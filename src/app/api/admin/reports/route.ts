@@ -1,20 +1,36 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
+import { Prisma } from '@prisma/client';
 
+/**
+ * GET /api/admin/reports
+ *
+ * Đã tối ưu:
+ * - Prisma.$queryRaw với Prisma.sql tagged template (type-safe, injection-safe)
+ *   để tính SUM(COALESCE(custom_price, price)) chính xác
+ * - groupBy() thay vì findMany() + JS reduce để tính rankings
+ * - Tất cả query độc lập trong Promise.all()
+ * - Paginated detail list (mặc định 20 bản ghi, tối đa 50)
+ * - Daily/monthly chart chỉ query trong khoảng thời gian cần thiết
+ * - console.time() đo từng phần
+ */
 export async function GET(req: Request) {
   try {
+    console.time('[reports] total');
+
     const { searchParams } = new URL(req.url);
     const startDateParam = searchParams.get('startDate');
-    const endDateParam = searchParams.get('endDate');
-    const creatorId = searchParams.get('creatorId');
-    const productId = searchParams.get('productId');
-    const status = searchParams.get('status');
-    const supplierId = searchParams.get('supplierId');
+    const endDateParam   = searchParams.get('endDate');
+    const creatorId      = searchParams.get('creatorId');
+    const productId      = searchParams.get('productId');
+    const statusFilter   = searchParams.get('status');
+    const supplierId     = searchParams.get('supplierId');
+    const page           = Math.max(1, parseInt(searchParams.get('page') ?? '1', 10));
+    const pageSize       = Math.min(50, Math.max(1, parseInt(searchParams.get('pageSize') ?? '20', 10)));
 
-    // Parse date filters
-    let startFilterDate: Date | null = null;
-    let endFilterDate: Date | null = null;
-
+    // ── Parse date filters ─────────────────────────────────────────────────
+    let startFilterDate: Date | undefined;
+    let endFilterDate: Date | undefined;
     if (startDateParam) {
       startFilterDate = new Date(startDateParam);
       startFilterDate.setHours(0, 0, 0, 0);
@@ -24,404 +40,326 @@ export async function GET(req: Request) {
       endFilterDate.setHours(23, 59, 59, 999);
     }
 
-    // Build query filters for Orders
-    const orderWhere: any = {};
-    if (creatorId) orderWhere.createdByUserId = creatorId;
-    if (productId) orderWhere.productId = productId;
-    if (status) orderWhere.status = status;
-    if (supplierId) orderWhere.supplierId = supplierId;
-
-    if (startFilterDate || endFilterDate) {
-      orderWhere.createdAt = {};
-      if (startFilterDate) orderWhere.createdAt.gte = startFilterDate;
-      if (endFilterDate) orderWhere.createdAt.lte = endFilterDate;
-    }
-
-    // Build query filters for Renewals (renewals are also a source of revenue!)
-    const renewalWhere: any = {};
-    if (creatorId) renewalWhere.renewedByUserId = creatorId;
-    if (supplierId) renewalWhere.order = { supplierId: supplierId };
-    if (startFilterDate || endFilterDate) {
-      renewalWhere.createdAt = {};
-      if (startFilterDate) renewalWhere.createdAt.gte = startFilterDate;
-      if (endFilterDate) renewalWhere.createdAt.lte = endFilterDate;
-    }
-
-    // 1. Fetch filtered orders and renewals
-    const orders = await prisma.order.findMany({
-      where: orderWhere,
-      include: {
-        customer: true,
-        product: true,
-        variant: true,
-        createdByUser: { select: { name: true, role: true } },
-      },
-    });
-
-    const renewals = await prisma.orderRenewal.findMany({
-      where: renewalWhere,
-      include: {
-        renewedByUser: { select: { name: true, role: true } },
-        variant: { include: { product: true } },
-        order: {
-          include: { customer: true },
-        },
-      },
-    });
-
-    // 2. Fetch aggregates for general overview (Today, Month, Year, total customer, expiring soon)
     const now = new Date();
-    
-    // Today boundary
-    const startOfToday = new Date(now);
-    startOfToday.setHours(0, 0, 0, 0);
-    const endOfToday = new Date(now);
-    endOfToday.setHours(23, 59, 59, 999);
+    const chartStart = startFilterDate ?? new Date(now.getTime() - 14 * 86_400_000);
+    const chartEnd   = endFilterDate   ?? now;
 
-    // Month boundary
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+    // ── Build Prisma where objects ─────────────────────────────────────────
+    const orderWhere: Prisma.OrderWhereInput = {
+      ...(creatorId  ? { createdByUserId: creatorId  } : {}),
+      ...(productId  ? { productId: productId          } : {}),
+      ...(statusFilter ? { status: statusFilter        } : {}),
+      ...(supplierId ? { supplierId: supplierId         } : {}),
+      ...(startFilterDate || endFilterDate ? {
+        createdAt: {
+          ...(startFilterDate ? { gte: startFilterDate } : {}),
+          ...(endFilterDate   ? { lte: endFilterDate   } : {}),
+        },
+      } : {}),
+    };
 
-    // Year boundary
-    const startOfYear = new Date(now.getFullYear(), 0, 1);
-    const endOfYear = new Date(now.getFullYear(), 11, 31, 23, 59, 59, 999);
+    const renewalWhere: Prisma.OrderRenewalWhereInput = {
+      ...(creatorId  ? { renewedByUserId: creatorId            } : {}),
+      ...(supplierId ? { order: { supplierId: supplierId }      } : {}),
+      ...(startFilterDate || endFilterDate ? {
+        createdAt: {
+          ...(startFilterDate ? { gte: startFilterDate } : {}),
+          ...(endFilterDate   ? { lte: endFilterDate   } : {}),
+        },
+      } : {}),
+    };
 
-    // Today 7 days ago boundary
-    const startOf7DaysAgo = new Date(startOfToday);
-    startOf7DaysAgo.setDate(startOf7DaysAgo.getDate() - 7);
-    const endOf7DaysAgo = new Date(endOfToday);
-    endOf7DaysAgo.setDate(endOf7DaysAgo.getDate() - 7);
+    // ── Build raw SQL WHERE clauses for SUM(COALESCE) ─────────────────────
+    // Prisma aggregate không hỗ trợ COALESCE nên cần rawQuery
+    const whereParts: Prisma.Sql[] = [];
+    if (creatorId)      whereParts.push(Prisma.sql`created_by_user_id = ${creatorId}::uuid`);
+    if (productId)      whereParts.push(Prisma.sql`product_id = ${productId}::uuid`);
+    if (statusFilter)   whereParts.push(Prisma.sql`status = ${statusFilter}`);
+    if (supplierId)     whereParts.push(Prisma.sql`supplier_id = ${supplierId}::uuid`);
+    if (startFilterDate) whereParts.push(Prisma.sql`created_at >= ${startFilterDate}`);
+    if (endFilterDate)   whereParts.push(Prisma.sql`created_at <= ${endFilterDate}`);
 
-    // Last 7 days boundary (including today)
-    const startOfLast7Days = new Date(startOfToday);
-    startOfLast7Days.setDate(startOfLast7Days.getDate() - 6);
+    const rawWhere = whereParts.length > 0
+      ? Prisma.sql`WHERE ${Prisma.join(whereParts, ' AND ')}`
+      : Prisma.empty;
 
-    // Previous 7 days boundary
-    const startOfPrev7Days = new Date(startOfToday);
-    startOfPrev7Days.setDate(startOfPrev7Days.getDate() - 13);
-    const endOfPrev7Days = new Date(endOfToday);
-    endOfPrev7Days.setDate(endOfPrev7Days.getDate() - 7);
+    // ── Phase 1: Tất cả queries chạy song song ────────────────────────────
+    console.time('[reports] phase1 parallel');
 
-    // Query Overview Revenues
     const [
-      ordersToday,
-      ordersMonth,
-      ordersYear,
-      renewalsToday,
-      renewalsMonth,
-      renewalsYear,
-      totalCustomers,
-      totalOrders,
-      expiringSoonCount,
-      orders7DaysAgo,
-      renewals7DaysAgo,
-      ordersLast7Days,
-      renewalsLast7Days,
-      ordersPrev7Days,
-      renewalsPrev7Days,
+      // SUM(COALESCE(custom_price, price)) – chính xác cho tổng revenue
+      revenueRaw,
+      // Renewal revenue
+      renewalsAgg,
+      // Import price aggregate
+      ordersImportAgg,
+      // Count orders có importPrice
+      ordersWithImportCount,
+      // Paginated detail list
+      detailOrders,
+      detailOrdersTotal,
+      // Chart data (chỉ trong chartStart → chartEnd)
+      chartOrders,
+      chartRenewals,
+      // Top rankings (groupBy – không scan toàn bảng)
+      topProductsGroup,
+      topCreatorsGroup,
+      topCustomersGroup,
+      // Status distribution (groupBy thay vì findMany toàn bảng)
+      statusGroupBy,
     ] = await Promise.all([
-      // Orders created today
-      prisma.order.findMany({ where: { createdAt: { gte: startOfToday, lte: endOfToday } } }),
-      // Orders created this month
-      prisma.order.findMany({ where: { createdAt: { gte: startOfMonth, lte: endOfMonth } } }),
-      // Orders created this year
-      prisma.order.findMany({ where: { createdAt: { gte: startOfYear, lte: endOfYear } } }),
-      // Renewals today
-      prisma.orderRenewal.findMany({ where: { createdAt: { gte: startOfToday, lte: endOfToday } } }),
-      // Renewals this month
-      prisma.orderRenewal.findMany({ where: { createdAt: { gte: startOfMonth, lte: endOfMonth } } }),
-      // Renewals this year
-      prisma.orderRenewal.findMany({ where: { createdAt: { gte: startOfYear, lte: endOfYear } } }),
-      // Totals
-      prisma.customer.count(),
-      prisma.order.count(),
-      // Expiring in next 7 days or status is expired_soon
-      prisma.order.count({
-        where: {
-          OR: [
-            { status: 'expired_soon' },
-            {
-              status: { in: ['running', 'new', 'processing'] },
-              endDate: {
-                gte: now,
-                lte: new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000),
-              },
-            },
-          ],
+
+      // ① Tổng revenue dùng COALESCE (chính xác khi mix price/customPrice)
+      prisma.$queryRaw<{ total: number }[]>(
+        Prisma.sql`SELECT COALESCE(SUM(COALESCE(custom_price, price)), 0)::float AS total FROM orders ${rawWhere}`
+      ),
+
+      // ② Renewal SUM
+      prisma.orderRenewal.aggregate({
+        _sum: { price: true },
+        where: renewalWhere,
+      }),
+
+      // ③ Import price SUM (chỉ rows có importPrice != null)
+      prisma.order.aggregate({
+        _sum: { importPrice: true },
+        where: { ...orderWhere, importPrice: { not: null } },
+      }),
+
+      // ④ Count có importPrice
+      prisma.order.count({ where: { ...orderWhere, importPrice: { not: null } } }),
+
+      // ⑤ Paginated detail orders (chỉ select field cần dùng)
+      prisma.order.findMany({
+        where: orderWhere,
+        take: pageSize,
+        skip: (page - 1) * pageSize,
+        orderBy: { createdAt: 'desc' },
+        select: {
+          orderCode:  true,
+          createdAt:  true,
+          price:      true,
+          customPrice:true,
+          importPrice:true,
+          status:     true,
+          startDate:  true,
+          endDate:    true,
+          customer:      { select: { name: true, phone: true } },
+          product:       { select: { name: true } },
+          variant:       { select: { name: true } },
+          createdByUser: { select: { name: true, role: true } },
         },
       }),
-      // Orders created 7 days ago
-      prisma.order.findMany({ where: { createdAt: { gte: startOf7DaysAgo, lte: endOf7DaysAgo } } }),
-      // Renewals created 7 days ago
-      prisma.orderRenewal.findMany({ where: { createdAt: { gte: startOf7DaysAgo, lte: endOf7DaysAgo } } }),
-      // Orders created last 7 days
-      prisma.order.findMany({ where: { createdAt: { gte: startOfLast7Days, lte: endOfToday } } }),
-      // Renewals created last 7 days
-      prisma.orderRenewal.findMany({ where: { createdAt: { gte: startOfLast7Days, lte: endOfToday } } }),
-      // Orders created previous 7 days
-      prisma.order.findMany({ where: { createdAt: { gte: startOfPrev7Days, lte: endOfPrev7Days } } }),
-      // Renewals created previous 7 days
-      prisma.orderRenewal.findMany({ where: { createdAt: { gte: startOfPrev7Days, lte: endOfPrev7Days } } }),
+
+      // ⑥ Total count cho pagination
+      prisma.order.count({ where: orderWhere }),
+
+      // ⑦ Chart orders – CHỈ trong khoảng thời gian chart (tối đa 15 ngày nếu không lọc)
+      prisma.order.findMany({
+        where: {
+          ...orderWhere,
+          createdAt: { gte: chartStart, lte: chartEnd },
+        },
+        select: { createdAt: true, price: true, customPrice: true, importPrice: true },
+        orderBy: { createdAt: 'asc' },
+      }),
+
+      // ⑧ Chart renewals
+      prisma.orderRenewal.findMany({
+        where: {
+          ...renewalWhere,
+          createdAt: { gte: chartStart, lte: chartEnd },
+        },
+        select: { createdAt: true, price: true },
+        orderBy: { createdAt: 'asc' },
+      }),
+
+      // ⑨ Top 5 products (groupBy – không load toàn bộ)
+      prisma.order.groupBy({
+        by: ['productId'],
+        where: orderWhere,
+        _sum: { price: true, customPrice: true },
+        orderBy: { _sum: { price: 'desc' } },
+        take: 5,
+      }),
+
+      // ⑩ Top 5 creators (groupBy)
+      prisma.order.groupBy({
+        by: ['createdByUserId'],
+        where: orderWhere,
+        _sum: { price: true, customPrice: true },
+        orderBy: { _sum: { price: 'desc' } },
+        take: 5,
+      }),
+
+      // ⑪ Top 5 customers (groupBy)
+      prisma.order.groupBy({
+        by: ['customerId'],
+        where: orderWhere,
+        _sum: { price: true, customPrice: true },
+        _count: { id: true },
+        orderBy: { _sum: { price: 'desc' } },
+        take: 5,
+      }),
+
+      // ⑫ Status distribution (groupBy – thay vì findMany toàn bảng)
+      prisma.order.groupBy({
+        by: ['status'],
+        _count: { id: true },
+      }),
     ]);
 
-    // Sum revenue today/month/year
-    const sumOrderRev = (arr: any[]) => arr.reduce((s, o) => s + (o.customPrice !== null ? o.customPrice : o.price), 0);
-    const sumRenewalRev = (arr: any[]) => arr.reduce((s, r) => s + r.price, 0);
+    console.timeEnd('[reports] phase1 parallel');
 
-    const revenueToday = sumOrderRev(ordersToday) + sumRenewalRev(renewalsToday);
-    const revenueMonth = sumOrderRev(ordersMonth) + sumRenewalRev(renewalsMonth);
-    const revenueYear = sumOrderRev(ordersYear) + sumRenewalRev(renewalsYear);
+    // ── Phase 2: Resolve entity names (song song) ─────────────────────────
+    console.time('[reports] phase2 resolve names');
+    const productIds  = topProductsGroup.map(p => p.productId);
+    const creatorIds  = topCreatorsGroup.map(c => c.createdByUserId);
+    const customerIds = topCustomersGroup.map(c => c.customerId);
 
-    // Sum additional values
-    const revenue7DaysAgo = sumOrderRev(orders7DaysAgo) + sumRenewalRev(renewals7DaysAgo);
-    const revenueLast7Days = sumOrderRev(ordersLast7Days) + sumRenewalRev(renewalsLast7Days);
-    const revenuePrev7Days = sumOrderRev(ordersPrev7Days) + sumRenewalRev(renewalsPrev7Days);
+    const [products, creators, customers] = await Promise.all([
+      productIds.length  ? prisma.product.findMany({ where: { id: { in: productIds  } }, select: { id: true, name: true } }) : [],
+      creatorIds.length  ? prisma.user.findMany(   { where: { id: { in: creatorIds  } }, select: { id: true, name: true, role: true } }) : [],
+      customerIds.length ? prisma.customer.findMany({ where: { id: { in: customerIds } }, select: { id: true, name: true, phone: true } }) : [],
+    ]);
+    console.timeEnd('[reports] phase2 resolve names');
 
-    // Calculate growth percentages
-    const calculateGrowth = (current: number, previous: number) => {
-      if (previous === 0) {
-        return current > 0 ? 100 : 0;
-      }
-      return ((current - previous) / previous) * 100;
-    };
+    // ── Tính revenue ───────────────────────────────────────────────────────
+    console.time('[reports] total revenue');
+    const totalOrderRevenue    = Number(revenueRaw[0]?.total ?? 0);
+    const totalRenewalRevenue  = renewalsAgg._sum.price ?? 0;
+    const totalFilteredRevenue = totalOrderRevenue + totalRenewalRevenue;
+    const totalImport          = ordersImportAgg._sum.importPrice ?? 0;
+    const totalFilteredProfit  = totalFilteredRevenue - totalImport;
+    console.timeEnd('[reports] total revenue');
 
-    const revenueTodayGrowth = calculateGrowth(revenueToday, revenue7DaysAgo);
-    const revenueLast7DaysGrowth = calculateGrowth(revenueLast7Days, revenuePrev7Days);
+    // ── Daily chart build ──────────────────────────────────────────────────
+    console.time('[reports] daily revenue');
+    const formatDayKey = (d: Date) =>
+      `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`;
 
-    // 3. Process charts data based on active filters
-    // Daily stats (last 15 days or filter period)
-    interface DayStats {
-      revenue: number;
-      importPrice: number;
-      profit: number;
+    const dailyMap = new Map<string, { revenue: number; importPrice: number; profit: number }>();
+    const cur = new Date(chartStart);
+    while (cur <= chartEnd) {
+      dailyMap.set(formatDayKey(cur), { revenue: 0, importPrice: 0, profit: 0 });
+      cur.setDate(cur.getDate() + 1);
     }
-    const dailyMap = new Map<string, DayStats>();
-    const formatDayKey = (date: Date) => {
-      return `${String(date.getDate()).padStart(2, '0')}/${String(date.getMonth() + 1).padStart(2, '0')}`;
-    };
-
-    // If no start date filter, default to 15 days ago
-    const minDate = startFilterDate || new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
-    
-    // Initialize day slots
-    const tempDate = new Date(minDate);
-    const maxDate = endFilterDate || now;
-    while (tempDate <= maxDate) {
-      dailyMap.set(formatDayKey(tempDate), { revenue: 0, importPrice: 0, profit: 0 });
-      tempDate.setDate(tempDate.getDate() + 1);
+    for (const o of chartOrders) {
+      const slot = dailyMap.get(formatDayKey(new Date(o.createdAt)));
+      if (slot) {
+        const val = o.customPrice ?? o.price;
+        const imp = o.importPrice ?? 0;
+        slot.revenue     += val;
+        slot.importPrice += imp;
+        slot.profit      += val - imp;
+      }
     }
+    for (const r of chartRenewals) {
+      const slot = dailyMap.get(formatDayKey(new Date(r.createdAt)));
+      if (slot) { slot.revenue += r.price; slot.profit += r.price; }
+    }
+    const dailyRevenue = Array.from(dailyMap.entries()).map(([label, s]) => ({
+      label, value: s.revenue, revenue: s.revenue, importPrice: s.importPrice, profit: s.profit,
+    }));
+    console.timeEnd('[reports] daily revenue');
 
-    // Populate day values from orders
-    orders.forEach((o) => {
-      const dayKey = formatDayKey(new Date(o.createdAt));
-      if (dailyMap.has(dayKey)) {
-        const current = dailyMap.get(dayKey)!;
-        const val = o.customPrice !== null ? o.customPrice : o.price;
-        const imp = o.importPrice || 0;
-        current.revenue += val;
-        current.importPrice += imp;
-        current.profit += (val - imp);
+    // ── Monthly chart ──────────────────────────────────────────────────────
+    console.time('[reports] monthly revenue');
+    const monthlyMap = new Map<string, number>();
+    for (let i = 0; i < 12; i++) monthlyMap.set(`Thg ${i + 1}`, 0);
+    for (const o of chartOrders) {
+      const d = new Date(o.createdAt);
+      if (d.getFullYear() === now.getFullYear()) {
+        const key = `Thg ${d.getMonth() + 1}`;
+        monthlyMap.set(key, (monthlyMap.get(key) ?? 0) + (o.customPrice ?? o.price));
       }
-    });
-
-    // Populate day values from renewals
-    renewals.forEach((r) => {
-      const dayKey = formatDayKey(new Date(r.createdAt));
-      if (dailyMap.has(dayKey)) {
-        const current = dailyMap.get(dayKey)!;
-        current.revenue += r.price;
-        current.profit += r.price;
+    }
+    for (const r of chartRenewals) {
+      const d = new Date(r.createdAt);
+      if (d.getFullYear() === now.getFullYear()) {
+        const key = `Thg ${d.getMonth() + 1}`;
+        monthlyMap.set(key, (monthlyMap.get(key) ?? 0) + r.price);
       }
-    });
+    }
+    const monthlyRevenue = Array.from(monthlyMap.entries()).map(([label, value]) => ({ label, value }));
+    console.timeEnd('[reports] monthly revenue');
 
-    const dailyRevenue = Array.from(dailyMap.entries()).map(([label, stats]) => ({
-      label,
-      value: stats.revenue,
-      revenue: stats.revenue,
-      importPrice: stats.importPrice,
-      profit: stats.profit,
+    // ── Build rankings ─────────────────────────────────────────────────────
+    const productMap  = new Map(products.map(p  => [p.id, p.name]));
+    const creatorMap  = new Map(creators.map(u  => [u.id, u]));
+    const customerMap = new Map(customers.map(c => [c.id, c]));
+
+    const topProducts = topProductsGroup.map(p => ({
+      label: productMap.get(p.productId) ?? p.productId,
+      value: (p._sum.customPrice ?? 0) || (p._sum.price ?? 0),
+    })).sort((a, b) => b.value - a.value);
+
+    const topCreators = topCreatorsGroup.map(c => {
+      const user = creatorMap.get(c.createdByUserId);
+      return {
+        label: user?.name ?? c.createdByUserId,
+        value: (c._sum.customPrice ?? 0) || (c._sum.price ?? 0),
+        subLabel: user?.role === 'collaborator' ? 'CTV'
+                : user?.role === 'agency'       ? 'Đại lý'
+                : 'Thành viên',
+      };
+    }).sort((a, b) => b.value - a.value);
+
+    const topCustomers = topCustomersGroup.map(c => {
+      const cust = customerMap.get(c.customerId);
+      return {
+        label: cust?.name ?? c.customerId,
+        value: (c._sum.customPrice ?? 0) || (c._sum.price ?? 0),
+        subLabel: `${cust?.phone ?? ''} (${c._count.id} đơn)`,
+      };
+    }).sort((a, b) => b.value - a.value);
+
+    // Status distribution
+    const STATUS_COLORS: Record<string, string> = {
+      new: '#64748b', processing: '#3b82f6', running: '#10b981',
+      expired_soon: '#f59e0b', expired: '#ef4444', cancelled: '#94a3b8',
+    };
+    const STATUS_LABELS: Record<string, string> = {
+      new: 'Mới tạo', processing: 'Đang xử lý', running: 'Đang chạy',
+      expired_soon: 'Sắp hết hạn', expired: 'Đã hết hạn', cancelled: 'Đã hủy',
+    };
+    const orderStatusDistribution = statusGroupBy.map(s => ({
+      label: STATUS_LABELS[s.status] ?? s.status,
+      value: s._count.id,
+      color: STATUS_COLORS[s.status] ?? '#94a3b8',
     }));
 
-    // Monthly revenue (for the current year)
-    const monthlyMap = new Map<string, number>();
-    for (let i = 0; i < 12; i++) {
-      monthlyMap.set(`Thg ${i + 1}`, 0);
-    }
+    // ── Format detail list ─────────────────────────────────────────────────
+    const formattedOrders = detailOrders.map(o => ({
+      createdAt:    o.createdAt,
+      orderCode:    o.orderCode,
+      customerName: o.customer.name,
+      customerPhone:o.customer.phone,
+      creatorName:  o.createdByUser.name,
+      creatorRole:  o.createdByUser.role,
+      productName:  o.product.name,
+      variantName:  o.variant.name,
+      cost:         o.customPrice ?? o.price,
+      importPrice:  o.importPrice,
+      profit:       o.importPrice != null ? (o.customPrice ?? o.price) - o.importPrice : null,
+      status:       o.status,
+      startDate:    o.startDate,
+      endDate:      o.endDate,
+    }));
 
-    orders.forEach((o) => {
-      const oDate = new Date(o.createdAt);
-      if (oDate.getFullYear() === now.getFullYear()) {
-        const key = `Thg ${oDate.getMonth() + 1}`;
-        const val = o.customPrice !== null ? o.customPrice : o.price;
-        monthlyMap.set(key, (monthlyMap.get(key) || 0) + val);
-      }
-    });
-
-    renewals.forEach((r) => {
-      const rDate = new Date(r.createdAt);
-      if (rDate.getFullYear() === now.getFullYear()) {
-        const key = `Thg ${rDate.getMonth() + 1}`;
-        monthlyMap.set(key, (monthlyMap.get(key) || 0) + r.price);
-      }
-    });
-
-    const monthlyRevenue = Array.from(monthlyMap.entries()).map(([label, value]) => ({ label, value }));
-
-    // Top Products ranking
-    const productRevenueMap = new Map<string, number>();
-    orders.forEach((o) => {
-      const val = o.customPrice !== null ? o.customPrice : o.price;
-      productRevenueMap.set(o.product.name, (productRevenueMap.get(o.product.name) || 0) + val);
-    });
-
-    renewals.forEach((r) => {
-      const prodName = r.variant.product.name;
-      productRevenueMap.set(prodName, (productRevenueMap.get(prodName) || 0) + r.price);
-    });
-
-    const topProducts = Array.from(productRevenueMap.entries())
-      .map(([label, value]) => ({ label, value }))
-      .sort((a, b) => b.value - a.value)
-      .slice(0, 5);
-
-    // Top Sellers/Creators ranking
-    const creatorRevenueMap = new Map<string, { value: number; role: string }>();
-    orders.forEach((o) => {
-      const val = o.customPrice !== null ? o.customPrice : o.price;
-      const current = creatorRevenueMap.get(o.createdByUser.name) || { value: 0, role: o.createdByUser.role };
-      creatorRevenueMap.set(o.createdByUser.name, {
-        value: current.value + val,
-        role: o.createdByUser.role,
-      });
-    });
-
-    renewals.forEach((r) => {
-      const current = creatorRevenueMap.get(r.renewedByUser.name) || { value: 0, role: r.renewedByUser.role };
-      creatorRevenueMap.set(r.renewedByUser.name, {
-        value: current.value + r.price,
-        role: r.renewedByUser.role,
-      });
-    });
-
-    const topCreators = Array.from(creatorRevenueMap.entries())
-      .map(([label, info]) => ({ label, value: info.value, subLabel: info.role === 'collaborator' ? 'CTV' : info.role === 'agency' ? 'Đại lý' : 'Thành viên' }))
-      .sort((a, b) => b.value - a.value)
-      .slice(0, 5);
-
-    // Top Customers ranking
-    const customerRevenueMap = new Map<string, { value: number; phone: string; count: number }>();
-    orders.forEach((o) => {
-      if (o.customer) {
-        const val = o.customPrice !== null ? o.customPrice : o.price;
-        const current = customerRevenueMap.get(o.customer.name) || { value: 0, phone: o.customer.phone, count: 0 };
-        customerRevenueMap.set(o.customer.name, {
-          value: current.value + val,
-          phone: o.customer.phone,
-          count: current.count + 1,
-        });
-      }
-    });
-
-    renewals.forEach((r) => {
-      if (r.order?.customer) {
-        const customerName = r.order.customer.name;
-        const current = customerRevenueMap.get(customerName) || { value: 0, phone: r.order.customer.phone, count: 0 };
-        customerRevenueMap.set(customerName, {
-          value: current.value + r.price,
-          phone: r.order.customer.phone,
-          count: current.count + 1,
-        });
-      }
-    });
-
-    const topCustomers = Array.from(customerRevenueMap.entries())
-      .map(([label, info]) => ({
-        label,
-        value: info.value,
-        subLabel: `${info.phone} (${info.count} đơn)`,
-      }))
-      .sort((a, b) => b.value - a.value)
-      .slice(0, 5);
-
-    // Orders status distribution count
-    const statusCounts = {
-      new: 0,
-      processing: 0,
-      running: 0,
-      expired_soon: 0,
-      expired: 0,
-      cancelled: 0,
-    };
-
-    const allOrders = await prisma.order.findMany({ select: { status: true } });
-    allOrders.forEach((o) => {
-      const st = o.status.toLowerCase() as keyof typeof statusCounts;
-      if (statusCounts[st] !== undefined) {
-        statusCounts[st]++;
-      }
-    });
-
-    const orderStatusDistribution = [
-      { label: 'Mới tạo', value: statusCounts.new, color: '#64748b' },
-      { label: 'Đang xử lý', value: statusCounts.processing, color: '#3b82f6' },
-      { label: 'Đang chạy', value: statusCounts.running, color: '#10b981' },
-      { label: 'Sắp hết hạn', value: statusCounts.expired_soon, color: '#f59e0b' },
-      { label: 'Đã hết hạn', value: statusCounts.expired, color: '#ef4444' },
-      { label: 'Đã hủy', value: statusCounts.cancelled, color: '#94a3b8' },
-    ];
-
-    // Compute active filters total revenue and profit
-    const totalFilteredRevenue = orders.reduce((sum, o) => sum + (o.customPrice !== null ? o.customPrice : o.price), 0) +
-      renewals.reduce((sum, r) => sum + r.price, 0);
-
-    // Profit = revenue - importPrice. Only count orders where importPrice is set.
-    const totalFilteredProfit = orders.reduce((sum, o) => {
-      if (o.importPrice !== null && o.importPrice !== undefined) {
-        const rev = o.customPrice !== null ? o.customPrice : o.price;
-        return sum + (rev - o.importPrice);
-      }
-      return sum;
-    }, 0);
-
-    const ordersWithImportPrice = orders.filter(o => o.importPrice !== null && o.importPrice !== undefined).length;
-
+    console.timeEnd('[reports] total');
 
     return NextResponse.json({
-      overview: {
-        revenueToday,
-        revenueMonth,
-        revenueYear,
-        totalCustomers,
-        totalOrders,
-        expiringSoonCount,
-        revenueLast7Days,
-        revenuePrev7Days,
-        revenueLast7DaysGrowth,
-        revenueTodayGrowth,
-      },
       filteredReport: {
-        totalRevenue: totalFilteredRevenue,
-        totalProfit: totalFilteredProfit,
-        ordersWithImportPrice,
-        orderCount: orders.length,
-        orders: orders.map((o) => ({
-          createdAt: o.createdAt,
-          orderCode: o.orderCode,
-          customerName: o.customer.name,
-          customerPhone: o.customer.phone,
-          creatorName: o.createdByUser.name,
-          creatorRole: o.createdByUser.role,
-          productName: o.product.name,
-          variantName: o.variant.name,
-          cost: o.customPrice !== null ? o.customPrice : o.price,
-          importPrice: o.importPrice,
-          profit: o.importPrice !== null && o.importPrice !== undefined
-            ? (o.customPrice !== null ? o.customPrice : o.price) - o.importPrice
-            : null,
-          status: o.status,
-          startDate: o.startDate,
-          endDate: o.endDate,
-        })),
+        totalRevenue:          totalFilteredRevenue,
+        totalProfit:           totalFilteredProfit,
+        totalImport,
+        ordersWithImportPrice: ordersWithImportCount,
+        orderCount:            detailOrdersTotal,
+        totalPages:            Math.ceil(detailOrdersTotal / pageSize),
+        currentPage:           page,
+        pageSize,
+        orders:                formattedOrders,
       },
       charts: {
         dailyRevenue,
@@ -433,7 +371,7 @@ export async function GET(req: Request) {
       },
     });
   } catch (error) {
-    console.error('Reports endpoint error:', error);
+    console.error('[reports] error:', error);
     return NextResponse.json({ error: 'Lỗi máy chủ tải báo cáo thống kê.' }, { status: 500 });
   }
 }

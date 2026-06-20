@@ -71,9 +71,11 @@ export default function AdminReportsPage() {
   const [sortField, setSortField] = useState<SortField>('createdAt');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
 
-  // Pagination States
+  // Pagination States (server-side)
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 10;
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalOrderCount, setTotalOrderCount] = useState(0);
+  const PAGE_SIZE = 20;
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {
@@ -84,30 +86,21 @@ export default function AdminReportsPage() {
     }
   };
 
+  // sortedReportData = reportData (sorting done server-side via orderBy createdAt desc)
+  // Client-side sort kept for columns where API doesn't support ordering yet
   const sortedReportData = React.useMemo(() => {
     return [...reportData].sort((a, b) => {
       let aVal: any = a[sortField];
       let bVal: any = b[sortField];
-
       if (aVal === undefined || aVal === null) return sortDirection === 'asc' ? -1 : 1;
       if (bVal === undefined || bVal === null) return sortDirection === 'asc' ? 1 : -1;
-
       if (sortField === 'createdAt' || sortField === 'endDate') {
-        const dateA = new Date(aVal).getTime();
-        const dateB = new Date(bVal).getTime();
-        return sortDirection === 'asc' ? dateA - dateB : dateB - dateA;
+        return sortDirection === 'asc'
+          ? new Date(aVal).getTime() - new Date(bVal).getTime()
+          : new Date(bVal).getTime() - new Date(aVal).getTime();
       }
-
-      if (typeof aVal === 'string') {
-        return sortDirection === 'asc' 
-          ? aVal.localeCompare(bVal, 'vi') 
-          : bVal.localeCompare(aVal, 'vi');
-      }
-
-      if (typeof aVal === 'number') {
-        return sortDirection === 'asc' ? aVal - bVal : bVal - aVal;
-      }
-
+      if (typeof aVal === 'string') return sortDirection === 'asc' ? aVal.localeCompare(bVal, 'vi') : bVal.localeCompare(aVal, 'vi');
+      if (typeof aVal === 'number')  return sortDirection === 'asc' ? aVal - bVal : bVal - aVal;
       return 0;
     });
   }, [reportData, sortField, sortDirection]);
@@ -131,16 +124,18 @@ export default function AdminReportsPage() {
     }
   };
 
-  const fetchReport = async () => {
+  const fetchReport = async (page = 1) => {
     setLoading(true);
     try {
       const queryParams = new URLSearchParams();
-      if (startDate) queryParams.append('startDate', startDate);
-      if (endDate) queryParams.append('endDate', endDate);
-      if (creatorId) queryParams.append('creatorId', creatorId);
-      if (productId) queryParams.append('productId', productId);
-      if (status) queryParams.append('status', status);
+      if (startDate)  queryParams.append('startDate', startDate);
+      if (endDate)    queryParams.append('endDate', endDate);
+      if (creatorId)  queryParams.append('creatorId', creatorId);
+      if (productId)  queryParams.append('productId', productId);
+      if (status)     queryParams.append('status', status);
       if (supplierId) queryParams.append('supplierId', supplierId);
+      queryParams.append('page', String(page));
+      queryParams.append('pageSize', String(PAGE_SIZE));
 
       const res = await fetch(`/api/admin/reports?${queryParams.toString()}`);
       if (res.ok) {
@@ -150,14 +145,12 @@ export default function AdminReportsPage() {
         setTotalProfit(data.filteredReport.totalProfit || 0);
         setOrdersWithImportPrice(data.filteredReport.ordersWithImportPrice || 0);
         setTotalImport(data.filteredReport.totalImport || 0);
-        setTotalProfit(data.filteredReport.totalProfit || 0);
+        setTotalPages(data.filteredReport.totalPages || 1);
+        setTotalOrderCount(data.filteredReport.orderCount || 0);
         setDailyChartData(data.charts.dailyRevenue || []);
-        setTotalCustomers(data.overview?.totalCustomers || 0);
         setTopCreators(data.charts?.topCreators || []);
         setTopCustomers(data.charts?.topCustomers || []);
         setTopProducts(data.charts?.topProducts || []);
-        setRevenueLast7Days(data.overview?.revenueLast7Days || 0);
-        setRevenueLast7DaysGrowth(data.overview?.revenueLast7DaysGrowth || 0);
       } else {
         showToast('Không thể tải báo cáo doanh thu.', 'error');
       }
@@ -174,17 +167,18 @@ export default function AdminReportsPage() {
   }, []);
 
   useEffect(() => {
-    fetchReport();
+    setCurrentPage(1);
+    fetchReport(1);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [startDate, endDate, creatorId, productId, status, supplierId]);
 
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [startDate, endDate, creatorId, productId, status, supplierId, sortField, sortDirection]);
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
+    fetchReport(page);
+  };
 
-  const totalPages = Math.ceil(sortedReportData.length / itemsPerPage);
-  const paginatedReportData = React.useMemo(() => {
-    return sortedReportData.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
-  }, [sortedReportData, currentPage]);
+  // Server-side pagination: API already sliced data
+  const paginatedReportData = sortedReportData;
 
   const handleClearFilters = () => {
     setStartDate('');
@@ -729,13 +723,13 @@ export default function AdminReportsPage() {
           {!loading && totalPages > 1 && (
             <div className="flex flex-col sm:flex-row items-center justify-between px-6 py-4 gap-4 border-t border-border bg-[#f8f9fa] dark:bg-slate-900/50">
               <div className="text-xs text-slate-500 font-semibold text-center sm:text-left">
-                Hiển thị <span className="text-foreground">{(currentPage - 1) * itemsPerPage + 1}</span> - <span className="text-foreground">{Math.min(currentPage * itemsPerPage, sortedReportData.length)}</span> trong tổng số <span className="text-foreground">{sortedReportData.length}</span> đơn hàng
+                Hiển thị <span className="text-foreground">{(currentPage - 1) * PAGE_SIZE + 1}</span> - <span className="text-foreground">{Math.min(currentPage * PAGE_SIZE, totalOrderCount)}</span> trong tổng số <span className="text-foreground">{totalOrderCount}</span> đơn hàng
               </div>
               <div className="flex items-center gap-1.5 flex-wrap justify-center">
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => setCurrentPage(1)}
+                  onClick={() => handlePageChange(1)}
                   disabled={currentPage === 1}
                   className="h-8 px-2.5 cursor-pointer"
                 >
@@ -744,7 +738,7 @@ export default function AdminReportsPage() {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
+                  onClick={() => handlePageChange(Math.max(currentPage - 1, 1))}
                   disabled={currentPage === 1}
                   className="h-8 px-2.5 cursor-pointer"
                 >
@@ -754,14 +748,13 @@ export default function AdminReportsPage() {
                 {/* Page numbers */}
                 {Array.from({ length: totalPages }).map((_, i) => {
                   const pageNum = i + 1;
-                  // Show current page, and a range around it
                   if (pageNum === 1 || pageNum === totalPages || Math.abs(pageNum - currentPage) <= 1) {
                     return (
                       <Button
                         key={pageNum}
                         variant={currentPage === pageNum ? 'primary' : 'outline'}
                         size="sm"
-                        onClick={() => setCurrentPage(pageNum)}
+                        onClick={() => handlePageChange(pageNum)}
                         className="h-8 w-8 p-0 cursor-pointer"
                       >
                         {pageNum}
@@ -777,7 +770,7 @@ export default function AdminReportsPage() {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
+                  onClick={() => handlePageChange(Math.min(currentPage + 1, totalPages))}
                   disabled={currentPage === totalPages}
                   className="h-8 px-2.5 cursor-pointer"
                 >
@@ -786,7 +779,7 @@ export default function AdminReportsPage() {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => setCurrentPage(totalPages)}
+                  onClick={() => handlePageChange(totalPages)}
                   disabled={currentPage === totalPages}
                   className="h-8 px-2.5 cursor-pointer"
                 >

@@ -26,6 +26,8 @@ model User {
   notifications  Notification[]     @relation("NotificationCreator")
   notificationReads NotificationRead[] @relation("NotificationReadByUser")
 
+  @@index([role])
+  @@index([status])
   @@map("users")
 }
 
@@ -128,6 +130,14 @@ model Order {
   renewals      OrderRenewal[]
   emailLogs     EmailLog[]
 
+  @@index([createdAt])
+  @@index([status])
+  @@index([customerId])
+  @@index([createdByUserId])
+  @@index([productId])
+  @@index([supplierId])
+  @@index([endDate])
+  @@index([createdAt, status])  // composite: range + status filter
   @@map("orders")
 }
 
@@ -145,6 +155,9 @@ model OrderRenewal {
   variant           ProductVariant @relation(fields: [variantId], references: [id])
   renewedByUser     User           @relation(fields: [renewedByUserId], references: [id])
 
+  @@index([createdAt])
+  @@index([renewedByUserId])
+  @@index([orderId])
   @@map("order_renewals")
 }
 

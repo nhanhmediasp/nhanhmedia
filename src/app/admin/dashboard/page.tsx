@@ -60,7 +60,7 @@ export default function AdminDashboardPage() {
   useEffect(() => {
     (async () => {
       try {
-        const res = await fetch('/api/admin/reports');
+        const res = await fetch('/api/admin/dashboard');
         if (res.ok) {
           const data = await res.json();
           setStats(data.overview);
