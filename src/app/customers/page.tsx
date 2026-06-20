@@ -1,0 +1,402 @@
+'use client';
+
+import React, { useState, useEffect } from 'react';
+import Link from 'next/link';
+import { Button, Input, Card, CardContent, showToast, PageHeader, EmptyState, LoadingSkeleton } from '@/components/ui';
+import { Search, Plus, Edit2, UserCheck, Phone, ArrowUpDown, ArrowUp, ArrowDown, Eye } from 'lucide-react';
+
+interface Customer {
+  id: string;
+  name: string;
+  phone: string;
+  facebook: string | null;
+  zalo: string | null;
+  email: string | null;
+  note: string | null;
+  createdAt: string;
+  orderCount: number;
+  totalSpent: number;
+}
+
+type SortField = 'name' | 'orderCount' | 'totalSpent';
+type SortDirection = 'asc' | 'desc';
+
+function SortableHeader({ label, field, currentField, currentDirection, onSort, className }: {
+  label: string;
+  field: SortField;
+  currentField: SortField | null;
+  currentDirection: SortDirection;
+  onSort: (field: SortField) => void;
+  className?: string;
+}) {
+  const isActive = currentField === field;
+  return (
+    <th
+      className={`px-6 py-5 cursor-pointer select-none hover:text-primary transition-colors group ${className || ''}`}
+      onClick={() => onSort(field)}
+    >
+      <div className="flex items-center gap-1.5">
+        <span>{label}</span>
+        <span className={`transition-opacity ${isActive ? 'opacity-100' : 'opacity-0 group-hover:opacity-40'}`}>
+          {isActive ? (
+            currentDirection === 'asc' ? <ArrowUp className="w-3.5 h-3.5" /> : <ArrowDown className="w-3.5 h-3.5" />
+          ) : (
+            <ArrowUpDown className="w-3.5 h-3.5" />
+          )}
+        </span>
+      </div>
+    </th>
+  );
+}
+
+export default function UserCustomersPage() {
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [purchaseFilter, setPurchaseFilter] = useState('');
+  const [loading, setLoading] = useState(true);
+
+  // Sort state
+  const [sortField, setSortField] = useState<SortField | null>(null);
+  const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
+
+  // Modal form state
+  const [isOpen, setIsOpen] = useState(false);
+  const [editId, setEditId] = useState<string | null>(null);
+  const [name, setName] = useState('');
+  const [phone, setPhone] = useState('');
+  const [facebook, setFacebook] = useState('');
+  const [zalo, setZalo] = useState('');
+  const [email, setEmail] = useState('');
+  const [note, setNote] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  const fetchCustomers = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch('/api/customers');
+      if (res.ok) {
+        const data = await res.json();
+        setCustomers(data.customers || []);
+      } else {
+        showToast('Không thể tải danh sách khách hàng.', 'error');
+      }
+    } catch (error) {
+      console.error('Fetch customers error:', error);
+      showToast('Lỗi kết nối máy chủ.', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchCustomers();
+  }, []);
+
+  const openAddModal = () => {
+    setEditId(null);
+    setName('');
+    setPhone('');
+    setFacebook('');
+    setZalo('');
+    setEmail('');
+    setNote('');
+    setIsOpen(true);
+  };
+
+  const openEditModal = (c: Customer) => {
+    setEditId(c.id);
+    setName(c.name);
+    setPhone(c.phone);
+    setFacebook(c.facebook || '');
+    setZalo(c.zalo || '');
+    setEmail(c.email || '');
+    setNote(c.note || '');
+    setIsOpen(true);
+  };
+
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!name || !phone) {
+      showToast('Họ tên và số điện thoại là bắt buộc.', 'error');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const url = editId ? `/api/customers/${editId}` : '/api/customers';
+      const method = editId ? 'PUT' : 'POST';
+
+      const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, phone, facebook, zalo, email, note }),
+      });
+
+      const data = await res.json();
+
+      if (res.ok) {
+        showToast(data.message || 'Lưu khách hàng thành công!', 'success');
+        setIsOpen(false);
+        fetchCustomers();
+      } else {
+        showToast(data.error || 'Lỗi khi lưu khách hàng.', 'error');
+      }
+    } catch (error) {
+      console.error('Save customer error:', error);
+      showToast('Lỗi kết nối máy chủ.', 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const formatVND = (value: number) => {
+    return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(value);
+  };
+
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDirection('asc');
+    }
+  };
+
+  const filteredCustomers = customers.filter((c) => {
+    const matchesSearch =
+      c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      c.phone.includes(searchTerm) ||
+      (c.email && c.email.toLowerCase().includes(searchTerm.toLowerCase()));
+
+    let matchesPurchase = true;
+    if (purchaseFilter === 'purchased') {
+      matchesPurchase = c.orderCount > 0;
+    } else if (purchaseFilter === 'not_purchased') {
+      matchesPurchase = c.orderCount === 0;
+    }
+
+    return matchesSearch && matchesPurchase;
+  });
+
+  const sortedCustomers = [...filteredCustomers].sort((a, b) => {
+    if (!sortField) return 0;
+    const dir = sortDirection === 'asc' ? 1 : -1;
+    switch (sortField) {
+      case 'name': return a.name.localeCompare(b.name) * dir;
+      case 'orderCount': return (a.orderCount - b.orderCount) * dir;
+      case 'totalSpent': return (a.totalSpent - b.totalSpent) * dir;
+      default: return 0;
+    }
+  });
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <PageHeader
+        title="Khách hàng của tôi"
+        description="Quản lý danh sách khách hàng do bạn phụ trách và tạo đơn hàng trực tiếp."
+      >
+        <Button onClick={openAddModal} className="flex items-center gap-2 cursor-pointer">
+          <Plus className="w-4 h-4" />
+          <span>Thêm khách hàng</span>
+        </Button>
+      </PageHeader>
+
+      {/* Search and Filters */}
+      <Card>
+        <CardContent className="py-5">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-5">
+            <div className="md:col-span-3 relative">
+              <span className="absolute left-3 top-3.5 text-slate-400">
+                <Search className="w-4.5 h-4.5" />
+              </span>
+              <input
+                type="text"
+                placeholder="Tìm kiếm khách hàng theo tên hoặc số điện thoại..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-10 pr-4 py-2.5 text-sm bg-input border border-border rounded-xl text-foreground placeholder-slate-400 focus:outline-none focus:border-primary focus:ring-2 focus:ring-ring transition-all duration-200"
+              />
+            </div>
+
+            <div>
+              <select
+                value={purchaseFilter}
+                onChange={(e) => setPurchaseFilter(e.target.value)}
+                className="w-full px-3 py-2.5 text-sm bg-input border border-border rounded-xl text-foreground focus:outline-none focus:border-primary focus:ring-2 focus:ring-ring cursor-pointer"
+              >
+                <option value="">Tình trạng mua hàng</option>
+                <option value="purchased">Đã mua hàng</option>
+                <option value="not_purchased">Chưa mua hàng</option>
+              </select>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Customers table */}
+      {loading ? (
+        <LoadingSkeleton variant="table" />
+      ) : sortedCustomers.length === 0 ? (
+        <EmptyState
+          title="Chưa có khách hàng phụ trách"
+          description="Bạn chưa đăng ký khách hàng nào hoặc không tìm thấy kết quả phù hợp."
+          actionLabel="Thêm khách hàng"
+          onAction={openAddModal}
+        />
+      ) : (
+        <Card className="overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full border-collapse text-left text-sm">
+              <thead>
+                <tr className="border-b border-border bg-muted/40 text-muted-foreground font-semibold">
+                  <SortableHeader label="Khách hàng" field="name" currentField={sortField} currentDirection={sortDirection} onSort={handleSort} />
+                  <th className="px-6 py-5">Liên lạc</th>
+                  <SortableHeader label="Tổng đơn hàng" field="orderCount" currentField={sortField} currentDirection={sortDirection} onSort={handleSort} className="text-center" />
+                  <SortableHeader label="Tổng chi tiêu" field="totalSpent" currentField={sortField} currentDirection={sortDirection} onSort={handleSort} className="text-right" />
+                  <th className="px-6 py-5 text-center">Hành động</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border bg-card">
+                {sortedCustomers.map((c) => (
+                  <tr key={c.id} className="hover:bg-muted/20 transition-colors">
+                    <td className="px-6 py-5">
+                      <div className="font-bold text-foreground">{c.name}</div>
+                      {c.note && (
+                        <div className="text-xs text-muted-foreground mt-0.5 line-clamp-1 max-w-[250px]" title={c.note}>
+                          Ghi chú: {c.note}
+                        </div>
+                      )}
+                    </td>
+                    <td className="px-6 py-5 space-y-1">
+                      <div className="flex items-center gap-1.5 text-xs text-foreground font-medium">
+                        <Phone className="w-3.5 h-3.5 text-slate-400" />
+                        <span>{c.phone}</span>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        {c.zalo && (
+                          <a
+                            href={`https://zalo.me/${c.zalo}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-xs text-indigo-500 hover:underline font-semibold"
+                          >
+                            Zalo
+                          </a>
+                        )}
+                        {c.facebook && (
+                          <a
+                            href={c.facebook}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-xs text-primary hover:underline font-semibold"
+                          >
+                            Facebook
+                          </a>
+                        )}
+                        {c.email && <span className="text-[11px] text-muted-foreground truncate max-w-[150px]">{c.email}</span>}
+                      </div>
+                    </td>
+                    <td className="px-6 py-5 text-center font-bold text-foreground">{c.orderCount}</td>
+                    <td className="px-6 py-5 text-right font-bold text-primary">{formatVND(c.totalSpent)}</td>
+                    <td className="px-6 py-5 text-center">
+                      <div className="flex items-center justify-center gap-2">
+                        <Link href={`/customers/${c.id}`}>
+                          <button
+                            className="p-1.5 text-slate-500 hover:text-primary rounded-lg hover:bg-slate-100 dark:hover:bg-zinc-800 cursor-pointer"
+                            title="Xem chi tiết"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                          </button>
+                        </Link>
+                        <button
+                          onClick={() => openEditModal(c)}
+                          className="p-1.5 text-slate-500 hover:text-primary rounded-lg hover:bg-slate-100 dark:hover:bg-zinc-800 cursor-pointer"
+                          title="Sửa thông tin khách"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
+
+      {/* Add/Edit Modal */}
+      {isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fade-in">
+          <div className="bg-card border border-border w-full max-w-lg rounded-2xl shadow-xl overflow-hidden animate-fade-in">
+            <div className="px-6 py-5 border-b border-border">
+              <h3 className="text-lg font-bold text-foreground">
+                {editId ? 'Chỉnh sửa thông tin Khách hàng' : 'Thêm Khách hàng Mới'}
+              </h3>
+            </div>
+            <form onSubmit={handleSave}>
+              <div className="p-6 space-y-5">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                  <Input
+                    label="Họ tên khách hàng *"
+                    placeholder="Ví dụ: Nguyễn Văn A"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    required
+                  />
+                  <Input
+                    label="Số điện thoại *"
+                    placeholder="Ví dụ: 0977111222"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    required
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                  <Input
+                    label="Link Facebook"
+                    placeholder="Ví dụ: https://facebook.com/user"
+                    value={facebook}
+                    onChange={(e) => setFacebook(e.target.value)}
+                  />
+                  <Input
+                    label="Số Zalo"
+                    placeholder="Ví dụ: 0977111222"
+                    value={zalo}
+                    onChange={(e) => setZalo(e.target.value)}
+                  />
+                </div>
+
+                <Input
+                  label="Email khách hàng"
+                  type="email"
+                  placeholder="Ví dụ: customer@gmail.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                />
+
+                <Input
+                  label="Ghi chú thêm"
+                  placeholder="Ghi chú nhanh thông tin..."
+                  value={note}
+                  onChange={(e) => setNote(e.target.value)}
+                />
+              </div>
+
+              <div className="px-6 py-5 bg-muted/50 border-t border-border flex justify-end gap-3">
+                <Button type="button" variant="outline" size="sm" onClick={() => setIsOpen(false)} disabled={saving}>
+                  Hủy
+                </Button>
+                <Button type="submit" variant="primary" size="sm" loading={saving}>
+                  {editId ? 'Lưu thay đổi' : 'Thêm mới'}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

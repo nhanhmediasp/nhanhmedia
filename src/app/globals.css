@@ -1,0 +1,249 @@
+@import "tailwindcss";
+
+:root {
+  --font-inter: 'Inter', sans-serif;
+
+  /* ── Brand ── */
+  --primary: #a145ab;
+  --primary-hover: #8d3797;
+  --primary-light: #f7eafa;
+  --primary-soft: #ede1f7;
+  --primary-glow: rgba(161, 69, 171, 0.18);
+
+  /* ── Surface ── */
+  --background: #f4f5fb;
+  --card: #ffffff;
+  --card-border: rgba(108, 117, 147, 0.10);
+
+  /* ── Text ── */
+  --foreground: #566a7f;
+  --heading: #1e293b;
+  --card-foreground: #566a7f;
+
+  /* ── Status ── */
+  --success: #22c55e;
+  --warning: #f59e0b;
+  --danger: #ef4444;
+  --info: #06b6d4;
+
+  /* ── Misc ── */
+  --border: rgba(108, 117, 147, 0.12);
+  --input: #ffffff;
+  --muted: #f8f9fc;
+  --muted-foreground: #a0aec0;
+  --ring: rgba(161, 69, 171, 0.20);
+
+  /* ── Sidebar ── */
+  --sidebar-bg: #ffffff;
+  --sidebar-fg: #697a8d;
+  --sidebar-border: rgba(108, 117, 147, 0.10);
+  --sidebar-active: #a145ab;
+
+  /* ── Shadows ── */
+  --shadow-sm: 0 1px 4px 0 rgba(108, 117, 147, 0.08), 0 0 0 1px rgba(108, 117, 147, 0.06);
+  --shadow-md: 0 4px 18px 0 rgba(108, 117, 147, 0.14);
+  --shadow-lg: 0 8px 32px 0 rgba(108, 117, 147, 0.18);
+  --shadow-primary: 0 4px 16px 0 rgba(161, 69, 171, 0.35);
+}
+
+/* ──────────── Tailwind theme bridge ──────────── */
+@theme inline {
+  --font-sans: var(--font-inter), system-ui, sans-serif;
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-heading: var(--heading);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-light: var(--primary-light);
+  --color-primary-soft: var(--primary-soft);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-danger: var(--danger);
+  --color-info: var(--info);
+  --color-sidebar-bg: var(--sidebar-bg);
+  --color-sidebar-fg: var(--sidebar-fg);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-active: var(--sidebar-active);
+}
+
+/* ──────────── Base Reset ──────────── */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-inter), system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+/* ──────────── Utility Shadows ──────────── */
+.shadow-card {
+  box-shadow: var(--shadow-sm);
+}
+
+.shadow-panel {
+  box-shadow: var(--shadow-md);
+}
+
+.shadow-float {
+  box-shadow: var(--shadow-lg);
+}
+
+.sneat-shadow {
+  box-shadow: var(--shadow-sm);
+}
+
+/* ──────────── Custom Scrollbar ──────────── */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(108, 117, 147, 0.18);
+  border-radius: 99px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(161, 69, 171, 0.30);
+}
+
+/* ──────────── Animations ──────────── */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slideInLeft {
+  from {
+    opacity: 0;
+    transform: translateX(-14px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes scaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes pulse-ring {
+  0% {
+    box-shadow: 0 0 0 0 rgba(161, 69, 171, 0.45);
+  }
+
+  70% {
+    box-shadow: 0 0 0 8px rgba(161, 69, 171, 0);
+  }
+
+  100% {
+    box-shadow: 0 0 0 0 rgba(161, 69, 171, 0);
+  }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.25s ease-out forwards;
+}
+
+.animate-fade-in-up {
+  animation: fadeInUp 0.35s ease-out forwards;
+}
+
+.animate-slide-left {
+  animation: slideInLeft 0.30s ease-out forwards;
+}
+
+.animate-scale-in {
+  animation: scaleIn 0.25s ease-out forwards;
+}
+
+/* ──────────── Glassmorphism ──────────── */
+.glass {
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgba(255, 255, 255, 0.30);
+}
+
+/* ──────────── Stat card gradient icons ──────────── */
+.icon-wrap-primary {
+  background: linear-gradient(135deg, #f3d0f7 0%, #e9b6f0 100%);
+  color: #a145ab;
+}
+
+.icon-wrap-success {
+  background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%);
+  color: #059669;
+}
+
+.icon-wrap-warning {
+  background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+  color: #d97706;
+}
+
+.icon-wrap-danger {
+  background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);
+  color: #dc2626;
+}
+
+.icon-wrap-info {
+  background: linear-gradient(135deg, #cffafe 0%, #a5f3fc 100%);
+  color: #0891b2;
+}
+
+/* ──────────── Focus visible (accessibility) ──────────── */
+:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
