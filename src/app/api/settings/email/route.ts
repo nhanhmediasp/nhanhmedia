@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { encrypt } from '@/lib/crypto';
+import { createAuditLog } from '@/lib/audit';
 
 export async function GET() {
   try {
@@ -73,6 +74,28 @@ export async function POST(req: Request) {
       },
     });
 
+    await createAuditLog({
+      action: 'UPDATE_SMTP_SETTINGS',
+      actionLabel: 'Sửa cấu hình SMTP',
+      module: 'settings',
+      entityType: 'EmailSettings',
+      entityId: 'default',
+      entityName: 'SMTP Settings',
+      description: 'Đã cập nhật cấu hình email SMTP của hệ thống',
+      oldValues: currentSettings ? { ...currentSettings, smtpPasswordEncrypted: '••••••••' } : null,
+      newValues: {
+        smtpHost,
+        smtpPort: parseInt(smtpPort),
+        smtpUser,
+        smtpPasswordEncrypted: '••••••••',
+        smtpSecure: !!smtpSecure,
+        fromName,
+        fromEmail
+      },
+      request: req,
+      status: 'success'
+    });
+
     return NextResponse.json({
       message: 'Lưu cấu hình SMTP thành công!',
       settings: {
@@ -85,3 +108,4 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Lỗi lưu cấu hình SMTP.' }, { status: 500 });
   }
 }
+

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
+import { createAuditLog } from '@/lib/audit';
 
 export async function GET() {
   try {
@@ -24,6 +25,11 @@ export async function POST(req: Request) {
 
     const body = await req.json();
     const { templates, settings } = body;
+
+    const [currentTemplates, currentSettings] = await Promise.all([
+      prisma.emailTemplate.findMany(),
+      prisma.reminderSettings.findMany()
+    ]);
 
     await prisma.$transaction(async (tx) => {
       // 1. Save templates
@@ -52,9 +58,21 @@ export async function POST(req: Request) {
       }
     });
 
+    await createAuditLog({
+      action: 'UPDATE_REMINDER_SETTINGS',
+      actionLabel: 'Sửa cấu hình nhắc hạn & templates',
+      module: 'settings',
+      description: 'Đã cập nhật mốc thời gian nhắc hạn và nội dung email templates',
+      oldValues: { templates: currentTemplates, settings: currentSettings },
+      newValues: { templates, settings },
+      request: req,
+      status: 'success'
+    });
+
     return NextResponse.json({ message: 'Lưu cấu hình nhắc hạn thành công!' });
   } catch (error) {
     console.error('Save reminder settings error:', error);
     return NextResponse.json({ error: 'Lỗi lưu cấu hình nhắc hạn.' }, { status: 500 });
   }
 }
+

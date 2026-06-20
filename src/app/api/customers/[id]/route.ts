@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
+import { createAuditLog } from '@/lib/audit';
 
 export async function GET(
   req: Request,
@@ -110,6 +111,16 @@ export async function PUT(
       return NextResponse.json({ error: 'Số điện thoại này đã được sử dụng bởi khách hàng khác.' }, { status: 400 });
     }
 
+    const oldValues = {
+      id: customer.id,
+      name: customer.name,
+      phone: customer.phone,
+      facebook: customer.facebook,
+      zalo: customer.zalo,
+      email: customer.email,
+      note: customer.note
+    };
+
     const updatedCustomer = await prisma.customer.update({
       where: { id },
       data: {
@@ -120,6 +131,30 @@ export async function PUT(
         email: email ? email.trim() : null,
         note: note ? note.trim() : null,
       },
+    });
+
+    const newValues = {
+      id: updatedCustomer.id,
+      name: updatedCustomer.name,
+      phone: updatedCustomer.phone,
+      facebook: updatedCustomer.facebook,
+      zalo: updatedCustomer.zalo,
+      email: updatedCustomer.email,
+      note: updatedCustomer.note
+    };
+
+    await createAuditLog({
+      action: 'UPDATE_CUSTOMER',
+      actionLabel: 'Sửa khách hàng',
+      module: 'customers',
+      entityType: 'Customer',
+      entityId: id,
+      entityName: updatedCustomer.name,
+      description: `Đã sửa thông tin khách hàng: ${updatedCustomer.name} (${updatedCustomer.phone})`,
+      oldValues,
+      newValues,
+      request: req,
+      status: 'success'
     });
 
     return NextResponse.json({
@@ -144,6 +179,14 @@ export async function DELETE(
       return NextResponse.json({ error: 'Chỉ có Admin mới có quyền xóa khách hàng.' }, { status: 403 });
     }
 
+    const customer = await prisma.customer.findUnique({
+      where: { id },
+    });
+
+    if (!customer) {
+      return NextResponse.json({ error: 'Khách hàng không tồn tại.' }, { status: 404 });
+    }
+
     // Check if customer is referenced in any order
     const orderCount = await prisma.order.count({
       where: { customerId: id },
@@ -160,9 +203,28 @@ export async function DELETE(
       where: { id },
     });
 
+    await createAuditLog({
+      action: 'DELETE_CUSTOMER',
+      actionLabel: 'Xóa khách hàng',
+      module: 'customers',
+      entityType: 'Customer',
+      entityId: id,
+      entityName: customer.name,
+      description: `Đã xóa khách hàng: ${customer.name} (${customer.phone})`,
+      oldValues: {
+        id: customer.id,
+        name: customer.name,
+        phone: customer.phone,
+        email: customer.email
+      },
+      request: req,
+      status: 'success'
+    });
+
     return NextResponse.json({ message: 'Xóa khách hàng thành công!' });
   } catch (error) {
     console.error('Delete customer error:', error);
     return NextResponse.json({ error: 'Lỗi xóa khách hàng.' }, { status: 500 });
   }
 }
+

@@ -17,6 +17,7 @@ interface UserItem {
   createdAt: string;
   orderCount: number;
   totalSales: number;
+  avatarUrl?: string | null;
 }
 
 type SortField = 'name' | 'orderCount' | 'totalSales';
@@ -314,10 +315,28 @@ export default function AdminUsersPage() {
                 {sortedUsers.map((u) => (
                   <tr key={u.id} className="hover:bg-muted/20 transition-colors">
                     <td className="px-6 py-5">
-                      <div className="font-bold text-foreground">{u.name}</div>
-                      <div className="text-xs text-muted-foreground mt-0.5">{u.email}</div>
+                      <div className="flex items-center gap-3">
+                        {u.avatarUrl ? (
+                          <img
+                            src={u.avatarUrl}
+                            alt={u.name}
+                            className="w-8 h-8 rounded-full object-cover shrink-0 select-none border border-slate-200"
+                          />
+                        ) : (
+                          <div
+                            className="w-8 h-8 rounded-full flex items-center justify-center text-white font-black text-xs shrink-0 select-none"
+                            style={{ background: 'linear-gradient(135deg,#c060c8 0%,#a145ab 100%)' }}
+                          >
+                            {u.name.charAt(0).toUpperCase()}
+                          </div>
+                        )}
+                        <div>
+                          <div className="font-bold text-foreground">{u.name}</div>
+                          <div className="text-xs text-muted-foreground mt-0.5">{u.email}</div>
+                        </div>
+                      </div>
                       {u.note && (
-                        <div className="text-[10px] text-amber-500 font-semibold mt-1">Ghi chú: {u.note}</div>
+                        <div className="text-[10px] text-amber-500 font-semibold mt-2 pl-11">Ghi chú: {u.note}</div>
                       )}
                     </td>
                     <td className="px-6 py-5 text-muted-foreground">{u.phone || '-'}</td>

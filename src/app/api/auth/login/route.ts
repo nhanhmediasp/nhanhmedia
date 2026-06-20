@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { comparePassword, signToken, TOKEN_COOKIE_NAME } from '@/lib/auth';
+import { createAuditLog } from '@/lib/audit';
 
 export async function POST(req: Request) {
   try {
@@ -19,6 +20,15 @@ export async function POST(req: Request) {
     });
 
     if (!user) {
+      await createAuditLog({
+        action: 'LOGIN_FAILED',
+        actionLabel: 'Đăng nhập thất bại',
+        module: 'auth',
+        description: `Đăng nhập thất bại với email: ${email}`,
+        request: req,
+        status: 'failed',
+        errorMessage: 'Email hoặc mật khẩu không chính xác.'
+      });
       return NextResponse.json(
         { error: 'Email hoặc mật khẩu không chính xác.' },
         { status: 400 }
@@ -28,6 +38,15 @@ export async function POST(req: Request) {
     // 2. Check password
     const passwordMatch = comparePassword(password, user.passwordHash);
     if (!passwordMatch) {
+      await createAuditLog({
+        action: 'LOGIN_FAILED',
+        actionLabel: 'Đăng nhập thất bại',
+        module: 'auth',
+        description: `Đăng nhập thất bại với email: ${email}`,
+        request: req,
+        status: 'failed',
+        errorMessage: 'Email hoặc mật khẩu không chính xác.'
+      });
       return NextResponse.json(
         { error: 'Email hoặc mật khẩu không chính xác.' },
         { status: 400 }
@@ -36,6 +55,15 @@ export async function POST(req: Request) {
 
     // 3. Check status
     if (user.status === 'inactive') {
+      await createAuditLog({
+        action: 'LOGIN_FAILED',
+        actionLabel: 'Đăng nhập thất bại',
+        module: 'auth',
+        description: `Tài khoản ${user.email} đăng nhập thất bại do ngừng hoạt động`,
+        request: req,
+        status: 'failed',
+        errorMessage: 'Tài khoản của bạn đã bị ngừng hoạt động.'
+      });
       return NextResponse.json(
         { error: 'Tài khoản của bạn đã bị ngừng hoạt động.' },
         { status: 403 }
@@ -43,6 +71,15 @@ export async function POST(req: Request) {
     }
 
     if (user.status === 'locked') {
+      await createAuditLog({
+        action: 'LOGIN_FAILED',
+        actionLabel: 'Đăng nhập thất bại',
+        module: 'auth',
+        description: `Tài khoản ${user.email} đăng nhập thất bại do bị khóa`,
+        request: req,
+        status: 'failed',
+        errorMessage: 'Tài khoản của bạn đã bị khóa. Vui lòng liên hệ Admin.'
+      });
       return NextResponse.json(
         { error: 'Tài khoản của bạn đã bị khóa. Vui lòng liên hệ Admin.' },
         { status: 403 }
@@ -79,6 +116,21 @@ export async function POST(req: Request) {
       path: '/',
     });
 
+    await createAuditLog({
+      actor: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role
+      },
+      action: 'LOGIN_SUCCESS',
+      actionLabel: 'Đăng nhập thành công',
+      module: 'auth',
+      description: `${user.name} đã đăng nhập vào hệ thống`,
+      request: req,
+      status: 'success'
+    });
+
     return response;
   } catch (error) {
     console.error('Login error:', error);
@@ -88,3 +140,4 @@ export async function POST(req: Request) {
     );
   }
 }
+

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { calculateEndDate } from '../../route';
+import { createAuditLog } from '@/lib/audit';
 
 export async function POST(
   req: Request,
@@ -75,6 +76,14 @@ export async function POST(
 
     const newEndDate = calculateEndDate(renewalStartDate, variant.durationValue, variant.durationUnit);
 
+    const oldValues = {
+      variantId: order.variantId,
+      endDate: order.endDate,
+      status: order.status,
+      price: order.price,
+      customPrice: order.customPrice
+    };
+
     // 4. Record renewal and update order in a transaction
     await prisma.$transaction(async (tx) => {
       // A) Create renewal log
@@ -103,6 +112,29 @@ export async function POST(
       });
     });
 
+    const updatedOrder = await prisma.order.findUnique({ where: { id } });
+    if (updatedOrder) {
+      await createAuditLog({
+        action: 'RENEW_ORDER',
+        actionLabel: 'Gia hạn đơn hàng',
+        module: 'orders',
+        entityType: 'Order',
+        entityId: id,
+        entityName: updatedOrder.orderCode,
+        description: `Đã gia hạn đơn hàng ${updatedOrder.orderCode} đến ngày ${newEndDate.toLocaleDateString('vi-VN')}`,
+        oldValues,
+        newValues: {
+          variantId: updatedOrder.variantId,
+          endDate: updatedOrder.endDate,
+          status: updatedOrder.status,
+          price: updatedOrder.price,
+          customPrice: updatedOrder.customPrice
+        },
+        request: req,
+        status: 'success'
+      });
+    }
+
     return NextResponse.json({
       message: 'Gia hạn dịch vụ thành công!',
       newEndDate: newEndDate.toISOString(),
@@ -112,3 +144,4 @@ export async function POST(
     return NextResponse.json({ error: 'Lỗi gia hạn dịch vụ.' }, { status: 500 });
   }
 }
+

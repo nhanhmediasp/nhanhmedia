@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
+import { createAuditLog } from '@/lib/audit';
 
 export async function GET(req: Request) {
   try {
@@ -107,6 +108,27 @@ export async function POST(req: Request) {
       },
     });
 
+    await createAuditLog({
+      action: 'CREATE_CUSTOMER',
+      actionLabel: 'Tạo khách hàng',
+      module: 'customers',
+      entityType: 'Customer',
+      entityId: newCustomer.id,
+      entityName: newCustomer.name,
+      description: `Đã tạo khách hàng mới: ${newCustomer.name} (${newCustomer.phone})`,
+      newValues: {
+        id: newCustomer.id,
+        name: newCustomer.name,
+        phone: newCustomer.phone,
+        facebook: newCustomer.facebook,
+        zalo: newCustomer.zalo,
+        email: newCustomer.email,
+        note: newCustomer.note
+      },
+      request: req,
+      status: 'success'
+    });
+
     return NextResponse.json({
       message: 'Thêm khách hàng thành công!',
       customer: newCustomer,
@@ -116,3 +138,4 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Lỗi thêm khách hàng mới.' }, { status: 500 });
   }
 }
+

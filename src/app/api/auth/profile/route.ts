@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { hashPassword, comparePassword } from '@/lib/auth';
+import { createAuditLog } from '@/lib/audit';
 
 export async function PUT(req: Request) {
   try {
@@ -10,7 +11,7 @@ export async function PUT(req: Request) {
     }
 
     const body = await req.json();
-    const { name, phone, oldPassword, newPassword } = body;
+    const { name, phone, oldPassword, newPassword, avatarUrl } = body;
 
     if (!name) {
       return NextResponse.json({ error: 'Tên hiển thị là bắt buộc.' }, { status: 400 });
@@ -24,13 +25,17 @@ export async function PUT(req: Request) {
       return NextResponse.json({ error: 'Tài khoản không tồn tại.' }, { status: 404 });
     }
 
+    const oldValues = { name: user.name, phone: user.phone };
+
     const updateData: any = {
       name: name.trim(),
       phone: phone ? phone.trim() : null,
+      avatarUrl: avatarUrl ? avatarUrl.trim() : null,
     };
 
     // If trying to change password
-    if (newPassword && newPassword.trim() !== '') {
+    const changedPassword = newPassword && newPassword.trim() !== '';
+    if (changedPassword) {
       if (!oldPassword) {
         return NextResponse.json({ error: 'Vui lòng cung cấp mật khẩu hiện tại.' }, { status: 400 });
       }
@@ -48,6 +53,30 @@ export async function PUT(req: Request) {
       data: updateData,
     });
 
+    const newValues = { name: updated.name, phone: updated.phone };
+
+    await createAuditLog({
+      actor: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role
+      },
+      action: changedPassword ? 'CHANGE_PASSWORD' : 'UPDATE_USER_PROFILE',
+      actionLabel: changedPassword ? 'Đổi mật khẩu' : 'Cập nhật trang cá nhân',
+      module: 'auth',
+      entityType: 'User',
+      entityId: user.id,
+      entityName: user.email,
+      description: changedPassword 
+        ? `${user.name} đã đổi mật khẩu và cập nhật trang cá nhân`
+        : `${user.name} đã cập nhật thông tin trang cá nhân`,
+      oldValues: changedPassword ? { ...oldValues, passwordHash: '••••••••' } : oldValues,
+      newValues: changedPassword ? { ...newValues, passwordHash: '••••••••' } : newValues,
+      request: req,
+      status: 'success'
+    });
+
     return NextResponse.json({
       message: 'Cập nhật trang cá nhân thành công!',
       user: {
@@ -55,6 +84,7 @@ export async function PUT(req: Request) {
         name: updated.name,
         email: updated.email,
         role: updated.role,
+        avatarUrl: updated.avatarUrl,
       },
     });
   } catch (error) {
@@ -62,3 +92,4 @@ export async function PUT(req: Request) {
     return NextResponse.json({ error: 'Lỗi cập nhật trang cá nhân.' }, { status: 500 });
   }
 }
+

@@ -425,39 +425,41 @@ const ICON_WRAP: Record<string, React.CSSProperties> = {
 };
 
 export const StatCard = ({ title, value, description, icon, iconColor = 'primary', trend, className = '' }: StatCardProps) => (
-  <Card className={`p-6 hover:-translate-y-1 transition-all duration-300 ${className}`}>
-    <div className="flex items-start justify-between gap-4">
-      <div className="space-y-1.5 flex-1 min-w-0">
-        <p className="text-xs font-bold uppercase tracking-widest truncate" style={{ color: '#a1acb8' }}>{title}</p>
-        <p className="text-2xl font-black leading-none" style={{ color: '#1e293b' }}>{value}</p>
-        {(description || trend) && (
-          <div className="flex items-center gap-1.5 flex-wrap">
-            {trend && (
-              <span
-                className="inline-flex items-center gap-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded-lg"
-                style={trend.isPositive
-                  ? { background: '#dcfce7', color: '#16a34a' }
-                  : { background: '#fee2e2', color: '#dc2626' }
-                }
-              >
-                {trend.isPositive ? '▲' : '▼'} {trend.value}
-              </span>
-            )}
-            {description && (
-              <span className="text-[11px] font-medium" style={{ color: '#a1acb8' }}>{description}</span>
-            )}
-          </div>
-        )}
-      </div>
-      {icon && (
-        <div
-          className="w-12 h-12 rounded-2xl flex items-center justify-center shrink-0"
-          style={ICON_WRAP[iconColor]}
-        >
-          {icon}
+  <Card className={`p-6 hover:-translate-y-1 transition-all duration-300 relative overflow-hidden group ${className}`}>
+    <div className={`flex flex-col space-y-1.5 min-w-0 ${icon ? 'pr-8' : ''}`}>
+      <p className="text-[10px] font-extrabold uppercase tracking-widest text-slate-400 truncate" title={title}>{title}</p>
+      <p className="text-lg sm:text-xl md:text-2xl xl:text-base 2xl:text-xl font-black leading-none text-slate-800 whitespace-nowrap truncate" title={String(value)}>{value}</p>
+      {(description || trend) && (
+        <div className="flex items-center gap-1.5 flex-wrap pt-0.5 min-w-0 w-full">
+          {trend && (
+            <span
+              className="inline-flex items-center gap-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded-lg whitespace-nowrap"
+              style={trend.isPositive
+                ? { background: '#dcfce7', color: '#16a34a' }
+                : { background: '#fee2e2', color: '#dc2626' }
+              }
+            >
+              {trend.isPositive ? '▲' : '▼'} {trend.value}
+            </span>
+          )}
+          {description && (
+            <span className="text-[11px] font-medium whitespace-nowrap truncate max-w-full text-slate-400" title={description}>{description}</span>
+          )}
         </div>
       )}
     </div>
+    {icon && (
+      <div
+        className="absolute bottom-[-10px] right-[-10px] w-14 h-14 rounded-full flex items-center justify-center shrink-0 pointer-events-none opacity-[0.08] transition-all duration-300 group-hover:scale-125 group-hover:opacity-[0.15]"
+        style={{
+          background: ICON_WRAP[iconColor].background,
+          color: ICON_WRAP[iconColor].color,
+          transform: 'scale(1.8)',
+        }}
+      >
+        {icon}
+      </div>
+    )}
   </Card>
 );
 

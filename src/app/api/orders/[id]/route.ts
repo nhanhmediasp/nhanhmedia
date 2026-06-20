@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { calculateEndDate } from '../route';
+import { createAuditLog } from '@/lib/audit';
 
 export async function GET(
   req: Request,
@@ -82,7 +83,7 @@ export async function PUT(
     }
 
     const body = await req.json();
-    const { status, startDate, endDate, note, internalNote, customPrice, importPrice, supplierId } = body;
+    const { status, startDate, endDate, note, internalNote, customPrice, importPrice, supplierId, amountPaid } = body;
 
     const order = await prisma.order.findUnique({
       where: { id },
@@ -99,10 +100,28 @@ export async function PUT(
       return NextResponse.json({ error: 'Bạn không có quyền chỉnh sửa đơn hàng này.' }, { status: 403 });
     }
 
+    // Save old values for log
+    const oldValues = {
+      status: order.status,
+      startDate: order.startDate,
+      endDate: order.endDate,
+      price: order.price,
+      customPrice: order.customPrice,
+      importPrice: order.importPrice,
+      amountPaid: order.amountPaid,
+      note: order.note,
+      internalNote: order.internalNote,
+      supplierId: order.supplierId
+    };
+
     // Prepare update data
     const updateData: any = {
-      note: note ? note.trim() : order.note,
+      note: note !== undefined ? (note ? note.trim() : null) : order.note,
     };
+
+    if (amountPaid !== undefined) {
+      updateData.amountPaid = amountPaid === '' || amountPaid === null ? 0 : parseFloat(amountPaid);
+    }
 
     // Admin-only updates
     if (isAdmin) {
@@ -179,6 +198,40 @@ export async function PUT(
       },
     });
 
+    const newValues = {
+      status: updatedOrder.status,
+      startDate: updatedOrder.startDate,
+      endDate: updatedOrder.endDate,
+      price: updatedOrder.price,
+      customPrice: updatedOrder.customPrice,
+      importPrice: updatedOrder.importPrice,
+      amountPaid: updatedOrder.amountPaid,
+      note: updatedOrder.note,
+      internalNote: updatedOrder.internalNote,
+      supplierId: updatedOrder.supplierId
+    };
+
+    let action = 'UPDATE_ORDER';
+    let actionLabel = 'Sửa đơn hàng';
+    if (order.status !== updatedOrder.status) {
+      action = 'CHANGE_ORDER_STATUS';
+      actionLabel = 'Thay đổi trạng thái đơn hàng';
+    }
+
+    await createAuditLog({
+      action,
+      actionLabel,
+      module: 'orders',
+      entityType: 'Order',
+      entityId: id,
+      entityName: updatedOrder.orderCode,
+      description: `Đã cập nhật đơn hàng ${updatedOrder.orderCode} (${actionLabel})`,
+      oldValues,
+      newValues,
+      request: req,
+      status: 'success'
+    });
+
     return NextResponse.json({
       message: 'Cập nhật đơn hàng thành công!',
       order: updatedOrder,
@@ -201,6 +254,14 @@ export async function DELETE(
       return NextResponse.json({ error: 'Chỉ có Admin mới có quyền xóa đơn hàng.' }, { status: 403 });
     }
 
+    const order = await prisma.order.findUnique({
+      where: { id },
+    });
+
+    if (!order) {
+      return NextResponse.json({ error: 'Đơn hàng không tồn tại.' }, { status: 404 });
+    }
+
     // Delete order (OrderRenewals and EmailLogs have cascade/restrict behavior)
     // First, clean up renewals for this order
     await prisma.orderRenewal.deleteMany({
@@ -216,9 +277,29 @@ export async function DELETE(
       where: { id },
     });
 
+    await createAuditLog({
+      action: 'DELETE_ORDER',
+      actionLabel: 'Xóa đơn hàng',
+      module: 'orders',
+      entityType: 'Order',
+      entityId: id,
+      entityName: order.orderCode,
+      description: `Đã xóa đơn hàng: ${order.orderCode}`,
+      oldValues: {
+        id: order.id,
+        orderCode: order.orderCode,
+        price: order.price,
+        customPrice: order.customPrice,
+        status: order.status
+      },
+      request: req,
+      status: 'success'
+    });
+
     return NextResponse.json({ message: 'Xóa đơn hàng thành công!' });
   } catch (error) {
     console.error('Delete order error:', error);
     return NextResponse.json({ error: 'Lỗi xóa đơn hàng.' }, { status: 500 });
   }
 }
+

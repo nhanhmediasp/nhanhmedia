@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
+import { createAuditLog } from '@/lib/audit';
 
 // Helper to calculate end date based on start date, value and unit
 export function calculateEndDate(startDate: Date, durationValue: number, durationUnit: string): Date {
@@ -221,6 +222,34 @@ export async function POST(req: Request) {
       },
     });
 
+    await createAuditLog({
+      action: 'CREATE_ORDER',
+      actionLabel: 'Tạo đơn hàng',
+      module: 'orders',
+      entityType: 'Order',
+      entityId: newOrder.id,
+      entityName: newOrder.orderCode,
+      description: `Đã tạo đơn hàng mới: ${newOrder.orderCode} cho khách hàng ${customer.name}`,
+      newValues: {
+        id: newOrder.id,
+        orderCode: newOrder.orderCode,
+        customerId: newOrder.customerId,
+        productId: newOrder.productId,
+        variantId: newOrder.variantId,
+        price: newOrder.price,
+        customPrice: newOrder.customPrice,
+        importPrice: newOrder.importPrice,
+        supplierId: newOrder.supplierId,
+        status: newOrder.status,
+        startDate: newOrder.startDate,
+        endDate: newOrder.endDate,
+        note: newOrder.note,
+        internalNote: newOrder.internalNote
+      },
+      request: req,
+      status: 'success'
+    });
+
     return NextResponse.json({
       message: 'Tạo đơn hàng thành công!',
       order: newOrder,
@@ -230,3 +259,4 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Lỗi tạo đơn hàng mới.' }, { status: 500 });
   }
 }
+

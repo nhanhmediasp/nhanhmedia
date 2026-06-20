@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
+import { createAuditLog } from '@/lib/audit';
 
 // GET all products (including variants and prices) for Admin
 export async function GET() {
@@ -89,9 +90,31 @@ export async function POST(req: Request) {
       return product;
     });
 
+    await createAuditLog({
+      action: 'CREATE_PRODUCT',
+      actionLabel: 'Tạo sản phẩm',
+      module: 'products',
+      entityType: 'Product',
+      entityId: newProduct.id,
+      entityName: newProduct.name,
+      description: `Đã tạo sản phẩm mới: ${newProduct.name} (Slug: ${newProduct.slug})`,
+      newValues: {
+        id: newProduct.id,
+        name: newProduct.name,
+        slug: newProduct.slug,
+        description: newProduct.description,
+        imageUrl: newProduct.imageUrl,
+        status: newProduct.status,
+        variants: variants
+      },
+      request: req,
+      status: 'success'
+    });
+
     return NextResponse.json({ message: 'Tạo sản phẩm thành công!', product: newProduct });
   } catch (error) {
     console.error('Create product error:', error);
     return NextResponse.json({ error: 'Lỗi tạo sản phẩm.' }, { status: 500 });
   }
 }
+

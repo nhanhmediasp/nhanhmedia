@@ -8,7 +8,8 @@ export async function middleware(req: NextRequest) {
   // 1. Skip static resources, images, icons, and next internals
   if (
     pathname.startsWith('/_next') ||
-    pathname.startsWith('/api/auth') || // Allow login/logout APIs
+    pathname === '/api/auth/login' ||
+    pathname === '/api/auth/logout' || // Allow login/logout APIs without authentication
     pathname.startsWith('/api/cron') || // Cron job has its own token protection
     pathname.includes('.') || // Static files like favicon.ico, logo.png
     pathname === '/favicon.ico'

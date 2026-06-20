@@ -15,10 +15,13 @@ export default function UserProfilePage() {
   const [confirmPassword, setConfirmPassword] = useState('');
   
   const [saving, setSaving] = useState(false);
+  const [avatarUrl, setAvatarUrl] = useState('');
+  const [uploading, setUploading] = useState(false);
 
   useEffect(() => {
     if (user) {
       setName(user.name || '');
+      setAvatarUrl(user.avatarUrl || '');
       // Fetch phone number by calling reports or check details
       const fetchPhone = async () => {
         try {
@@ -37,6 +40,40 @@ export default function UserProfilePage() {
       fetchPhone();
     }
   }, [user]);
+
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 5 * 1024 * 1024) {
+      showToast('Kích thước file tối đa 5MB.', 'error');
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    setUploading(true);
+    try {
+      const res = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData,
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        setAvatarUrl(data.imageUrl);
+        showToast('Tải ảnh đại diện lên thành công!', 'success');
+      } else {
+        showToast(data.error || 'Upload ảnh thất bại.', 'error');
+      }
+    } catch (err) {
+      console.error('Upload avatar error:', err);
+      showToast('Lỗi kết nối máy chủ.', 'error');
+    } finally {
+      setUploading(false);
+    }
+  };
 
   const handleUpdateProfile = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -60,6 +97,7 @@ export default function UserProfilePage() {
           phone,
           oldPassword: oldPassword || undefined,
           newPassword: newPassword || undefined,
+          avatarUrl: avatarUrl || undefined,
         }),
       });
 
@@ -187,6 +225,51 @@ export default function UserProfilePage() {
 
         {/* Right side: Action updates */}
         <div className="space-y-6">
+          {/* Avatar Upload Card */}
+          <Card>
+            <CardHeader className="py-5">
+              <CardTitle>Ảnh đại diện</CardTitle>
+            </CardHeader>
+            <CardContent className="flex flex-col items-center gap-4">
+              <div className="relative group select-none">
+                {avatarUrl ? (
+                  <img
+                    src={avatarUrl}
+                    alt="Avatar"
+                    className="w-24 h-24 rounded-full object-cover border-4 border-slate-100 dark:border-slate-800 shadow-md"
+                  />
+                ) : (
+                  <div
+                    className="w-24 h-24 rounded-full flex items-center justify-center text-white font-black text-3xl shadow-md"
+                    style={{ background: 'linear-gradient(135deg,#c060c8 0%,#a145ab 100%)' }}
+                  >
+                    {user.name.charAt(0).toUpperCase()}
+                  </div>
+                )}
+                
+                {uploading && (
+                  <div className="absolute inset-0 bg-black/40 rounded-full flex items-center justify-center text-white text-xs font-bold">
+                    Đang tải...
+                  </div>
+                )}
+              </div>
+              
+              <div className="w-full text-center">
+                <label className="inline-flex items-center justify-center px-4 py-2 bg-slate-100 dark:bg-slate-800 text-xs font-bold text-slate-750 dark:text-slate-200 rounded-xl hover:bg-slate-150 dark:hover:bg-slate-750 transition-colors cursor-pointer border border-border">
+                  Thay đổi ảnh đại diện
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleAvatarUpload}
+                    className="hidden"
+                    disabled={uploading}
+                  />
+                </label>
+                <p className="text-[10px] text-slate-400 mt-2">Định dạng: JPG, PNG, WebP. Tối đa 5MB.</p>
+              </div>
+            </CardContent>
+          </Card>
+
           <Card className="bg-[#f7eafa] border border-[#a145ab]/20">
             <CardHeader className="py-5 flex flex-row items-center gap-2">
               <Lock className="w-5 h-5 text-[#a145ab]" />

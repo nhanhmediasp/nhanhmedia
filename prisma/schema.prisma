@@ -16,6 +16,7 @@ model User {
   role          String   @default("member") // admin, member, collaborator, agency
   status        String   @default("active") // active, inactive, locked
   note          String?
+  avatarUrl     String?  @map("avatar_url")
   createdAt     DateTime @default(now()) @map("created_at")
   updatedAt     DateTime @updatedAt @map("updated_at")
 
@@ -115,6 +116,7 @@ model Order {
   refundedAt      DateTime? @map("refunded_at")
   importPrice     Float?   @map("import_price")
   supplierId      String?  @map("supplier_id")
+  amountPaid      Float    @default(0) @map("amount_paid")
 
   customer      Customer       @relation(fields: [customerId], references: [id])
   createdByUser User           @relation(fields: [createdByUserId], references: [id])
@@ -237,3 +239,39 @@ model Supplier {
 
   @@map("suppliers")
 }
+
+model AuditLog {
+  id              String   @id @default(uuid())
+  actorUserId     String?  @map("actor_user_id")
+  actorName       String   @map("actor_name")
+  actorEmail      String?  @map("actor_email")
+  actorRole       String   @map("actor_role") // guest, admin, member, collaborator, agency
+  action          String
+  actionLabel     String   @map("action_label")
+  module          String   // users, customers, products, orders, settings, auth, reports
+  entityType      String?  @map("entity_type")
+  entityId        String?  @map("entity_id")
+  entityName      String?  @map("entity_name")
+  description     String
+  oldValues       String?  @map("old_values") // JSON string
+  newValues       String?  @map("new_values") // JSON string
+  changedFields   String?  @map("changed_fields") // JSON array string
+  ipAddress       String?  @map("ip_address")
+  userAgent       String?  @map("user_agent")
+  requestMethod   String?  @map("request_method")
+  requestPath     String?  @map("request_path")
+  status          String   @default("success") // success, failed
+  errorMessage    String?  @map("error_message")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@index([createdAt])
+  @@index([actorUserId])
+  @@index([actorRole])
+  @@index([action])
+  @@index([module])
+  @@index([entityType])
+  @@index([entityId])
+  @@index([status])
+  @@map("audit_logs")
+}
+

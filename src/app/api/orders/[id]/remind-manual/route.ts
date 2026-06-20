@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import nodemailer from 'nodemailer';
 import { decrypt } from '@/lib/crypto';
+import { createAuditLog } from '@/lib/audit';
 
 // Helper to replace email template variables
 export function formatEmailBody(
@@ -161,6 +162,31 @@ export async function POST(
       },
     });
 
+    await createAuditLog({
+      action: 'SEND_REMINDER_EMAIL',
+      actionLabel: 'Gửi email nhắc hạn thủ công',
+      module: 'orders',
+      entityType: 'Order',
+      entityId: order.id,
+      entityName: order.orderCode,
+      description: sendStatus === 'success'
+        ? `Đã gửi email nhắc hạn thành công tới ${order.customer.email} cho đơn hàng ${order.orderCode}`
+        : `Gửi email nhắc hạn thất bại tới ${order.customer.email} cho đơn hàng ${order.orderCode}`,
+      oldValues: {
+        email: order.customer.email,
+        status: order.status
+      },
+      newValues: {
+        email: order.customer.email,
+        status: order.status,
+        sendStatus,
+        errorMessage
+      },
+      request: req,
+      status: sendStatus === 'success' ? 'success' : 'failed',
+      errorMessage: errorMessage || undefined
+    });
+
     if (sendStatus === 'failed') {
       return NextResponse.json(
         {
@@ -178,3 +204,4 @@ export async function POST(
     return NextResponse.json({ error: 'Lỗi gửi email máy chủ.' }, { status: 500 });
   }
 }
+

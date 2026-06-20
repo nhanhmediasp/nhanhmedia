@@ -85,6 +85,7 @@ interface Order {
   price: number;
   customPrice: number | null;
   importPrice: number | null;
+  amountPaid: number;
   status: string;
   startDate: string;
   endDate: string;
@@ -109,6 +110,10 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
   // Status editing
   const [status, setStatus] = useState('');
   const [updatingStatus, setUpdatingStatus] = useState(false);
+
+  // Payment editing
+  const [updatingPayment, setUpdatingPayment] = useState(false);
+  const [customPaymentVal, setCustomPaymentVal] = useState('');
 
   // Supplier editing
   const [suppliers, setSuppliers] = useState<{ id: string; name: string; contactUrl: string | null; icon?: string | null }[]>([]);
@@ -230,6 +235,29 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
       showToast('Lỗi kết nối máy chủ.', 'error');
     } finally {
       setSavingImportPrice(false);
+    }
+  };
+
+  const handleUpdatePayment = async (val: number) => {
+    setUpdatingPayment(true);
+    try {
+      const res = await fetch(`/api/orders/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ amountPaid: val }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        showToast('Cập nhật số tiền thanh toán thành công!', 'success');
+        setOrder(data.order);
+        setCustomPaymentVal('');
+      } else {
+        showToast(data.error || 'Cập nhật thất bại.', 'error');
+      }
+    } catch {
+      showToast('Lỗi kết nối máy chủ.', 'error');
+    } finally {
+      setUpdatingPayment(false);
     }
   };
 
@@ -519,6 +547,83 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
                   <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Ngày tạo đơn:</span>
                   <div className="font-bold text-foreground flex items-center gap-1.5 text-sm">
                     <span>{formatDateTime(order.createdAt)}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Payment Info & Actions */}
+              <div className="pt-4 border-t border-border space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-slate-50 dark:bg-zinc-900/60 p-4 rounded-xl border border-border/60">
+                  <div className="space-y-1.5">
+                    <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Tình trạng thanh toán:</span>
+                    <div className="flex items-center gap-2.5 flex-wrap">
+                      <span className="font-extrabold text-foreground text-sm">
+                        Đã nhận: {formatVND(order.amountPaid ?? 0)} / {formatVND(currentPrice)}
+                      </span>
+                      {(order.amountPaid ?? 0) >= currentPrice ? (
+                        <span className="inline-flex items-center text-[10px] font-bold px-2 py-0.5 rounded-lg bg-green-100 text-green-700 dark:bg-green-950/30 dark:text-green-400">
+                          Đã thanh toán đủ
+                        </span>
+                      ) : (order.amountPaid ?? 0) > 0 ? (
+                        <span className="inline-flex items-center text-[10px] font-bold px-2 py-0.5 rounded-lg bg-amber-100 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400">
+                          Thanh toán một phần
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center text-[10px] font-bold px-2 py-0.5 rounded-lg bg-rose-100 text-rose-700 dark:bg-rose-950/30 dark:text-rose-400">
+                          Chưa thanh toán
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  
+                  {/* Quick Action Buttons */}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <Button 
+                      type="button" 
+                      size="sm" 
+                      variant={(order.amountPaid ?? 0) >= currentPrice ? "outline" : "primary"}
+                      onClick={() => handleUpdatePayment(currentPrice)}
+                      disabled={updatingPayment}
+                      className="cursor-pointer font-bold text-xs"
+                    >
+                      Đã thanh toán
+                    </Button>
+                    <Button 
+                      type="button" 
+                      size="sm" 
+                      variant="outline"
+                      onClick={() => handleUpdatePayment(currentPrice * 0.5)}
+                      disabled={updatingPayment}
+                      className="cursor-pointer font-bold text-xs"
+                    >
+                      Khách đã thanh toán 50%
+                    </Button>
+                    <div className="flex items-center gap-1">
+                      <input 
+                        type="number"
+                        placeholder="Tùy chỉnh..."
+                        value={customPaymentVal}
+                        onChange={(e) => setCustomPaymentVal(e.target.value)}
+                        className="w-24 px-2 py-1 text-xs bg-white dark:bg-zinc-800 border border-border rounded-lg"
+                      />
+                      <Button 
+                        type="button" 
+                        size="sm" 
+                        variant="outline"
+                        onClick={() => {
+                          const val = parseFloat(customPaymentVal);
+                          if (isNaN(val) || val < 0) {
+                            showToast("Vui lòng nhập số tiền hợp lệ", "error");
+                            return;
+                          }
+                          handleUpdatePayment(val);
+                        }}
+                        disabled={updatingPayment}
+                        className="cursor-pointer font-bold text-xs px-2"
+                      >
+                        Lưu
+                      </Button>
+                    </div>
                   </div>
                 </div>
               </div>

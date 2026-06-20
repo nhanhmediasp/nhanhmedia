@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { hashPassword } from '@/lib/auth';
+import { createAuditLog } from '@/lib/audit';
 
 export async function GET(req: Request) {
   try {
@@ -31,6 +32,7 @@ export async function GET(req: Request) {
         role: u.role,
         status: u.status,
         note: u.note,
+        avatarUrl: u.avatarUrl,
         createdAt: u.createdAt,
         orderCount,
         totalSales,
@@ -81,6 +83,27 @@ export async function POST(req: Request) {
       },
     });
 
+    await createAuditLog({
+      action: 'CREATE_USER',
+      actionLabel: 'Tạo tài khoản mới',
+      module: 'users',
+      entityType: 'User',
+      entityId: newUser.id,
+      entityName: newUser.email,
+      description: `Đã tạo tài khoản mới: ${newUser.name} (${newUser.email}) với vai trò ${newUser.role}`,
+      newValues: {
+        id: newUser.id,
+        name: newUser.name,
+        email: newUser.email,
+        phone: newUser.phone,
+        role: newUser.role,
+        status: newUser.status,
+        note: newUser.note
+      },
+      request: req,
+      status: 'success'
+    });
+
     return NextResponse.json({
       message: 'Tạo tài khoản thành công!',
       user: {
@@ -95,3 +118,4 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Lỗi tạo tài khoản mới.' }, { status: 500 });
   }
 }
+

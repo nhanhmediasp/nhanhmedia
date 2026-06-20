@@ -9,6 +9,7 @@ export async function GET(req: Request) {
     const creatorId = searchParams.get('creatorId');
     const productId = searchParams.get('productId');
     const status = searchParams.get('status');
+    const supplierId = searchParams.get('supplierId');
 
     // Parse date filters
     let startFilterDate: Date | null = null;
@@ -28,6 +29,7 @@ export async function GET(req: Request) {
     if (creatorId) orderWhere.createdByUserId = creatorId;
     if (productId) orderWhere.productId = productId;
     if (status) orderWhere.status = status;
+    if (supplierId) orderWhere.supplierId = supplierId;
 
     if (startFilterDate || endFilterDate) {
       orderWhere.createdAt = {};
@@ -38,6 +40,7 @@ export async function GET(req: Request) {
     // Build query filters for Renewals (renewals are also a source of revenue!)
     const renewalWhere: any = {};
     if (creatorId) renewalWhere.renewedByUserId = creatorId;
+    if (supplierId) renewalWhere.order = { supplierId: supplierId };
     if (startFilterDate || endFilterDate) {
       renewalWhere.createdAt = {};
       if (startFilterDate) renewalWhere.createdAt.gte = startFilterDate;
@@ -83,6 +86,22 @@ export async function GET(req: Request) {
     const startOfYear = new Date(now.getFullYear(), 0, 1);
     const endOfYear = new Date(now.getFullYear(), 11, 31, 23, 59, 59, 999);
 
+    // Today 7 days ago boundary
+    const startOf7DaysAgo = new Date(startOfToday);
+    startOf7DaysAgo.setDate(startOf7DaysAgo.getDate() - 7);
+    const endOf7DaysAgo = new Date(endOfToday);
+    endOf7DaysAgo.setDate(endOf7DaysAgo.getDate() - 7);
+
+    // Last 7 days boundary (including today)
+    const startOfLast7Days = new Date(startOfToday);
+    startOfLast7Days.setDate(startOfLast7Days.getDate() - 6);
+
+    // Previous 7 days boundary
+    const startOfPrev7Days = new Date(startOfToday);
+    startOfPrev7Days.setDate(startOfPrev7Days.getDate() - 13);
+    const endOfPrev7Days = new Date(endOfToday);
+    endOfPrev7Days.setDate(endOfPrev7Days.getDate() - 7);
+
     // Query Overview Revenues
     const [
       ordersToday,
@@ -94,6 +113,12 @@ export async function GET(req: Request) {
       totalCustomers,
       totalOrders,
       expiringSoonCount,
+      orders7DaysAgo,
+      renewals7DaysAgo,
+      ordersLast7Days,
+      renewalsLast7Days,
+      ordersPrev7Days,
+      renewalsPrev7Days,
     ] = await Promise.all([
       // Orders created today
       prisma.order.findMany({ where: { createdAt: { gte: startOfToday, lte: endOfToday } } }),
@@ -125,6 +150,18 @@ export async function GET(req: Request) {
           ],
         },
       }),
+      // Orders created 7 days ago
+      prisma.order.findMany({ where: { createdAt: { gte: startOf7DaysAgo, lte: endOf7DaysAgo } } }),
+      // Renewals created 7 days ago
+      prisma.orderRenewal.findMany({ where: { createdAt: { gte: startOf7DaysAgo, lte: endOf7DaysAgo } } }),
+      // Orders created last 7 days
+      prisma.order.findMany({ where: { createdAt: { gte: startOfLast7Days, lte: endOfToday } } }),
+      // Renewals created last 7 days
+      prisma.orderRenewal.findMany({ where: { createdAt: { gte: startOfLast7Days, lte: endOfToday } } }),
+      // Orders created previous 7 days
+      prisma.order.findMany({ where: { createdAt: { gte: startOfPrev7Days, lte: endOfPrev7Days } } }),
+      // Renewals created previous 7 days
+      prisma.orderRenewal.findMany({ where: { createdAt: { gte: startOfPrev7Days, lte: endOfPrev7Days } } }),
     ]);
 
     // Sum revenue today/month/year
@@ -135,9 +172,30 @@ export async function GET(req: Request) {
     const revenueMonth = sumOrderRev(ordersMonth) + sumRenewalRev(renewalsMonth);
     const revenueYear = sumOrderRev(ordersYear) + sumRenewalRev(renewalsYear);
 
+    // Sum additional values
+    const revenue7DaysAgo = sumOrderRev(orders7DaysAgo) + sumRenewalRev(renewals7DaysAgo);
+    const revenueLast7Days = sumOrderRev(ordersLast7Days) + sumRenewalRev(renewalsLast7Days);
+    const revenuePrev7Days = sumOrderRev(ordersPrev7Days) + sumRenewalRev(renewalsPrev7Days);
+
+    // Calculate growth percentages
+    const calculateGrowth = (current: number, previous: number) => {
+      if (previous === 0) {
+        return current > 0 ? 100 : 0;
+      }
+      return ((current - previous) / previous) * 100;
+    };
+
+    const revenueTodayGrowth = calculateGrowth(revenueToday, revenue7DaysAgo);
+    const revenueLast7DaysGrowth = calculateGrowth(revenueLast7Days, revenuePrev7Days);
+
     // 3. Process charts data based on active filters
-    // Daily revenue (last 15 days or filter period)
-    const dailyMap = new Map<string, number>();
+    // Daily stats (last 15 days or filter period)
+    interface DayStats {
+      revenue: number;
+      importPrice: number;
+      profit: number;
+    }
+    const dailyMap = new Map<string, DayStats>();
     const formatDayKey = (date: Date) => {
       return `${String(date.getDate()).padStart(2, '0')}/${String(date.getMonth() + 1).padStart(2, '0')}`;
     };
@@ -149,7 +207,7 @@ export async function GET(req: Request) {
     const tempDate = new Date(minDate);
     const maxDate = endFilterDate || now;
     while (tempDate <= maxDate) {
-      dailyMap.set(formatDayKey(tempDate), 0);
+      dailyMap.set(formatDayKey(tempDate), { revenue: 0, importPrice: 0, profit: 0 });
       tempDate.setDate(tempDate.getDate() + 1);
     }
 
@@ -157,8 +215,12 @@ export async function GET(req: Request) {
     orders.forEach((o) => {
       const dayKey = formatDayKey(new Date(o.createdAt));
       if (dailyMap.has(dayKey)) {
+        const current = dailyMap.get(dayKey)!;
         const val = o.customPrice !== null ? o.customPrice : o.price;
-        dailyMap.set(dayKey, (dailyMap.get(dayKey) || 0) + val);
+        const imp = o.importPrice || 0;
+        current.revenue += val;
+        current.importPrice += imp;
+        current.profit += (val - imp);
       }
     });
 
@@ -166,11 +228,19 @@ export async function GET(req: Request) {
     renewals.forEach((r) => {
       const dayKey = formatDayKey(new Date(r.createdAt));
       if (dailyMap.has(dayKey)) {
-        dailyMap.set(dayKey, (dailyMap.get(dayKey) || 0) + r.price);
+        const current = dailyMap.get(dayKey)!;
+        current.revenue += r.price;
+        current.profit += r.price;
       }
     });
 
-    const dailyRevenue = Array.from(dailyMap.entries()).map(([label, value]) => ({ label, value }));
+    const dailyRevenue = Array.from(dailyMap.entries()).map(([label, stats]) => ({
+      label,
+      value: stats.revenue,
+      revenue: stats.revenue,
+      importPrice: stats.importPrice,
+      profit: stats.profit,
+    }));
 
     // Monthly revenue (for the current year)
     const monthlyMap = new Map<string, number>();
@@ -315,9 +385,14 @@ export async function GET(req: Request) {
         totalCustomers,
         totalOrders,
         expiringSoonCount,
+        revenueLast7Days,
+        revenuePrev7Days,
+        revenueLast7DaysGrowth,
+        revenueTodayGrowth,
       },
       filteredReport: {
         totalRevenue: totalFilteredRevenue,
+        totalImport: totalFilteredImport,
         totalProfit: totalFilteredProfit,
         orderCount: orders.length,
         orders: orders.map((o) => ({

@@ -5,13 +5,43 @@ export async function GET(req: Request) {
   try {
     const suppliers = await prisma.supplier.findMany({
       include: {
+        orders: {
+          select: {
+            price: true,
+            customPrice: true,
+            importPrice: true
+          }
+        },
         _count: {
           select: { orders: true }
         }
       },
       orderBy: { name: 'asc' }
     });
-    return NextResponse.json({ suppliers });
+
+    const formattedSuppliers = suppliers.map(s => {
+      let revenue = 0;
+      let cost = 0;
+      s.orders.forEach(o => {
+        const price = o.customPrice !== null ? o.customPrice : o.price;
+        revenue += price;
+        cost += o.importPrice || 0;
+      });
+
+      return {
+        id: s.id,
+        name: s.name,
+        contactUrl: s.contactUrl,
+        icon: s.icon,
+        createdAt: s.createdAt,
+        _count: s._count,
+        totalRevenue: revenue,
+        totalCost: cost,
+        totalProfit: revenue - cost
+      };
+    });
+
+    return NextResponse.json({ suppliers: formattedSuppliers });
   } catch (error) {
     console.error('Get suppliers error:', error);
     return NextResponse.json({ error: 'Lỗi tải danh sách nguồn hàng.' }, { status: 500 });

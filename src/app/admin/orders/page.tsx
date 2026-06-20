@@ -49,6 +49,7 @@ interface Order {
   variant: Variant;
   price: number;
   customPrice: number | null;
+  amountPaid: number;
   status: string;
   startDate: string;
   endDate: string;
@@ -103,6 +104,7 @@ export default function AdminOrdersPage() {
   const [creatorFilter, setCreatorFilter] = useState('');
   const [creators, setCreators] = useState<{ id: string; name: string; role: string }[]>([]);
   const [expiryFilter, setExpiryFilter] = useState('');
+  const [paymentFilter, setPaymentFilter] = useState('');
 
   // Sort state
   const [sortField, setSortField] = useState<SortField | null>(null);
@@ -213,6 +215,19 @@ export default function AdminOrdersPage() {
     }
   };
 
+  const isFiltered = searchTerm !== '' || statusFilter !== '' || productFilter !== '' || supplierFilter !== '' || creatorFilter !== '' || expiryFilter !== '' || paymentFilter !== '';
+
+  const handleClearFilters = () => {
+    setSearchTerm('');
+    setStatusFilter('');
+    setProductFilter('');
+    setSupplierFilter('');
+    setCreatorFilter('');
+    setExpiryFilter('');
+    setPaymentFilter('');
+    showToast('Đã xóa tất cả bộ lọc', 'info');
+  };
+
   // Filter orders
   const filteredOrders = orders.filter((o) => {
     const matchesSearch =
@@ -224,6 +239,12 @@ export default function AdminOrdersPage() {
     const matchesProduct = productFilter === '' || o.productId === productFilter;
     const matchesSupplier = supplierFilter === '' || o.supplierId === supplierFilter;
     const matchesCreator = creatorFilter === '' || o.createdByUserId === creatorFilter;
+
+    const finalPrice = o.customPrice !== null ? o.customPrice : o.price;
+    const isPaid = (o.amountPaid ?? 0) >= finalPrice;
+    const matchesPayment = paymentFilter === '' || 
+      (paymentFilter === 'paid' && isPaid) || 
+      (paymentFilter === 'unpaid' && !isPaid);
 
     // Matches Expiry Filter
     let matchesExpiry = true;
@@ -248,7 +269,7 @@ export default function AdminOrdersPage() {
       }
     }
 
-    return matchesSearch && matchesStatus && matchesProduct && matchesSupplier && matchesCreator && matchesExpiry;
+    return matchesSearch && matchesStatus && matchesProduct && matchesSupplier && matchesCreator && matchesExpiry && matchesPayment;
   });
 
   // Sort orders
@@ -371,8 +392,8 @@ export default function AdminOrdersPage() {
       <Card>
         <CardContent className="py-5">
           <div className="space-y-4">
-            {/* Row 1: Search, Status, Product */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {/* Row 1: Search, Status, Product, Payment */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <div className="relative">
                 <span className="absolute left-3 top-3 text-slate-400">
                   <Search className="w-4.5 h-4.5" />
@@ -413,6 +434,18 @@ export default function AdminOrdersPage() {
                       {p.name}
                     </option>
                   ))}
+                </select>
+              </div>
+
+              <div>
+                <select
+                  value={paymentFilter}
+                  onChange={(e) => setPaymentFilter(e.target.value)}
+                  className="w-full px-3 py-2.5 text-sm bg-input border border-border rounded-xl text-foreground focus:outline-none focus:border-primary focus:ring-2 focus:ring-ring cursor-pointer"
+                >
+                  <option value="">Tất cả thanh toán</option>
+                  <option value="paid">Đã thanh toán đủ</option>
+                  <option value="unpaid">Chưa thanh toán đủ</option>
                 </select>
               </div>
             </div>
@@ -464,6 +497,18 @@ export default function AdminOrdersPage() {
                 </select>
               </div>
             </div>
+            {isFiltered && (
+              <div className="flex justify-end pt-3 border-t border-dashed border-border/60">
+                <Button 
+                  variant="outline" 
+                  onClick={handleClearFilters}
+                  className="text-xs py-1.5 h-8 text-rose-500 hover:text-rose-600 border-rose-200 hover:bg-rose-50/50 flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Xóa bộ lọc</span>
+                </Button>
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -523,6 +568,21 @@ export default function AdminOrdersPage() {
                         {o.customPrice !== null && (
                           <div className="text-[10px] text-amber-500 font-semibold mt-0.5">Sửa thủ công</div>
                         )}
+                        <div className="mt-1">
+                          {(o.amountPaid ?? 0) >= finalPrice ? (
+                            <span className="text-[10px] font-bold text-green-600 bg-green-50 dark:bg-green-950/20 px-1.5 py-0.5 rounded">
+                              Đã trả đủ
+                            </span>
+                          ) : (o.amountPaid ?? 0) > 0 ? (
+                            <span className="text-[10px] font-bold text-amber-600 bg-amber-50 dark:bg-amber-950/20 px-1.5 py-0.5 rounded" title={`Đã trả: ${formatVND(o.amountPaid)}`}>
+                              Còn nợ: {formatVND(finalPrice - o.amountPaid)}
+                            </span>
+                          ) : (
+                            <span className="text-[10px] font-bold text-rose-600 bg-rose-50 dark:bg-rose-950/20 px-1.5 py-0.5 rounded">
+                              Nợ 100%
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="px-6 py-5">
                         <div className="flex flex-col items-center gap-0.5 text-xs">

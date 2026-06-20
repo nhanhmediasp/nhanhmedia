@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
+import { createAuditLog } from '@/lib/audit';
 
 export async function PUT(
   req: Request,
@@ -21,6 +22,27 @@ export async function PUT(
     if (existing) {
       return NextResponse.json({ error: 'Slug sản phẩm đã bị trùng.' }, { status: 400 });
     }
+
+    const product = await prisma.product.findUnique({
+      where: { id },
+      include: {
+        variants: { include: { prices: true } }
+      }
+    });
+
+    if (!product) {
+      return NextResponse.json({ error: 'Sản phẩm không tồn tại.' }, { status: 404 });
+    }
+
+    const oldValues = {
+      id: product.id,
+      name: product.name,
+      slug: product.slug,
+      description: product.description,
+      imageUrl: product.imageUrl,
+      status: product.status,
+      variants: product.variants
+    };
 
     // Update in transaction
     await prisma.$transaction(async (tx) => {
@@ -138,6 +160,44 @@ export async function PUT(
       }
     });
 
+    const updatedProduct = await prisma.product.findUnique({
+      where: { id },
+      include: {
+        variants: { include: { prices: true } }
+      }
+    });
+
+    if (updatedProduct) {
+      let action = 'UPDATE_PRODUCT';
+      let actionLabel = 'Sửa sản phẩm';
+      if (product.status !== updatedProduct.status) {
+        action = 'UPDATE_PRODUCT_STATUS';
+        actionLabel = updatedProduct.status === 'active' ? 'Kích hoạt sản phẩm' : 'Tắt kích hoạt sản phẩm';
+      }
+
+      await createAuditLog({
+        action,
+        actionLabel,
+        module: 'products',
+        entityType: 'Product',
+        entityId: id,
+        entityName: updatedProduct.name,
+        description: `Đã cập nhật sản phẩm: ${updatedProduct.name} (Slug: ${updatedProduct.slug})`,
+        oldValues,
+        newValues: {
+          id: updatedProduct.id,
+          name: updatedProduct.name,
+          slug: updatedProduct.slug,
+          description: updatedProduct.description,
+          imageUrl: updatedProduct.imageUrl,
+          status: updatedProduct.status,
+          variants: updatedProduct.variants
+        },
+        request: req,
+        status: 'success'
+      });
+    }
+
     return NextResponse.json({ message: 'Cập nhật sản phẩm thành công!' });
   } catch (error) {
     console.error('Update product error:', error);
@@ -151,6 +211,14 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params;
+
+    const product = await prisma.product.findUnique({
+      where: { id },
+    });
+
+    if (!product) {
+      return NextResponse.json({ error: 'Sản phẩm không tồn tại.' }, { status: 404 });
+    }
 
     // Check if product is referenced in any order
     const orderCount = await prisma.order.count({
@@ -168,9 +236,28 @@ export async function DELETE(
       where: { id },
     });
 
+    await createAuditLog({
+      action: 'DELETE_PRODUCT',
+      actionLabel: 'Xóa sản phẩm',
+      module: 'products',
+      entityType: 'Product',
+      entityId: id,
+      entityName: product.name,
+      description: `Đã xóa sản phẩm: ${product.name} (Slug: ${product.slug})`,
+      oldValues: {
+        id: product.id,
+        name: product.name,
+        slug: product.slug,
+        status: product.status
+      },
+      request: req,
+      status: 'success'
+    });
+
     return NextResponse.json({ message: 'Xóa sản phẩm thành công!' });
   } catch (error) {
     console.error('Delete product error:', error);
     return NextResponse.json({ error: 'Lỗi xóa sản phẩm.' }, { status: 500 });
   }
 }
+

@@ -23,6 +23,9 @@ interface OverviewStats {
   totalCustomers: number;
   totalOrders: number;
   expiringSoonCount: number;
+  revenueLast7Days: number;
+  revenueLast7DaysGrowth: number;
+  revenueTodayGrowth: number;
 }
 
 interface RecentOrder {
@@ -102,12 +105,26 @@ export default function AdminDashboardPage() {
 
       {/* ── KPI Stats ── */}
       {stats && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-5">
           <StatCard
             title="Doanh thu hôm nay"
             value={formatVND(stats.revenueToday)}
+            trend={stats.revenueTodayGrowth !== undefined ? {
+              value: `${stats.revenueTodayGrowth >= 0 ? '+' : '-'}${Math.abs(stats.revenueTodayGrowth).toFixed(1)}% - 7 ngày trước`,
+              isPositive: stats.revenueTodayGrowth >= 0
+            } : undefined}
             icon={<DollarSign className="w-5.5 h-5.5" />}
             iconColor="primary"
+          />
+          <StatCard
+            title="Doanh thu 7 ngày qua"
+            value={formatVND(stats.revenueLast7Days)}
+            trend={stats.revenueLast7DaysGrowth !== undefined ? {
+              value: `${stats.revenueLast7DaysGrowth >= 0 ? '+' : '-'}${Math.abs(stats.revenueLast7DaysGrowth).toFixed(1)}% - 7 ngày trước`,
+              isPositive: stats.revenueLast7DaysGrowth >= 0
+            } : undefined}
+            icon={<TrendingUp className="w-5.5 h-5.5" />}
+            iconColor="success"
           />
           <StatCard
             title="Doanh thu tháng này"

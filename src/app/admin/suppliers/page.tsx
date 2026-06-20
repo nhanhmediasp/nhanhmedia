@@ -16,6 +16,9 @@ interface Supplier {
   _count: {
     orders: number;
   };
+  totalRevenue: number;
+  totalCost: number;
+  totalProfit: number;
 }
 
 const IconPicker = ({ selectedIcon, onChange }: { selectedIcon: string; onChange: (icon: string) => void }) => {
@@ -198,6 +201,10 @@ export default function AdminSuppliersPage() {
     return new Date(dateStr).toLocaleDateString('vi-VN');
   };
 
+  const formatVND = (value: number) => {
+    return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(value);
+  };
+
   // Filter suppliers
   const filteredSuppliers = suppliers.filter(s =>
     s.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -253,6 +260,8 @@ export default function AdminSuppliersPage() {
                 <tr className="border-b border-border bg-muted/40 text-muted-foreground font-semibold">
                   <th className="px-6 py-5">Nguồn hàng (Tag)</th>
                   <th className="px-6 py-5">Liên kết liên hệ</th>
+                  <th className="px-6 py-5 text-right">Vốn nhập gốc</th>
+                  <th className="px-6 py-5 text-right">Lợi nhuận ròng</th>
                   <th className="px-6 py-5 text-center">Đơn hàng đang dùng</th>
                   <th className="px-6 py-5 text-center">Ngày tạo</th>
                   <th className="px-6 py-5 text-center">Hành động</th>
@@ -283,6 +292,12 @@ export default function AdminSuppliersPage() {
                       ) : (
                         <span className="text-xs text-muted-foreground italic">-</span>
                       )}
+                    </td>
+                    <td className="px-6 py-5 text-right font-semibold text-rose-500 text-xs">
+                      {formatVND(s.totalCost || 0)}
+                    </td>
+                    <td className="px-6 py-5 text-right font-bold text-emerald-600 text-xs">
+                      {formatVND(s.totalProfit || 0)}
                     </td>
                     <td className="px-6 py-5 text-center font-bold text-slate-800 dark:text-slate-200">
                       <Badge variant={s._count.orders > 0 ? 'success' : 'secondary'} className="px-2.5 py-1 text-xs font-black">

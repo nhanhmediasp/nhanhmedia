@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { hashPassword } from '@/lib/auth';
+import { createAuditLog } from '@/lib/audit';
 
 export async function GET(
   req: Request,
@@ -52,6 +53,7 @@ export async function GET(
       role: user.role,
       status: user.status,
       note: user.note,
+      avatarUrl: user.avatarUrl,
       createdAt: user.createdAt,
       orderCount,
       customerCount,
@@ -116,6 +118,17 @@ export async function PUT(
       return NextResponse.json({ error: 'Email đăng nhập đã được sử dụng bởi tài khoản khác.' }, { status: 400 });
     }
 
+    // Prepare old values
+    const oldValues = {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      phone: user.phone,
+      role: user.role,
+      status: user.status,
+      note: user.note
+    };
+
     // Prepare update data
     const updateData: any = {
       name: name.trim(),
@@ -140,6 +153,46 @@ export async function PUT(
     const updatedUser = await prisma.user.update({
       where: { id },
       data: updateData,
+    });
+
+    // Prepare new values
+    const newValues = {
+      id: updatedUser.id,
+      name: updatedUser.name,
+      email: updatedUser.email,
+      phone: updatedUser.phone,
+      role: updatedUser.role,
+      status: updatedUser.status,
+      note: updatedUser.note
+    };
+
+    let action = 'UPDATE_USER';
+    let actionLabel = 'Sửa thông tin tài khoản';
+    if (user.role !== updatedUser.role) {
+      action = 'CHANGE_USER_ROLE';
+      actionLabel = 'Đổi vai trò tài khoản';
+    } else if (user.status !== updatedUser.status) {
+      if (updatedUser.status === 'locked') {
+        action = 'LOCK_USER';
+        actionLabel = 'Khóa tài khoản';
+      } else if (user.status === 'locked' && updatedUser.status === 'active') {
+        action = 'UNLOCK_USER';
+        actionLabel = 'Mở khóa tài khoản';
+      }
+    }
+
+    await createAuditLog({
+      action,
+      actionLabel,
+      module: 'users',
+      entityType: 'User',
+      entityId: user.id,
+      entityName: user.email,
+      description: `Đã cập nhật tài khoản ${user.email} (${actionLabel})`,
+      oldValues: password && password.trim() !== '' ? { ...oldValues, passwordHash: '••••••••' } : oldValues,
+      newValues: password && password.trim() !== '' ? { ...newValues, passwordHash: '••••••••' } : newValues,
+      request: req,
+      status: 'success'
     });
 
     return NextResponse.json({
@@ -174,6 +227,14 @@ export async function DELETE(
       return NextResponse.json({ error: 'Bạn không thể tự xóa tài khoản của chính mình!' }, { status: 400 });
     }
 
+    const user = await prisma.user.findUnique({
+      where: { id },
+    });
+
+    if (!user) {
+      return NextResponse.json({ error: 'Tài khoản không tồn tại.' }, { status: 404 });
+    }
+
     // Check database links
     const orderCount = await prisma.order.count({ where: { createdByUserId: id } });
     const customerCount = await prisma.customer.count({ where: { createdByUserId: id } });
@@ -191,9 +252,29 @@ export async function DELETE(
       where: { id },
     });
 
+    await createAuditLog({
+      action: 'DELETE_USER',
+      actionLabel: 'Xóa tài khoản',
+      module: 'users',
+      entityType: 'User',
+      entityId: id,
+      entityName: user.email,
+      description: `Đã xóa tài khoản: ${user.name} (${user.email})`,
+      oldValues: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        status: user.status
+      },
+      request: req,
+      status: 'success'
+    });
+
     return NextResponse.json({ message: 'Xóa tài khoản thành công!' });
   } catch (error) {
     console.error('Delete user error:', error);
     return NextResponse.json({ error: 'Lỗi xóa tài khoản.' }, { status: 500 });
   }
 }
+

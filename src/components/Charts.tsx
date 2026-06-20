@@ -157,6 +157,348 @@ export const AreaChart = ({ data, height = 240 }: TimelineChartProps) => {
 };
 
 // ==========================================
+// Multi-Line Chart (Revenue vs Cost, Profit)
+// ==========================================
+interface MultiLineChartProps {
+  data: { label: string; [key: string]: any }[];
+  height?: number;
+  keys: string[];
+  colors: string[];
+}
+
+export const MultiLineChart = ({ data, height = 240, keys, colors }: MultiLineChartProps) => {
+  if (!data || data.length === 0) {
+    return (
+      <div className="flex items-center justify-center text-muted-foreground text-xs font-semibold" style={{ height }}>
+        Không có dữ liệu báo cáo
+      </div>
+    );
+  }
+
+  // Calculate global max value across all keys to scale chart
+  const maxValue = Math.max(
+    ...data.flatMap((d) => keys.map((k) => Number(d[k] || 0))),
+    100000
+  );
+
+  const padding = { top: 20, right: 20, bottom: 30, left: 75 };
+  const chartHeight = height - padding.top - padding.bottom;
+  
+  const width = 600;
+  const chartWidth = width - padding.left - padding.right;
+
+  // Generate Y axis ticks
+  const yTicks = 4;
+  const yAxisTicks = Array.from({ length: yTicks + 1 }).map((_, i) => {
+    const val = (maxValue / yTicks) * i;
+    const y = padding.top + chartHeight - (val / maxValue) * chartHeight;
+    return { value: val, y };
+  });
+
+  return (
+    <div className="w-full overflow-x-auto">
+      <svg viewBox={`0 0 ${width} ${height}`} className="w-full min-w-[500px]" style={{ height }}>
+        <defs>
+          {keys.map((key, keyIndex) => (
+            <linearGradient key={key} id={`areaGrad-${key}`} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={colors[keyIndex]} stopOpacity="0.10" />
+              <stop offset="100%" stopColor={colors[keyIndex]} stopOpacity="0.0" />
+            </linearGradient>
+          ))}
+        </defs>
+
+        {/* Grid lines */}
+        {yAxisTicks.map((tick, i) => (
+          <line
+            key={i}
+            x1={padding.left}
+            y1={tick.y}
+            x2={width - padding.right}
+            y2={tick.y}
+            stroke="var(--border)"
+            strokeWidth="0.75"
+            strokeDasharray="3 3"
+          />
+        ))}
+
+        {/* Draw Area Fills & Lines for each key */}
+        {keys.map((key, keyIndex) => {
+          const points = data.map((d, index) => {
+            const x = padding.left + (index / (data.length - 1 || 1)) * chartWidth;
+            const y = padding.top + chartHeight - ((d[key] || 0) / maxValue) * chartHeight;
+            return { x, y, label: d.label, value: d[key] || 0 };
+          });
+
+          const linePath = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');
+          const areaPath = points.length > 0 
+            ? `${linePath} L ${points[points.length - 1].x} ${padding.top + chartHeight} L ${points[0].x} ${padding.top + chartHeight} Z`
+            : '';
+
+          return (
+            <g key={key}>
+              {/* Area fill */}
+              {areaPath && <path d={areaPath} fill={`url(#areaGrad-${key})`} />}
+              
+              {/* Line path */}
+              {linePath && (
+                <path
+                  d={linePath}
+                  fill="none"
+                  stroke={colors[keyIndex]}
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              )}
+
+              {/* Data points */}
+              {points.map((p, i) => (
+                <g key={i} className="group cursor-pointer">
+                  <circle
+                    cx={p.x}
+                    cy={p.y}
+                    r="3.5"
+                    fill="var(--card)"
+                    stroke={colors[keyIndex]}
+                    strokeWidth="2"
+                    className="transition-all duration-200 group-hover:r-[5px] group-hover:stroke-width-3"
+                  />
+                  <title>{`${p.label}: ${formatVND(p.value)}`}</title>
+                </g>
+              ))}
+            </g>
+          );
+        })}
+
+        {/* X Axis labels */}
+        {data.map((d, i) => {
+          const x = padding.left + (i / (data.length - 1 || 1)) * chartWidth;
+          const showLabel = data.length <= 10 || i % Math.ceil(data.length / 8) === 0 || i === data.length - 1;
+          if (!showLabel) return null;
+          return (
+            <text
+              key={i}
+              x={x}
+              y={height - 10}
+              fill="var(--muted-foreground)"
+              fontSize="9"
+              fontWeight="500"
+              textAnchor="middle"
+            >
+              {d.label}
+            </text>
+          );
+        })}
+
+        {/* Y Axis labels */}
+        {yAxisTicks.map((tick, i) => (
+          <text
+            key={i}
+            x={padding.left - 10}
+            y={tick.y + 3}
+            fill="var(--muted-foreground)"
+            fontSize="9"
+            fontWeight="500"
+            textAnchor="end"
+          >
+            {tick.value >= 1000000 
+              ? `${(tick.value / 1000000).toFixed(1)}M` 
+              : tick.value >= 1000 
+              ? `${(tick.value / 1000).toFixed(0)}k` 
+              : tick.value}
+          </text>
+        ))}
+
+        {/* Bottom baseline */}
+        <line
+          x1={padding.left}
+          y1={padding.top + chartHeight}
+          x2={width - padding.right}
+          y2={padding.top + chartHeight}
+          stroke="var(--border)"
+          strokeWidth="1"
+        />
+      </svg>
+    </div>
+  );
+};
+
+// ==========================================
+// Column Chart (Multi-key bar chart)
+// ==========================================
+interface ColumnChartProps {
+  data: { label: string; [key: string]: any }[];
+  height?: number;
+  keys: string[];
+  colors: string[];
+}
+
+export const ColumnChart = ({ data, height = 240, keys, colors }: ColumnChartProps) => {
+  if (!data || data.length === 0) {
+    return (
+      <div className="flex items-center justify-center text-muted-foreground text-xs font-semibold" style={{ height }}>
+        Không có dữ liệu báo cáo
+      </div>
+    );
+  }
+
+  // Calculate global max and min value across all keys to scale chart
+  const allValues = data.flatMap((d) => keys.map((k) => Number(d[k] || 0)));
+  const maxValue = Math.max(...allValues, 100000);
+  const minValue = Math.min(...allValues, 0); // Include 0 or negative values if any
+
+  const padding = { top: 20, right: 20, bottom: 30, left: 75 };
+  const chartHeight = height - padding.top - padding.bottom;
+  
+  const width = 600;
+  const chartWidth = width - padding.left - padding.right;
+
+  // Scale calculations
+  const totalRange = maxValue - minValue;
+  const getY = (val: number) => {
+    return padding.top + chartHeight - ((val - minValue) / totalRange) * chartHeight;
+  };
+
+  // Generate Y axis ticks
+  const yTicks = 4;
+  const yAxisTicks = Array.from({ length: yTicks + 1 }).map((_, i) => {
+    const val = minValue + (totalRange / yTicks) * i;
+    const y = getY(val);
+    return { value: val, y };
+  });
+
+  const groupWidth = chartWidth / data.length;
+  const numKeys = keys.length;
+  // Determine column width based on number of keys
+  const columnWidth = Math.min(groupWidth * (numKeys === 1 ? 0.45 : 0.32), 14);
+  const columnGap = 2;
+  const totalBarWidth = numKeys * columnWidth + (numKeys - 1) * columnGap;
+
+  return (
+    <div className="w-full overflow-x-auto">
+      <svg viewBox={`0 0 ${width} ${height}`} className="w-full min-w-[500px]" style={{ height }}>
+        {/* Grid lines */}
+        {yAxisTicks.map((tick, i) => (
+          <line
+            key={i}
+            x1={padding.left}
+            y1={tick.y}
+            x2={width - padding.right}
+            y2={tick.y}
+            stroke="var(--border)"
+            strokeWidth="0.75"
+            strokeDasharray="3 3"
+          />
+        ))}
+
+        {/* Draw Columns for each day */}
+        {data.map((d, i) => {
+          const groupCenterX = padding.left + i * groupWidth + groupWidth / 2;
+          const startX = groupCenterX - totalBarWidth / 2;
+
+          // X Axis label visibility
+          const showLabel = data.length <= 12 || i % Math.ceil(data.length / 10) === 0 || i === data.length - 1;
+
+          return (
+            <g key={i} className="group/day cursor-pointer">
+              {/* Background hover highlights */}
+              <rect
+                x={padding.left + i * groupWidth + 2}
+                y={padding.top - 5}
+                width={groupWidth - 4}
+                height={chartHeight + 10}
+                fill="currentColor"
+                className="text-slate-100/0 group-hover/day:text-slate-100/50 dark:group-hover/day:text-slate-800/20 transition-colors duration-150"
+                rx={4}
+              />
+
+              {keys.map((key, keyIndex) => {
+                const val = Number(d[key] || 0);
+                const barHeight = (Math.abs(val) / totalRange) * chartHeight;
+                const barX = startX + keyIndex * (columnWidth + columnGap);
+                
+                // Position bar above or below baseline (y = 0 position)
+                const baselineY = getY(0);
+                const barY = val >= 0 ? baselineY - barHeight : baselineY;
+
+                if (barHeight <= 0) return null;
+
+                return (
+                  <rect
+                    key={key}
+                    x={barX}
+                    y={barY}
+                    width={columnWidth}
+                    height={barHeight}
+                    fill={colors[keyIndex]}
+                    rx={2}
+                    className="transition-all duration-300 group-hover/day:opacity-90"
+                  />
+                );
+              })}
+
+              {/* Tooltip */}
+              <title>
+                {`${d.label}\n` + 
+                  keys.map((key, keyIndex) => {
+                    const labelName = key === 'revenue' ? 'Doanh thu' : key === 'importPrice' ? 'Chi phí' : 'Lợi nhuận';
+                    return `${labelName}: ${formatVND(Number(d[key] || 0))}`;
+                  }).join('\n')
+                }
+              </title>
+
+              {/* X Axis label */}
+              {showLabel && (
+                <text
+                  x={groupCenterX}
+                  y={height - 10}
+                  fill="var(--muted-foreground)"
+                  fontSize="9"
+                  fontWeight="600"
+                  textAnchor="middle"
+                >
+                  {d.label}
+                </text>
+              )}
+            </g>
+          );
+        })}
+
+        {/* Y Axis labels */}
+        {yAxisTicks.map((tick, i) => (
+          <text
+            key={i}
+            x={padding.left - 10}
+            y={tick.y + 3}
+            fill="var(--muted-foreground)"
+            fontSize="9"
+            fontWeight="600"
+            textAnchor="end"
+          >
+            {tick.value >= 1000000 
+              ? `${(tick.value / 1000000).toFixed(1)}M` 
+              : tick.value >= 1000 
+              ? `${(tick.value / 1000).toFixed(0)}k` 
+              : tick.value}
+          </text>
+        ))}
+
+        {/* Bottom baseline */}
+        <line
+          x1={padding.left}
+          y1={getY(0)}
+          x2={width - padding.right}
+          y2={getY(0)}
+          stroke="var(--border)"
+          strokeWidth="1.25"
+        />
+      </svg>
+    </div>
+  );
+};
+
+
+// ==========================================
 // Donut Chart (Status distribution)
 // ==========================================
 interface DonutChartProps {

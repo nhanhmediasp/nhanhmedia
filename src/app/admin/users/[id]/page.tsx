@@ -62,6 +62,7 @@ interface UserDetail {
   customerCount: number;
   totalSales: number;
   orders: Order[];
+  avatarUrl?: string | null;
 }
 
 export default function AdminUserDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -168,10 +169,18 @@ export default function AdminUserDetailPage({ params }: { params: Promise<{ id: 
             <div className="h-20 bg-gradient-to-r from-purple-400 to-indigo-500" />
             <CardContent className="pt-0 px-6 pb-6 relative">
               <div className="flex flex-col items-center -mt-10 text-center space-y-3">
-                {/* Avatar icon */}
-                <div className="w-20 h-20 rounded-full border-4 border-card bg-gradient-to-tr from-purple-500 to-indigo-500 flex items-center justify-center text-white text-2xl font-bold shadow-md select-none">
-                  {userDetail.name.charAt(0).toUpperCase()}
-                </div>
+                {/* Avatar image or text fallback */}
+                {userDetail.avatarUrl ? (
+                  <img
+                    src={userDetail.avatarUrl}
+                    alt={userDetail.name}
+                    className="w-20 h-20 rounded-full object-cover border-4 border-card shadow-md select-none"
+                  />
+                ) : (
+                  <div className="w-20 h-20 rounded-full border-4 border-card bg-gradient-to-tr from-purple-500 to-indigo-500 flex items-center justify-center text-white text-2xl font-bold shadow-md select-none">
+                    {userDetail.name.charAt(0).toUpperCase()}
+                  </div>
+                )}
                 <div>
                   <h2 className="text-lg font-bold text-foreground">{userDetail.name}</h2>
                   <div className="text-xs text-muted-foreground mt-0.5">{userDetail.email}</div>

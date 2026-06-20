@@ -18,6 +18,7 @@ interface Product {
   id: string;
   name: string;
   slug: string;
+  imageUrl?: string | null;
   variants: Variant[];
 }
 
@@ -483,12 +484,14 @@ function OrderCreateForm() {
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 max-h-60 overflow-y-auto pr-1">
                   {filteredProducts.map(p => {
                     const isSelected = productId === p.id;
+                    // Generate a consistent color from the product name
+                    const hue = p.name.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0) % 360;
                     return (
                       <button
                         key={p.id}
                         type="button"
                         onClick={() => setProductId(p.id)}
-                        className="text-left p-3.5 rounded-xl border-2 transition-all duration-200 cursor-pointer hover:shadow-md"
+                        className="text-left p-3 rounded-xl border-2 transition-all duration-200 cursor-pointer hover:shadow-md flex flex-col items-start gap-2"
                         style={isSelected ? {
                           borderColor: '#a145ab',
                           background: 'linear-gradient(135deg,#fdf4ff,#fae8ff)',
@@ -498,14 +501,39 @@ function OrderCreateForm() {
                           background: '#fff'
                         }}
                       >
-                        <div className="flex items-start justify-between gap-1 mb-1.5">
-                          <span className="text-xs font-bold leading-tight" style={{ color: isSelected ? '#a145ab' : '#1e293b' }}>
-                            {p.name}
-                          </span>
-                          {isSelected && <CheckCircle2 className="w-4 h-4 shrink-0" style={{ color: '#a145ab' }} />}
+                        {/* Avatar */}
+                        <div className="flex items-center justify-between w-full">
+                          {p.imageUrl ? (
+                            <img
+                              src={p.imageUrl}
+                              alt={p.name}
+                              className="w-9 h-9 rounded-lg object-cover shrink-0"
+                              onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                            />
+                          ) : (
+                            <div
+                              className="w-9 h-9 rounded-lg flex items-center justify-center text-white font-black text-sm shrink-0"
+                              style={{
+                                background: isSelected
+                                  ? '#a145ab'
+                                  : `hsl(${hue},60%,52%)`,
+                              }}
+                            >
+                              {p.name.charAt(0).toUpperCase()}
+                            </div>
+                          )}
+                          {isSelected && (
+                            <CheckCircle2 className="w-4 h-4 shrink-0" style={{ color: '#a145ab' }} />
+                          )}
                         </div>
-                        <div className="text-[10px]" style={{ color: '#a1acb8' }}>
-                          {p.variants.length} gói
+                        {/* Name + count */}
+                        <div>
+                          <div className="text-xs font-bold leading-tight" style={{ color: isSelected ? '#a145ab' : '#1e293b' }}>
+                            {p.name}
+                          </div>
+                          <div className="text-[10px] mt-0.5" style={{ color: '#a1acb8' }}>
+                            {p.variants.length} gói
+                          </div>
                         </div>
                       </button>
                     );
