@@ -3,30 +3,38 @@ import { prisma } from '@/lib/db';
 
 export async function GET(req: Request) {
   try {
-    const suppliers = await prisma.supplier.findMany({
-      include: {
-        orders: {
-          select: {
-            price: true,
-            customPrice: true,
-            importPrice: true
-          }
-        },
-        _count: {
-          select: { orders: true }
+    const [suppliers, stats] = await Promise.all([
+      prisma.supplier.findMany({
+        orderBy: { name: 'asc' }
+      }),
+      prisma.$queryRaw<{ supplierId: string; totalRevenue: number; totalCost: number; orderCount: number }[]>`
+        SELECT 
+          "supplier_id" as "supplierId",
+          COUNT(*)::int as "orderCount",
+          COALESCE(SUM(COALESCE(custom_price, price)), 0)::float as "totalRevenue",
+          COALESCE(SUM(import_price), 0)::float as "totalCost"
+        FROM orders
+        WHERE "supplier_id" IS NOT NULL
+        GROUP BY "supplier_id"
+      `
+    ]);
+
+    // Build lookup maps for fast O(1) matching
+    const statsMap = new Map<string, { orderCount: number; totalRevenue: number; totalCost: number }>();
+    if (Array.isArray(stats)) {
+      stats.forEach((stat) => {
+        if (stat.supplierId) {
+          statsMap.set(stat.supplierId, {
+            orderCount: Number(stat.orderCount) || 0,
+            totalRevenue: Number(stat.totalRevenue) || 0,
+            totalCost: Number(stat.totalCost) || 0,
+          });
         }
-      },
-      orderBy: { name: 'asc' }
-    });
+      });
+    }
 
     const formattedSuppliers = suppliers.map(s => {
-      let revenue = 0;
-      let cost = 0;
-      s.orders.forEach(o => {
-        const price = o.customPrice !== null ? o.customPrice : o.price;
-        revenue += price;
-        cost += o.importPrice || 0;
-      });
+      const stat = statsMap.get(s.id) || { orderCount: 0, totalRevenue: 0, totalCost: 0 };
 
       return {
         id: s.id,
@@ -34,10 +42,10 @@ export async function GET(req: Request) {
         contactUrl: s.contactUrl,
         icon: s.icon,
         createdAt: s.createdAt,
-        _count: s._count,
-        totalRevenue: revenue,
-        totalCost: cost,
-        totalProfit: revenue - cost
+        _count: { orders: stat.orderCount },
+        totalRevenue: stat.totalRevenue,
+        totalCost: stat.totalCost,
+        totalProfit: stat.totalRevenue - stat.totalCost
       };
     });
 

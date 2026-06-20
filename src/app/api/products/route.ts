@@ -9,16 +9,27 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: 'Không xác định được phân quyền.' }, { status: 400 });
     }
 
-    // If admin, they can see all. But for user-facing lists, we filter active.
-    // Let's filter active products & variants
+    // Filter active products & variants with select to optimize payload
     const products = await prisma.product.findMany({
       where: { status: 'active' },
-      include: {
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        description: true,
+        imageUrl: true,
         variants: {
           where: { status: 'active' },
-          include: {
+          select: {
+            id: true,
+            name: true,
+            durationValue: true,
+            durationUnit: true,
             prices: {
               where: { role: role },
+              select: {
+                price: true,
+              },
             },
           },
         },
@@ -48,7 +59,14 @@ export async function GET(req: Request) {
       }),
     }));
 
-    return NextResponse.json({ products: formattedProducts });
+    return NextResponse.json(
+      { products: formattedProducts },
+      {
+        headers: {
+          'Cache-Control': 'private, max-age=60',
+        },
+      }
+    );
   } catch (error) {
     console.error('Get user products error:', error);
     return NextResponse.json({ error: 'Lỗi tải danh sách sản phẩm.' }, { status: 500 });

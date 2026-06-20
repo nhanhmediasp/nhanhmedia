@@ -28,6 +28,7 @@ model User {
 
   @@index([role])
   @@index([status])
+  @@index([createdAt])
   @@map("users")
 }
 
@@ -47,6 +48,8 @@ model Customer {
   orders           Order[]
   emailLogs        EmailLog[]
 
+  @@index([createdByUserId])
+  @@index([createdAt])
   @@map("customers")
 }
 
@@ -66,6 +69,8 @@ model Product {
   variants    ProductVariant[]
   orders      Order[]
 
+  @@index([status])
+  @@index([createdAt])
   @@map("products")
 }
 
@@ -84,6 +89,9 @@ model ProductVariant {
   orders        Order[]
   renewals      OrderRenewal[]
 
+  @@index([productId])
+  @@index([status])
+  @@index([createdAt])
   @@map("product_variants")
 }
 
@@ -226,6 +234,8 @@ model Notification {
   createdByUser   User               @relation("NotificationCreator", fields: [createdByUserId], references: [id], onDelete: Cascade)
   reads           NotificationRead[]
 
+  @@index([targetRole])
+  @@index([createdAt])
   @@map("notifications")
 }
 
@@ -239,6 +249,7 @@ model NotificationRead {
   user           User         @relation("NotificationReadByUser", fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([notificationId, userId])
+  @@index([userId])
   @@map("notification_reads")
 }
 
@@ -289,6 +300,7 @@ model Supplier {
 
   orders     Order[]
 
+  @@index([createdAt])
   @@map("suppliers")
 }
 

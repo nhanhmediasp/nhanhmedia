@@ -13,26 +13,52 @@ export async function GET(req: Request) {
 
     const isAdmin = role === 'admin';
 
-    // Query customers
-    const customers = await prisma.customer.findMany({
-      where: isAdmin ? {} : { createdByUserId: userId },
-      include: {
-        createdByUser: {
-          select: { id: true, name: true, role: true },
+    // Query customers and aggregates in parallel
+    const [customers, orderStats] = await Promise.all([
+      prisma.customer.findMany({
+        where: isAdmin ? {} : { createdByUserId: userId },
+        select: {
+          id: true,
+          name: true,
+          phone: true,
+          facebook: true,
+          zalo: true,
+          email: true,
+          createdByUserId: true,
+          note: true,
+          createdAt: true,
+          createdByUser: {
+            select: { name: true, role: true },
+          },
         },
-        orders: {
-          select: { id: true, price: true, customPrice: true },
-        },
-      },
-      orderBy: { createdAt: 'desc' },
-    });
+        orderBy: { createdAt: 'desc' },
+      }),
+      prisma.$queryRaw<{ customerId: string; orderCount: number; totalSpent: number }[]>`
+        SELECT 
+          "customer_id" as "customerId",
+          COUNT(*)::int as "orderCount",
+          COALESCE(SUM(COALESCE(custom_price, price)), 0)::float as "totalSpent"
+        FROM orders
+        GROUP BY "customer_id"
+      `,
+    ]);
+
+    // Build map for fast matching
+    const statsMap = new Map<string, { orderCount: number; totalSpent: number }>();
+    if (Array.isArray(orderStats)) {
+      orderStats.forEach((stat) => {
+        if (stat.customerId) {
+          statsMap.set(stat.customerId, {
+            orderCount: Number(stat.orderCount) || 0,
+            totalSpent: Number(stat.totalSpent) || 0,
+          });
+        }
+      });
+    }
 
     // Format output with computed aggregates (total spent, order count)
     const formattedCustomers = customers.map((c) => {
-      const orderCount = c.orders.length;
-      const totalSpent = c.orders.reduce((sum, order) => {
-        return sum + (order.customPrice !== null ? order.customPrice : order.price);
-      }, 0);
+      const stat = statsMap.get(c.id) || { orderCount: 0, totalSpent: 0 };
 
       return {
         id: c.id,
@@ -46,8 +72,8 @@ export async function GET(req: Request) {
         createdByRole: c.createdByUser.role,
         note: c.note,
         createdAt: c.createdAt,
-        orderCount,
-        totalSpent,
+        orderCount: stat.orderCount,
+        totalSpent: stat.totalSpent,
       };
     });
 

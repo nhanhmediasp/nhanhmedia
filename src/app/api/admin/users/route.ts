@@ -5,24 +5,65 @@ import { createAuditLog } from '@/lib/audit';
 
 export async function GET(req: Request) {
   try {
-    const users = await prisma.user.findMany({
-      include: {
-        orders: { select: { price: true, customPrice: true } },
-        renewals: { select: { price: true } },
-      },
-      orderBy: { createdAt: 'desc' },
-    });
+    const [users, orderStats, renewalStats] = await Promise.all([
+      prisma.user.findMany({
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          phone: true,
+          role: true,
+          status: true,
+          note: true,
+          avatarUrl: true,
+          createdAt: true,
+        },
+        orderBy: { createdAt: 'desc' },
+      }),
+      prisma.$queryRaw<{ createdByUserId: string; orderCount: number; revenue: number }[]>`
+        SELECT 
+          "created_by_user_id" as "createdByUserId",
+          COUNT(*)::int as "orderCount",
+          COALESCE(SUM(COALESCE(custom_price, price)), 0)::float as "revenue"
+        FROM orders
+        GROUP BY "created_by_user_id"
+      `,
+      prisma.$queryRaw<{ renewedByUserId: string; revenue: number }[]>`
+        SELECT 
+          "renewed_by_user_id" as "renewedByUserId",
+          COALESCE(SUM(price), 0)::float as "revenue"
+        FROM order_renewals
+        GROUP BY "renewed_by_user_id"
+      `,
+    ]);
+
+    // Build lookup maps for fast O(1) matching
+    const orderMap = new Map<string, { orderCount: number; revenue: number }>();
+    if (Array.isArray(orderStats)) {
+      orderStats.forEach((stat) => {
+        if (stat.createdByUserId) {
+          orderMap.set(stat.createdByUserId, {
+            orderCount: Number(stat.orderCount) || 0,
+            revenue: Number(stat.revenue) || 0,
+          });
+        }
+      });
+    }
+
+    const renewalMap = new Map<string, number>();
+    if (Array.isArray(renewalStats)) {
+      renewalStats.forEach((stat) => {
+        if (stat.renewedByUserId) {
+          renewalMap.set(stat.renewedByUserId, Number(stat.revenue) || 0);
+        }
+      });
+    }
 
     // Format and calculate sales aggregates for each user
     const formattedUsers = users.map((u) => {
-      const orderCount = u.orders.length;
-      
-      const ordersRevenue = u.orders.reduce((sum, order) => {
-        return sum + (order.customPrice !== null ? order.customPrice : order.price);
-      }, 0);
-
-      const renewalsRevenue = u.renewals.reduce((sum, r) => sum + r.price, 0);
-      const totalSales = ordersRevenue + renewalsRevenue;
+      const oStat = orderMap.get(u.id) || { orderCount: 0, revenue: 0 };
+      const renewalRev = renewalMap.get(u.id) || 0;
+      const totalSales = oStat.revenue + renewalRev;
 
       return {
         id: u.id,
@@ -34,7 +75,7 @@ export async function GET(req: Request) {
         note: u.note,
         avatarUrl: u.avatarUrl,
         createdAt: u.createdAt,
-        orderCount,
+        orderCount: oStat.orderCount,
         totalSales,
       };
     });
