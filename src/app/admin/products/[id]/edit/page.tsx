@@ -33,8 +33,7 @@ export default function AdminProductEditPage({ params }: { params: Promise<{ id:
   const [description, setDescription] = useState('');
   const [status, setStatus] = useState('active');
   const [imageUrl, setImageUrl] = useState('');
-  const [imagePreview, setImagePreview] = useState('');
-  const [uploading, setUploading] = useState(false);
+  const [imageLoadError, setImageLoadError] = useState(false);
   const [variants, setVariants] = useState<Variant[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -59,7 +58,6 @@ export default function AdminProductEditPage({ params }: { params: Promise<{ id:
             setSupplierLink(product.supplierLink || '');
             if (product.imageUrl) {
               setImageUrl(product.imageUrl);
-              setImagePreview(product.imageUrl);
             }
             
             // Format variants for the form
@@ -155,45 +153,28 @@ export default function AdminProductEditPage({ params }: { params: Promise<{ id:
     setVariants(updated);
   };
 
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = (ev) => setImagePreview(ev.target?.result as string);
-    reader.readAsDataURL(file);
-
-    setUploading(true);
-    try {
-      const formData = new FormData();
-      formData.append('file', file);
-      const res = await fetch('/api/upload', { method: 'POST', body: formData });
-      const data = await res.json();
-      if (res.ok) {
-        setImageUrl(data.imageUrl);
-        showToast('Upload ảnh thành công!', 'success');
-      } else {
-        showToast(data.error || 'Lỗi upload ảnh.', 'error');
-        setImagePreview(imageUrl || '');
-      }
-    } catch (error) {
-      console.error('Upload error:', error);
-      showToast('Lỗi kết nối khi upload.', 'error');
-      setImagePreview(imageUrl || '');
-    } finally {
-      setUploading(false);
-    }
-  };
-
-  const removeImage = () => {
-    setImageUrl('');
-    setImagePreview('');
+  const validateImageUrl = (url: string): boolean => {
+    if (!url) return true;
+    if (!url.startsWith('https://')) return false;
+    const hasValidExtension = /\.(jpg|jpeg|png|webp|gif)(?:\?.*)?$/i.test(url);
+    const isTrustedDomain = /https:\/\/([a-z0-9-]+\.)*(cloudinary\.com|i\.ibb\.co|imgur\.com)\//i.test(url);
+    return hasValidExtension || isTrustedDomain;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name || !slug) {
       showToast('Tên sản phẩm và slug là bắt buộc.', 'error');
+      return;
+    }
+
+    if (imageUrl && !validateImageUrl(imageUrl)) {
+      showToast('Link ảnh sản phẩm không hợp lệ.', 'error');
+      return;
+    }
+
+    if (imageLoadError && imageUrl) {
+      showToast('Không thể tải ảnh sản phẩm từ đường dẫn đã cung cấp.', 'error');
       return;
     }
 
@@ -349,41 +330,48 @@ export default function AdminProductEditPage({ params }: { params: Promise<{ id:
                 </div>
 
 
-                {/* Image Upload */}
+                {/* Image Link Input */}
                 <div>
-                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
-                    Hình ảnh đại diện sản phẩm
-                  </label>
-                  {imagePreview ? (
-                    <div className="relative inline-block">
-                      <img
-                        src={imagePreview}
-                        alt="Preview"
-                        className="w-40 h-40 object-cover rounded-xl border border-border"
-                      />
+                  <Input
+                    label="Link ảnh đại diện sản phẩm"
+                    placeholder="https://example.com/product-image.jpg"
+                    value={imageUrl}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setImageUrl(val);
+                      setImageLoadError(false);
+                    }}
+                  />
+                  {imageUrl && (
+                    <div className="mt-3 relative inline-block">
+                      {!imageLoadError ? (
+                        <img
+                          src={imageUrl}
+                          alt="Product Preview"
+                          className="w-40 h-40 object-cover rounded-xl border border-border"
+                          onError={() => setImageLoadError(true)}
+                        />
+                      ) : (
+                        <div className="w-40 h-40 flex items-center justify-center border border-dashed border-rose-300 rounded-xl bg-rose-50 text-rose-600 text-xs font-semibold p-4 text-center">
+                          Link ảnh không hợp lệ hoặc không thể tải ảnh
+                        </div>
+                      )}
                       <button
                         type="button"
-                        onClick={removeImage}
+                        onClick={() => {
+                          setImageUrl('');
+                          setImageLoadError(false);
+                        }}
                         className="absolute -top-2 -right-2 w-6 h-6 bg-rose-500 text-white rounded-full flex items-center justify-center hover:bg-rose-600 cursor-pointer shadow-md"
                       >
                         <X className="w-3.5 h-3.5" />
                       </button>
                     </div>
-                  ) : (
-                    <label className="flex flex-col items-center justify-center w-full h-40 border-2 border-dashed border-border rounded-xl cursor-pointer hover:border-primary/40 hover:bg-primary-light/30 transition-all duration-200">
-                      <ImagePlus className="w-8 h-8 text-muted-foreground mb-2" />
-                      <span className="text-xs text-muted-foreground font-medium">
-                        {uploading ? 'Đang tải lên...' : 'Nhấp hoặc kéo thả ảnh vào đây'}
-                      </span>
-                      <span className="text-[10px] text-muted-foreground mt-1">JPG, PNG, WebP, GIF (Tối đa 5MB)</span>
-                      <input
-                        type="file"
-                        accept="image/jpeg,image/png,image/webp,image/gif"
-                        className="hidden"
-                        onChange={handleImageUpload}
-                        disabled={uploading}
-                      />
-                    </label>
+                  )}
+                  {imageLoadError && imageUrl && (
+                    <p className="text-[10px] text-rose-500 font-semibold mt-1">
+                      Link ảnh không hợp lệ hoặc không thể tải ảnh
+                    </p>
                   )}
                 </div>
               </CardContent>
@@ -505,7 +493,7 @@ export default function AdminProductEditPage({ params }: { params: Promise<{ id:
                 />
 
                 <div className="pt-4 border-t border-border flex flex-col gap-2">
-                  <Button type="submit" variant="primary" className="w-full font-bold py-2.5 rounded-xl" loading={submitting} disabled={uploading}>
+                  <Button type="submit" variant="primary" className="w-full font-bold py-2.5 rounded-xl" loading={submitting}>
                     Lưu thay đổi
                   </Button>
                   <Link href="/admin/products" className="w-full">
