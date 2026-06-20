@@ -1,5 +1,5 @@
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
@@ -49,14 +49,17 @@ model Customer {
 }
 
 model Product {
-  id          String   @id @default(uuid())
-  name        String
-  slug        String   @unique
-  description String?
-  imageUrl    String?  @map("image_url")
-  status      String   @default("active") // active, inactive
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  id           String   @id @default(uuid())
+  name         String
+  slug         String   @unique
+  description  String?
+  imageUrl     String?  @map("image_url")
+  status       String   @default("active") // active, inactive
+  importPrice  Float?   @map("import_price")
+  supplierName String?  @map("supplier_name")
+  supplierLink String?  @map("supplier_link")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
 
   variants    ProductVariant[]
   orders      Order[]
@@ -103,8 +106,10 @@ model Order {
   createdByUserId String   @map("created_by_user_id")
   productId       String   @map("product_id")
   variantId       String   @map("variant_id")
+  supplierId      String?  @map("supplier_id")
   price           Float
   customPrice     Float?   @map("custom_price")
+  importPrice     Float?   @map("import_price")
   status          String   @default("new") // new, processing, running, expired_soon, expired, cancelled
   startDate       DateTime @map("start_date")
   endDate         DateTime @map("end_date")
@@ -114,9 +119,6 @@ model Order {
   updatedAt       DateTime @updatedAt @map("updated_at")
   refundAmount    Float?   @map("refund_amount")
   refundedAt      DateTime? @map("refunded_at")
-  importPrice     Float?   @map("import_price")
-  supplierId      String?  @map("supplier_id")
-  amountPaid      Float    @default(0) @map("amount_paid")
 
   customer      Customer       @relation(fields: [customerId], references: [id])
   createdByUser User           @relation(fields: [createdByUserId], references: [id])
@@ -227,18 +229,8 @@ model NotificationRead {
   @@map("notification_reads")
 }
 
-model Supplier {
-  id         String   @id @default(uuid())
-  name       String   @unique
-  contactUrl String?  @map("contact_url")
-  icon       String?
-  createdAt  DateTime @default(now()) @map("created_at")
-  updatedAt  DateTime @updatedAt @map("updated_at")
 
-  orders     Order[]
 
-  @@map("suppliers")
-}
 
 model AuditLog {
   id              String   @id @default(uuid())
@@ -273,5 +265,17 @@ model AuditLog {
   @@index([entityId])
   @@index([status])
   @@map("audit_logs")
+}
+model Supplier {
+  id         String   @id @default(uuid())
+  name       String   @unique
+  contactUrl String?  @map("contact_url")
+  icon       String?
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  orders     Order[]
+
+  @@map("suppliers")
 }
 

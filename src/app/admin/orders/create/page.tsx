@@ -9,9 +9,8 @@ import {
 } from '@/components/ui';
 import {
   ArrowLeft, UserPlus, Users, Search, Sparkles,
-  Calendar, DollarSign, CheckCircle2, X,
+  Calendar, DollarSign, CheckCircle2, X, ExternalLink, Package,
 } from 'lucide-react';
-import { SupplierAvatar } from '@/components/SupplierAvatar';
 
 interface Price  { role: string; price: number; }
 interface Variant {
@@ -69,27 +68,17 @@ function AdminOrderCreateForm() {
   /* ── product search ── */
   const [productSearch, setProductSearch] = useState('');
 
-  /* ── supplier tags states ── */
-  const [suppliers, setSuppliers]         = useState<{ id: string; name: string; contactUrl: string | null; icon?: string | null }[]>([]);
-  const [supplierId, setSupplierId]       = useState('');
-  const [isSupplierModalOpen, setIsSupplierModalOpen] = useState(false);
-  const [newSupplierName, setNewSupplierName] = useState('');
-  const [newSupplierUrl, setNewSupplierUrl]   = useState('');
-  const [addingSupplier, setAddingSupplier]   = useState(false);
-
   useEffect(() => {
     (async () => {
       try {
-        const [prodRes, custRes, suppRes] = await Promise.all([
+        const [prodRes, custRes] = await Promise.all([
           fetch('/api/admin/products'),
           fetch('/api/customers'),
-          fetch('/api/admin/suppliers'),
         ]);
-        if (prodRes.ok && custRes.ok && suppRes.ok) {
-          const [prodData, custData, suppData] = await Promise.all([prodRes.json(), custRes.json(), suppRes.json()]);
+        if (prodRes.ok && custRes.ok) {
+          const [prodData, custData] = await Promise.all([prodRes.json(), custRes.json()]);
           setProducts(prodData.products || []);
           setCustomers(custData.customers || []);
-          setSuppliers(suppData.suppliers || []);
           if (!productId && prodData.products.length > 0) setProductId(prodData.products[0].id);
         }
       } catch { showToast('Lỗi tải dữ liệu biểu mẫu.', 'error'); }
@@ -196,7 +185,6 @@ function AdminOrderCreateForm() {
           startDate, note, internalNote,
           customPrice: customPrice ? parseFloat(customPrice) : undefined,
           importPrice: importPrice ? parseFloat(importPrice) : undefined,
-          supplierId: supplierId || undefined,
         }),
       });
       const data = await res.json();
@@ -209,40 +197,6 @@ function AdminOrderCreateForm() {
       }
     } catch { showToast('Lỗi kết nối máy chủ.', 'error'); }
     finally { setSubmitting(false); }
-  };
-
-  const handleAddSupplierSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newSupplierName.trim()) {
-      showToast('Tên nguồn hàng là bắt buộc.', 'error');
-      return;
-    }
-    setAddingSupplier(true);
-    try {
-      const res = await fetch('/api/admin/suppliers', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: newSupplierName,
-          contactUrl: newSupplierUrl,
-        }),
-      });
-      const data = await res.json();
-      if (res.ok) {
-        showToast('Tạo nguồn hàng thành công!', 'success');
-        setSuppliers(prev => [...prev, data.supplier]);
-        setSupplierId(data.supplier.id);
-        setNewSupplierName('');
-        setNewSupplierUrl('');
-        setIsSupplierModalOpen(false);
-      } else {
-        showToast(data.error || 'Lỗi tạo nguồn hàng.', 'error');
-      }
-    } catch {
-      showToast('Lỗi kết nối máy chủ.', 'error');
-    } finally {
-      setAddingSupplier(false);
-    }
   };
 
   const formatVND = (v: number) =>
@@ -661,66 +615,39 @@ function AdminOrderCreateForm() {
               </div>
 
               <div className="pt-1">
-                <label className="block text-xs font-bold uppercase tracking-wider mb-2" style={{ color: '#697a8d' }}>
-                  Nguồn hàng (Tag)
-                </label>
-                <div className="flex gap-2">
-                  <div className="flex-1">
-                    <select
-                      value={supplierId}
-                      onChange={e => setSupplierId(e.target.value)}
-                      className="w-full px-4 py-3 text-sm rounded-xl transition-all duration-200 focus:outline-none cursor-pointer"
-                      style={{
-                        background: '#fff',
-                        border: '1.5px solid rgba(108,117,147,0.18)',
-                        color: '#1e293b',
-                        boxShadow: '0 1px 3px rgba(108,117,147,0.06)',
-                      }}
-                    >
-                      <option value="">-- Chọn nguồn hàng (Không bắt buộc) --</option>
-                      {suppliers.map(s => (
-                        <option key={s.id} value={s.id}>{s.name}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => setIsSupplierModalOpen(true)}
-                    className="p-3 h-11 w-11 flex items-center justify-center rounded-xl font-bold text-lg"
-                    style={{ borderColor: 'rgba(108,117,147,0.18)', color: '#a145ab' }}
-                  >
-                    +
-                  </Button>
-                </div>
-                {(() => {
-                  const selectedSupplier = suppliers.find(s => s.id === supplierId);
-                  return selectedSupplier ? (
-                    <div className="mt-2.5 flex items-center gap-2 p-2.5 bg-slate-50 dark:bg-zinc-800/40 border border-border rounded-xl animate-fade-in">
-                      <SupplierAvatar iconName={selectedSupplier.icon} size="sm" />
-                      <div className="text-xs">
-                        <div className="font-bold text-slate-800 dark:text-slate-200">{selectedSupplier.name}</div>
-                        {selectedSupplier.contactUrl && (
-                          <div className="text-muted-foreground mt-0.5 text-[10px]">{selectedSupplier.contactUrl}</div>
-                        )}
-                      </div>
-                    </div>
-                  ) : null;
-                })()}
-                <p className="text-[10px] mt-1 leading-normal" style={{ color: '#a1acb8' }}>
-                  Chọn nguồn cung cấp tài nguyên cho đơn hàng này.
-                </p>
-              </div>
-
-              <div className="pt-1">
                 <Input label="Giá nhập gốc (VND)" type="number" min="0"
-                  placeholder="Bỏ trống nếu không có (mặc định 0)"
+                  placeholder="Bỏ trống để tính lợi nhuận sau"
                   value={importPrice} onChange={e => setImportPrice(e.target.value)}
                   leftIcon={<DollarSign className="w-4 h-4" />} />
                 <p className="text-[10px] mt-1 leading-normal" style={{ color: '#a1acb8' }}>
-                  Chỉ Admin mới thấy và sửa giá nhập gốc này.
+                  Chỉ Admin mới thấy và sửa giá nhập gốc này. Dùng để tính lợi nhuận.
                 </p>
               </div>
+
+              {/* Supplier info from product (read-only tag) */}
+              {activeProduct && (activeProduct.supplierName || activeProduct.supplierLink) && (
+                <div className="pt-1">
+                  <label className="block text-xs font-bold uppercase tracking-wider mb-2" style={{ color: '#697a8d' }}>
+                    Nguồn hàng sản phẩm
+                  </label>
+                  <div className="flex items-center gap-2.5 p-3 rounded-xl border" style={{ background: '#f8f0ff', borderColor: 'rgba(161,69,171,0.2)' }}>
+                    <Package className="w-4 h-4 shrink-0" style={{ color: '#a145ab' }} />
+                    <div className="min-w-0 flex-1">
+                      {activeProduct.supplierName && (
+                        <div className="text-xs font-bold" style={{ color: '#1e293b' }}>{activeProduct.supplierName}</div>
+                      )}
+                      {activeProduct.supplierLink && (
+                        <a href={activeProduct.supplierLink} target="_blank" rel="noopener noreferrer"
+                          className="text-[10px] flex items-center gap-1 mt-0.5 hover:underline"
+                          style={{ color: '#a145ab' }}>
+                          <ExternalLink className="w-3 h-3" />
+                          Liên hệ nguồn hàng
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {activeVariant && (
                 <div className="p-4 rounded-xl space-y-2"
@@ -760,49 +687,11 @@ function AdminOrderCreateForm() {
           </Card>
         </div>
       </form>
-
-      {/* Supplier Modal */}
-      {isSupplierModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fade-in">
-          <div className="bg-card border border-border w-full max-w-md rounded-2xl shadow-xl overflow-hidden animate-fade-in">
-            <div className="px-6 py-5 border-b border-border">
-              <h3 className="text-base font-bold text-foreground">
-                Tạo Nguồn hàng mới
-              </h3>
-            </div>
-            
-            <form onSubmit={handleAddSupplierSubmit}>
-              <div className="p-6 space-y-4">
-                <Input
-                  label="Tên nguồn hàng *"
-                  placeholder="Ví dụ: Nguồn hàng chính, CTV Thảo..."
-                  value={newSupplierName}
-                  onChange={e => setNewSupplierName(e.target.value)}
-                  required
-                />
-                <Input
-                  label="Link liên hệ / URL"
-                  placeholder="Ví dụ: https://zalo.me/username..."
-                  value={newSupplierUrl}
-                  onChange={e => setNewSupplierUrl(e.target.value)}
-                />
-              </div>
-
-              <div className="px-6 py-4 bg-muted/50 border-t border-border flex justify-end gap-3">
-                <Button type="button" variant="outline" size="sm" onClick={() => setIsSupplierModalOpen(false)} disabled={addingSupplier}>
-                  Hủy
-                </Button>
-                <Button type="submit" variant="primary" size="sm" loading={addingSupplier}>
-                  Xác nhận tạo
-                </Button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
+
+
 
 export default function AdminOrderCreatePage() {
   return (

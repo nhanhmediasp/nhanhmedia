@@ -370,12 +370,21 @@ export async function GET(req: Request) {
       { label: 'Đã hủy', value: statusCounts.cancelled, color: '#94a3b8' },
     ];
 
-    // Compute active filters total revenue
+    // Compute active filters total revenue and profit
     const totalFilteredRevenue = orders.reduce((sum, o) => sum + (o.customPrice !== null ? o.customPrice : o.price), 0) +
       renewals.reduce((sum, r) => sum + r.price, 0);
 
-    const totalFilteredImport = orders.reduce((sum, o) => sum + (o.importPrice || 0), 0);
-    const totalFilteredProfit = totalFilteredRevenue - totalFilteredImport;
+    // Profit = revenue - importPrice. Only count orders where importPrice is set.
+    const totalFilteredProfit = orders.reduce((sum, o) => {
+      if (o.importPrice !== null && o.importPrice !== undefined) {
+        const rev = o.customPrice !== null ? o.customPrice : o.price;
+        return sum + (rev - o.importPrice);
+      }
+      return sum;
+    }, 0);
+
+    const ordersWithImportPrice = orders.filter(o => o.importPrice !== null && o.importPrice !== undefined).length;
+
 
     return NextResponse.json({
       overview: {
@@ -392,8 +401,8 @@ export async function GET(req: Request) {
       },
       filteredReport: {
         totalRevenue: totalFilteredRevenue,
-        totalImport: totalFilteredImport,
         totalProfit: totalFilteredProfit,
+        ordersWithImportPrice,
         orderCount: orders.length,
         orders: orders.map((o) => ({
           createdAt: o.createdAt,
@@ -405,8 +414,10 @@ export async function GET(req: Request) {
           productName: o.product.name,
           variantName: o.variant.name,
           cost: o.customPrice !== null ? o.customPrice : o.price,
-          importPrice: o.importPrice || 0,
-          profit: (o.customPrice !== null ? o.customPrice : o.price) - (o.importPrice || 0),
+          importPrice: o.importPrice,
+          profit: o.importPrice !== null && o.importPrice !== undefined
+            ? (o.customPrice !== null ? o.customPrice : o.price) - o.importPrice
+            : null,
           status: o.status,
           startDate: o.startDate,
           endDate: o.endDate,

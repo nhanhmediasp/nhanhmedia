@@ -20,8 +20,8 @@ interface OrderReportItem {
   productName: string;
   variantName: string;
   cost: number;
-  importPrice: number;
-  profit: number;
+  importPrice: number | null;
+  profit: number | null;
   status: string;
   startDate: string;
   endDate: string;
@@ -48,6 +48,7 @@ export default function AdminReportsPage() {
   // States for stats and charts
   const [totalRevenue, setTotalRevenue] = useState(0);
   const [totalProfit, setTotalProfit] = useState(0);
+  const [ordersWithImportPrice, setOrdersWithImportPrice] = useState(0);
   const [totalImport, setTotalImport] = useState(0);
   const [dailyChartData, setDailyChartData] = useState<{ label: string; value: number; revenue: number; importPrice: number; profit: number }[]>([]);
   const [totalCustomers, setTotalCustomers] = useState(0);
@@ -146,6 +147,8 @@ export default function AdminReportsPage() {
         const data = await res.json();
         setReportData(data.filteredReport.orders || []);
         setTotalRevenue(data.filteredReport.totalRevenue || 0);
+        setTotalProfit(data.filteredReport.totalProfit || 0);
+        setOrdersWithImportPrice(data.filteredReport.ordersWithImportPrice || 0);
         setTotalImport(data.filteredReport.totalImport || 0);
         setTotalProfit(data.filteredReport.totalProfit || 0);
         setDailyChartData(data.charts.dailyRevenue || []);
@@ -705,9 +708,9 @@ export default function AdminReportsPage() {
                       </td>
                       <td className="px-4 py-3 text-right">
                         <div className="font-semibold text-[#a145ab]">{formatVND(item.cost)}</div>
-                        <div className="text-[11px] text-rose-400 mt-0.5">{formatVND(item.importPrice)}</div>
+                        <div className="text-[11px] text-rose-400 mt-0.5">{item.importPrice != null ? formatVND(item.importPrice) : '—'}</div>
                       </td>
-                      <td className="px-4 py-3 text-right font-bold text-emerald-600">{formatVND(item.profit)}</td>
+                      <td className="px-4 py-3 text-right font-bold text-emerald-600">{formatVND(item.profit ?? 0)}</td>
                       <td className="px-4 py-3 text-center whitespace-nowrap">
                         <StatusBadge status={item.status} />
                       </td>

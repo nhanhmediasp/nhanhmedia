@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
-import { createAuditLog } from '@/lib/audit';
 
 export async function PUT(
   req: Request,
@@ -9,7 +8,7 @@ export async function PUT(
   try {
     const { id } = await params;
     const body = await req.json();
-    const { name, slug, description, imageUrl, status, variants } = body;
+    const { name, slug, description, imageUrl, status, variants, importPrice, supplierName, supplierLink } = body;
 
     if (!name || !slug) {
       return NextResponse.json({ error: 'Tên và slug là bắt buộc.' }, { status: 400 });
@@ -23,27 +22,6 @@ export async function PUT(
       return NextResponse.json({ error: 'Slug sản phẩm đã bị trùng.' }, { status: 400 });
     }
 
-    const product = await prisma.product.findUnique({
-      where: { id },
-      include: {
-        variants: { include: { prices: true } }
-      }
-    });
-
-    if (!product) {
-      return NextResponse.json({ error: 'Sản phẩm không tồn tại.' }, { status: 404 });
-    }
-
-    const oldValues = {
-      id: product.id,
-      name: product.name,
-      slug: product.slug,
-      description: product.description,
-      imageUrl: product.imageUrl,
-      status: product.status,
-      variants: product.variants
-    };
-
     // Update in transaction
     await prisma.$transaction(async (tx) => {
       // 1. Update product basic details
@@ -55,28 +33,24 @@ export async function PUT(
           description,
           imageUrl,
           status,
+          importPrice: importPrice !== undefined && importPrice !== '' ? parseFloat(importPrice) : null,
+          supplierName: supplierName ? supplierName.trim() : null,
+          supplierLink: supplierLink ? supplierLink.trim() : null,
         },
       });
 
       // 2. Sync variants if provided
       if (variants && Array.isArray(variants)) {
-        // Simple syncing strategy for variants:
-        // A) Find existing variants in DB
         const existingVariants = await tx.productVariant.findMany({
           where: { productId: id },
         });
         const existingVariantIds = existingVariants.map((v) => v.id);
-
-        // B) Get IDs from incoming request
         const incomingVariantIds = variants.map((v) => v.id).filter(Boolean) as string[];
 
-        // C) Delete variants that are NOT in incoming list
-        // BUT check if any of them are used in active orders. If so, don't delete them; throw error or toggle inactive.
         const idsToDelete = existingVariantIds.filter((x) => !incomingVariantIds.includes(x));
         for (const deleteId of idsToDelete) {
           const count = await tx.order.count({ where: { variantId: deleteId } });
           if (count > 0) {
-            // Cannot delete variant because it is in an order, so we toggle it inactive instead
             await tx.productVariant.update({
               where: { id: deleteId },
               data: { status: 'inactive' },
@@ -86,10 +60,8 @@ export async function PUT(
           }
         }
 
-        // D) Create or Update incoming variants
         for (const variant of variants) {
           if (variant.id) {
-            // Update existing variant
             const updatedVariant = await tx.productVariant.update({
               where: { id: variant.id },
               data: {
@@ -100,9 +72,7 @@ export async function PUT(
               },
             });
 
-            // Update prices
             if (variant.prices) {
-              // Delete old prices to avoid unique constraint, then re-insert
               await tx.productVariantPrice.deleteMany({
                 where: { variantId: variant.id },
               });
@@ -119,13 +89,10 @@ export async function PUT(
               }
 
               if (priceData.length > 0) {
-                await tx.productVariantPrice.createMany({
-                  data: priceData,
-                });
+                await tx.productVariantPrice.createMany({ data: priceData });
               }
             }
           } else {
-            // Create new variant
             const newVariant = await tx.productVariant.create({
               data: {
                 productId: id,
@@ -136,7 +103,6 @@ export async function PUT(
               },
             });
 
-            // Insert prices
             if (variant.prices) {
               const priceData = [];
               if (variant.prices.member !== undefined) {
@@ -150,53 +116,13 @@ export async function PUT(
               }
 
               if (priceData.length > 0) {
-                await tx.productVariantPrice.createMany({
-                  data: priceData,
-                });
+                await tx.productVariantPrice.createMany({ data: priceData });
               }
             }
           }
         }
       }
     });
-
-    const updatedProduct = await prisma.product.findUnique({
-      where: { id },
-      include: {
-        variants: { include: { prices: true } }
-      }
-    });
-
-    if (updatedProduct) {
-      let action = 'UPDATE_PRODUCT';
-      let actionLabel = 'Sửa sản phẩm';
-      if (product.status !== updatedProduct.status) {
-        action = 'UPDATE_PRODUCT_STATUS';
-        actionLabel = updatedProduct.status === 'active' ? 'Kích hoạt sản phẩm' : 'Tắt kích hoạt sản phẩm';
-      }
-
-      await createAuditLog({
-        action,
-        actionLabel,
-        module: 'products',
-        entityType: 'Product',
-        entityId: id,
-        entityName: updatedProduct.name,
-        description: `Đã cập nhật sản phẩm: ${updatedProduct.name} (Slug: ${updatedProduct.slug})`,
-        oldValues,
-        newValues: {
-          id: updatedProduct.id,
-          name: updatedProduct.name,
-          slug: updatedProduct.slug,
-          description: updatedProduct.description,
-          imageUrl: updatedProduct.imageUrl,
-          status: updatedProduct.status,
-          variants: updatedProduct.variants
-        },
-        request: req,
-        status: 'success'
-      });
-    }
 
     return NextResponse.json({ message: 'Cập nhật sản phẩm thành công!' });
   } catch (error) {
@@ -212,15 +138,6 @@ export async function DELETE(
   try {
     const { id } = await params;
 
-    const product = await prisma.product.findUnique({
-      where: { id },
-    });
-
-    if (!product) {
-      return NextResponse.json({ error: 'Sản phẩm không tồn tại.' }, { status: 404 });
-    }
-
-    // Check if product is referenced in any order
     const orderCount = await prisma.order.count({
       where: { productId: id },
     });
@@ -236,28 +153,9 @@ export async function DELETE(
       where: { id },
     });
 
-    await createAuditLog({
-      action: 'DELETE_PRODUCT',
-      actionLabel: 'Xóa sản phẩm',
-      module: 'products',
-      entityType: 'Product',
-      entityId: id,
-      entityName: product.name,
-      description: `Đã xóa sản phẩm: ${product.name} (Slug: ${product.slug})`,
-      oldValues: {
-        id: product.id,
-        name: product.name,
-        slug: product.slug,
-        status: product.status
-      },
-      request: req,
-      status: 'success'
-    });
-
     return NextResponse.json({ message: 'Xóa sản phẩm thành công!' });
   } catch (error) {
     console.error('Delete product error:', error);
     return NextResponse.json({ error: 'Lỗi xóa sản phẩm.' }, { status: 500 });
   }
 }
-

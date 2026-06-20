@@ -28,6 +28,9 @@ export default function AdminProductCreatePage() {
   const [imagePreview, setImagePreview] = useState('');
   const [uploading, setUploading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [importPrice, setImportPrice] = useState('');
+  const [supplierName, setSupplierName] = useState('');
+  const [supplierLink, setSupplierLink] = useState('');
 
   // Dynamic variants state
   const [variants, setVariants] = useState<VariantForm[]>([
@@ -171,6 +174,9 @@ export default function AdminProductCreatePage() {
           imageUrl,
           status,
           variants,
+          importPrice,
+          supplierName,
+          supplierLink,
         }),
       });
 
@@ -249,6 +255,36 @@ export default function AdminProductCreatePage() {
                   onChange={(e) => setDescription(e.target.value)}
                   rows={4}
                 />
+
+                {/* Supplier & Import Price - Admin only section */}
+                <div className="pt-2 border-t border-border">
+                  <h4 className="text-xs font-bold text-amber-600 uppercase tracking-widest mb-3 flex items-center gap-2">
+                    <span>🔒</span>
+                    <span>Thông tin nội bộ (Chỉ Admin)</span>
+                  </h4>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+                    <Input
+                      label="Giá nhập gốc (VND)"
+                      type="number"
+                      min="0"
+                      placeholder="Ví dụ: 200000"
+                      value={importPrice}
+                      onChange={(e) => setImportPrice(e.target.value)}
+                    />
+                    <Input
+                      label="Tên nguồn hàng"
+                      placeholder="Ví dụ: Reseller XYZ"
+                      value={supplierName}
+                      onChange={(e) => setSupplierName(e.target.value)}
+                    />
+                    <Input
+                      label="Link liên hệ nguồn hàng"
+                      placeholder="https://t.me/supplier..."
+                      value={supplierLink}
+                      onChange={(e) => setSupplierLink(e.target.value)}
+                    />
+                  </div>
+                </div>
 
 
                 {/* Image Upload */}
