@@ -73,9 +73,6 @@ export default function AdminProductEditPage({ params }: { params: Promise<{ id:
   };
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
-  const [importPrice, setImportPrice] = useState('');
-  const [supplierName, setSupplierName] = useState('');
-  const [supplierLink, setSupplierLink] = useState('');
 
   useEffect(() => {
     const fetchProduct = async () => {
@@ -89,9 +86,6 @@ export default function AdminProductEditPage({ params }: { params: Promise<{ id:
             setSlug(product.slug);
             setDescription(product.description || '');
             setStatus(product.status);
-            setImportPrice(product.importPrice !== null && product.importPrice !== undefined ? String(product.importPrice) : '');
-            setSupplierName(product.supplierName || '');
-            setSupplierLink(product.supplierLink || '');
             if (product.imageUrl) {
               setImageUrl(product.imageUrl);
             }
@@ -210,10 +204,7 @@ export default function AdminProductEditPage({ params }: { params: Promise<{ id:
       return;
     }
 
-    if (imageLoadError && imageUrl) {
-      showToast('Không thể tải ảnh sản phẩm từ đường dẫn đã cung cấp.', 'error');
-      return;
-    }
+
 
     if (variants.length === 0) {
       showToast('Vui lòng thêm ít nhất một gói dịch vụ.', 'error');
@@ -245,9 +236,6 @@ export default function AdminProductEditPage({ params }: { params: Promise<{ id:
           imageUrl,
           status,
           variants,
-          importPrice,
-          supplierName,
-          supplierLink,
         }),
       });
 
@@ -336,31 +324,7 @@ export default function AdminProductEditPage({ params }: { params: Promise<{ id:
                   rows={4}
                 />
 
-                {/* Supplier & Import Price */}
-                <div className="pt-2 border-t border-border">
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-                    <Input
-                      label="Giá nhập gốc (VND)"
-                      type="number"
-                      min="0"
-                      placeholder="Ví dụ: 200000"
-                      value={importPrice}
-                      onChange={(e) => setImportPrice(e.target.value)}
-                    />
-                    <Input
-                      label="Tên nguồn hàng"
-                      placeholder="Ví dụ: Reseller XYZ"
-                      value={supplierName}
-                      onChange={(e) => setSupplierName(e.target.value)}
-                    />
-                    <Input
-                      label="Link liên hệ nguồn hàng"
-                      placeholder="https://t.me/supplier..."
-                      value={supplierLink}
-                      onChange={(e) => setSupplierLink(e.target.value)}
-                    />
-                  </div>
-                </div>
+
 
 
                 {/* Image Link Input */}

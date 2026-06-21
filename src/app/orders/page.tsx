@@ -87,6 +87,10 @@ export default function UserOrdersPage() {
   const [sortField, setSortField] = useState<SortField | null>(null);
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
 
+  // Pagination
+  const [currentPage, setCurrentPage] = useState(1);
+  const PAGE_SIZE = 20;
+
   const fetchData = async () => {
     setLoading(true);
     try {
@@ -207,6 +211,15 @@ export default function UserOrdersPage() {
         return 0;
     }
   });
+
+  // Paginate orders
+  const totalPages = Math.ceil(sortedOrders.length / PAGE_SIZE);
+  const paginatedOrders = sortedOrders.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, statusFilter, productFilter, paymentFilter, sortField, sortDirection]);
 
   // Client-side CSV Export
   const exportCSV = () => {
@@ -383,6 +396,7 @@ export default function UserOrdersPage() {
             <table className="w-full border-collapse text-left text-sm">
               <thead>
                 <tr className="border-b border-border bg-muted/40 text-muted-foreground font-semibold">
+                  <th className="px-4 py-5 w-[48px] text-center text-xs">STT</th>
                   <SortableHeader label="Mã đơn" field="orderCode" currentField={sortField} currentDirection={sortDirection} onSort={handleSort} />
                   <SortableHeader label="Khách hàng" field="customerName" currentField={sortField} currentDirection={sortDirection} onSort={handleSort} />
                   <th className="px-6 py-5">Dịch vụ</th>
@@ -393,10 +407,11 @@ export default function UserOrdersPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-border bg-card">
-                {sortedOrders.map((o) => {
+                {paginatedOrders.map((o, idx) => {
                   const finalPrice = o.customPrice !== null ? o.customPrice : o.price;
                   return (
                     <tr key={o.id} className="hover:bg-muted/20 transition-colors">
+                      <td className="px-4 py-5 text-center text-xs font-bold text-slate-400">{(currentPage - 1) * PAGE_SIZE + idx + 1}</td>
                       <td className="px-6 py-5">
                         <div className="font-bold text-foreground">{o.orderCode}</div>
                         <div className="mt-1">
@@ -463,6 +478,37 @@ export default function UserOrdersPage() {
               </tbody>
             </table>
           </div>
+
+          {/* Pagination Controls */}
+          {totalPages > 1 && (
+            <div className="flex flex-col sm:flex-row items-center justify-between px-6 py-4 gap-4 border-t border-border bg-slate-50/50">
+              <span className="text-xs text-slate-500 font-medium">
+                Hiển thị <span className="font-bold text-foreground">{(currentPage - 1) * PAGE_SIZE + 1}</span>
+                {' '}– <span className="font-bold text-foreground">{Math.min(currentPage * PAGE_SIZE, sortedOrders.length)}</span>
+                {' '}trong tổng số <span className="font-bold text-foreground">{sortedOrders.length}</span> đơn hàng
+              </span>
+              <div className="flex items-center gap-1.5 flex-wrap justify-center">
+                <Button variant="outline" size="sm" onClick={() => setCurrentPage(1)} disabled={currentPage === 1} className="h-8 px-2.5 cursor-pointer text-xs">Đầu</Button>
+                <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.max(p - 1, 1))} disabled={currentPage === 1} className="h-8 px-2.5 cursor-pointer text-xs">Trước</Button>
+                {Array.from({ length: totalPages }).map((_, i) => {
+                  const pageNum = i + 1;
+                  if (pageNum === 1 || pageNum === totalPages || Math.abs(pageNum - currentPage) <= 1) {
+                    return (
+                      <Button key={pageNum} variant={currentPage === pageNum ? 'primary' : 'outline'} size="sm" onClick={() => setCurrentPage(pageNum)} className="h-8 w-8 p-0 cursor-pointer text-xs">
+                        {pageNum}
+                      </Button>
+                    );
+                  }
+                  if (pageNum === 2 || pageNum === totalPages - 1) {
+                    return <span key={pageNum} className="text-slate-400 px-1 text-xs">...</span>;
+                  }
+                  return null;
+                })}
+                <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.min(p + 1, totalPages))} disabled={currentPage === totalPages} className="h-8 px-2.5 cursor-pointer text-xs">Sau</Button>
+                <Button variant="outline" size="sm" onClick={() => setCurrentPage(totalPages)} disabled={currentPage === totalPages} className="h-8 px-2.5 cursor-pointer text-xs">Cuối</Button>
+              </div>
+            </div>
+          )}
         </Card>
       )}
     </div>

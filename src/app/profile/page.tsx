@@ -106,10 +106,7 @@ export default function UserProfilePage() {
       return;
     }
 
-    if (imageLoadError && urlInput) {
-      showToast('Không thể tải ảnh từ đường dẫn đã cung cấp.', 'error');
-      return;
-    }
+
 
     setSaving(true);
     try {

@@ -27,7 +27,6 @@ export default function AdminProductCreatePage() {
   const [imageUrl, setImageUrl] = useState('');
   const [imageLoadError, setImageLoadError] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [importPrice, setImportPrice] = useState('');
   const [uploadingImage, setUploadingImage] = useState(false);
   const imageInputRef = React.useRef<HTMLInputElement>(null);
 
@@ -64,9 +63,6 @@ export default function AdminProductCreatePage() {
       setUploadingImage(false);
     }
   };
-  const [supplierName, setSupplierName] = useState('');
-  const [supplierLink, setSupplierLink] = useState('');
-
   // Dynamic variants state
   const [variants, setVariants] = useState<VariantForm[]>([
     {
@@ -155,10 +151,7 @@ export default function AdminProductCreatePage() {
       return;
     }
 
-    if (imageLoadError && imageUrl) {
-      showToast('Không thể tải ảnh sản phẩm từ đường dẫn đã cung cấp.', 'error');
-      return;
-    }
+
 
     // Verify variants has at least 1 item
     if (variants.length === 0) {
@@ -191,9 +184,6 @@ export default function AdminProductCreatePage() {
           imageUrl,
           status,
           variants,
-          importPrice,
-          supplierName,
-          supplierLink,
         }),
       });
 
@@ -273,31 +263,7 @@ export default function AdminProductCreatePage() {
                   rows={4}
                 />
 
-                {/* Supplier & Import Price */}
-                <div className="pt-2 border-t border-border">
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-                    <Input
-                      label="Giá nhập gốc (VND)"
-                      type="number"
-                      min="0"
-                      placeholder="Ví dụ: 200000"
-                      value={importPrice}
-                      onChange={(e) => setImportPrice(e.target.value)}
-                    />
-                    <Input
-                      label="Tên nguồn hàng"
-                      placeholder="Ví dụ: Reseller XYZ"
-                      value={supplierName}
-                      onChange={(e) => setSupplierName(e.target.value)}
-                    />
-                    <Input
-                      label="Link liên hệ nguồn hàng"
-                      placeholder="https://t.me/supplier..."
-                      value={supplierLink}
-                      onChange={(e) => setSupplierLink(e.target.value)}
-                    />
-                  </div>
-                </div>
+
 
 
                 {/* Image Link Input */}
