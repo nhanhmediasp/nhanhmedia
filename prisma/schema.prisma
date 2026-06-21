@@ -305,3 +305,34 @@ model Supplier {
   @@map("suppliers")
 }
 
+model WebsiteSettings {
+  id                    String   @id @default("default")
+  siteName              String   @default("Nhanh Media") @map("site_name")
+  siteDescription       String?  @map("site_description")
+  logoUrl               String?  @map("logo_url")
+  faviconUrl            String?  @map("favicon_url")
+  adminEmail            String?  @map("admin_email")
+  adminPhone            String?  @map("admin_phone")
+  adminAddress          String?  @map("admin_address")
+  loginMaxAttempts      Int      @default(5) @map("login_max_attempts")
+  loginLockEnabled      Boolean  @default(true) @map("login_lock_enabled")
+  loginLockDurationMins Int      @default(15) @map("login_lock_duration_mins")
+  createdAt             DateTime @default(now()) @map("created_at")
+  updatedAt             DateTime @updatedAt @map("updated_at")
+
+  @@map("website_settings")
+}
+
+model LoginAttempt {
+  id          String   @id @default(uuid())
+  ipAddress   String   @map("ip_address")
+  email       String?
+  attempts    Int      @default(1)
+  lastAttempt DateTime @default(now()) @map("last_attempt")
+  lockedUntil DateTime? @map("locked_until")
+
+  @@index([ipAddress])
+  @@index([email])
+  @@index([lastAttempt])
+  @@map("login_attempts")
+}

@@ -299,12 +299,8 @@ export default function AdminProductEditPage({ params }: { params: Promise<{ id:
                   rows={4}
                 />
 
-                {/* Supplier & Import Price - Admin only */}
+                {/* Supplier & Import Price */}
                 <div className="pt-2 border-t border-border">
-                  <h4 className="text-xs font-bold text-amber-600 uppercase tracking-widest mb-3 flex items-center gap-2">
-                    <span>🔒</span>
-                    <span>Thông tin nội bộ (Chỉ Admin)</span>
-                  </h4>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
                     <Input
                       label="Giá nhập gốc (VND)"

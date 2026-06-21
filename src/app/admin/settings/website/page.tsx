@@ -1,0 +1,437 @@
+'use client';
+
+import React, { useState, useEffect } from 'react';
+import Link from 'next/link';
+import { Button, Card, CardHeader, CardTitle, CardContent, Input, showToast, PageHeader } from '@/components/ui';
+import { Globe, Image, Shield, Save, ExternalLink, Eye, EyeOff, ArrowLeft, Mail, Settings } from 'lucide-react';
+
+interface WebsiteSettings {
+  id: string;
+  siteName: string;
+  siteDescription: string | null;
+  logoUrl: string | null;
+  faviconUrl: string | null;
+  adminEmail: string | null;
+  adminPhone: string | null;
+  adminAddress: string | null;
+  loginMaxAttempts: number;
+  loginLockEnabled: boolean;
+  loginLockDurationMins: number;
+}
+
+type Tab = 'info' | 'images' | 'security';
+
+export default function WebsiteSettingsPage() {
+  const [activeTab, setActiveTab] = useState<Tab>('info');
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  // Site info
+  const [siteName, setSiteName] = useState('');
+  const [siteDescription, setSiteDescription] = useState('');
+  const [adminEmail, setAdminEmail] = useState('');
+  const [adminPhone, setAdminPhone] = useState('');
+  const [adminAddress, setAdminAddress] = useState('');
+
+  // Images
+  const [logoUrl, setLogoUrl] = useState('');
+  const [faviconUrl, setFaviconUrl] = useState('');
+  const [logoError, setLogoError] = useState(false);
+
+  // Security
+  const [loginLockEnabled, setLoginLockEnabled] = useState(true);
+  const [loginMaxAttempts, setLoginMaxAttempts] = useState(5);
+  const [loginLockDurationMins, setLoginLockDurationMins] = useState(15);
+
+  const fetchSettings = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch('/api/settings/website');
+      if (res.ok) {
+        const data = await res.json();
+        const s: WebsiteSettings = data.settings;
+        setSiteName(s.siteName || '');
+        setSiteDescription(s.siteDescription || '');
+        setAdminEmail(s.adminEmail || '');
+        setAdminPhone(s.adminPhone || '');
+        setAdminAddress(s.adminAddress || '');
+        setLogoUrl(s.logoUrl || '');
+        setFaviconUrl(s.faviconUrl || '');
+        setLoginLockEnabled(s.loginLockEnabled);
+        setLoginMaxAttempts(s.loginMaxAttempts);
+        setLoginLockDurationMins(s.loginLockDurationMins);
+      } else {
+        showToast('Không thể tải cài đặt website.', 'error');
+      }
+    } catch (e) {
+      showToast('Lỗi kết nối máy chủ.', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchSettings();
+  }, []);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      const res = await fetch('/api/settings/website', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          siteName,
+          siteDescription,
+          adminEmail,
+          adminPhone,
+          adminAddress,
+          logoUrl,
+          faviconUrl,
+          loginLockEnabled,
+          loginMaxAttempts,
+          loginLockDurationMins,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        showToast(data.message || 'Đã lưu cài đặt thành công!', 'success');
+      } else {
+        showToast(data.error || 'Lỗi khi lưu cài đặt.', 'error');
+      }
+    } catch (e) {
+      showToast('Lỗi kết nối máy chủ.', 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
+    { id: 'info', label: 'Thông tin Website', icon: <Globe className="w-4 h-4" /> },
+    { id: 'images', label: 'Logo & Favicon', icon: <Image className="w-4 h-4" /> },
+    { id: 'security', label: 'Bảo mật đăng nhập', icon: <Shield className="w-4 h-4" /> },
+  ];
+
+  return (
+    <div className="space-y-6">
+      <PageHeader
+        title="Tùy chỉnh Website"
+        description="Quản lý thông tin, hình ảnh thương hiệu và cài đặt bảo mật cho hệ thống."
+      >
+        <div className="flex gap-2.5 shrink-0">
+          <Link href="/admin/settings/email">
+            <Button variant="outline" className="flex items-center gap-2 cursor-pointer">
+              <Mail className="w-4 h-4" />
+              <span>Cài đặt Email</span>
+            </Button>
+          </Link>
+          <Button onClick={handleSave} loading={saving} className="flex items-center gap-2 cursor-pointer">
+            <Save className="w-4 h-4" />
+            <span>Lưu thay đổi</span>
+          </Button>
+        </div>
+      </PageHeader>
+
+      {/* Tabs */}
+      <div className="flex gap-1 bg-muted/40 p-1 rounded-xl border border-border w-full sm:w-auto">
+        {tabs.map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id)}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-200 cursor-pointer flex-1 sm:flex-none justify-center
+              ${activeTab === tab.id
+                ? 'bg-card text-primary shadow-sm border border-border'
+                : 'text-muted-foreground hover:text-foreground hover:bg-white/50'
+              }`}
+          >
+            {tab.icon}
+            <span>{tab.label}</span>
+          </button>
+        ))}
+      </div>
+
+      {loading ? (
+        <Card>
+          <CardContent className="p-10 text-center">
+            <div className="animate-spin w-8 h-8 border-2 border-primary border-t-transparent rounded-full mx-auto" />
+            <p className="text-sm text-muted-foreground mt-3">Đang tải cài đặt...</p>
+          </CardContent>
+        </Card>
+      ) : (
+        <>
+          {/* Tab: Thông tin Website */}
+          {activeTab === 'info' && (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Globe className="w-4 h-4 text-primary" />
+                    Thông tin Website
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-5">
+                  <Input
+                    label="Tên website"
+                    placeholder="Ví dụ: Nhanh Media"
+                    value={siteName}
+                    onChange={(e) => setSiteName(e.target.value)}
+                  />
+                  <div>
+                    <label className="block text-sm font-semibold text-foreground mb-1.5">Mô tả website</label>
+                    <textarea
+                      placeholder="Mô tả ngắn về website, hiển thị dưới tiêu đề trang..."
+                      value={siteDescription}
+                      onChange={(e) => setSiteDescription(e.target.value)}
+                      rows={3}
+                      className="w-full px-4 py-2.5 text-sm bg-input border border-border rounded-xl text-foreground placeholder-slate-400 focus:outline-none focus:border-primary focus:ring-2 focus:ring-ring transition-all duration-200 resize-none"
+                    />
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Mail className="w-4 h-4 text-primary" />
+                    Thông tin liên hệ Admin
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-5">
+                  <Input
+                    label="Email liên hệ"
+                    type="email"
+                    placeholder="contact@nhanhmedia.vn"
+                    value={adminEmail}
+                    onChange={(e) => setAdminEmail(e.target.value)}
+                  />
+                  <Input
+                    label="Số điện thoại liên hệ"
+                    placeholder="0977 111 222"
+                    value={adminPhone}
+                    onChange={(e) => setAdminPhone(e.target.value)}
+                  />
+                  <Input
+                    label="Địa chỉ"
+                    placeholder="Số 123, Đường ABC, Q.1, TP.HCM"
+                    value={adminAddress}
+                    onChange={(e) => setAdminAddress(e.target.value)}
+                  />
+                </CardContent>
+              </Card>
+            </div>
+          )}
+
+          {/* Tab: Logo & Favicon */}
+          {activeTab === 'images' && (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Image className="w-4 h-4 text-primary" />
+                    Logo Website
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-5">
+                  <Input
+                    label="URL hình ảnh Logo"
+                    placeholder="https://example.com/logo.png"
+                    value={logoUrl}
+                    onChange={(e) => {
+                      setLogoUrl(e.target.value);
+                      setLogoError(false);
+                    }}
+                  />
+                  <div className="text-xs text-muted-foreground">
+                    Hỗ trợ định dạng: PNG, JPG, SVG, WebP. Kích thước khuyến nghị: 200×60 px.
+                  </div>
+                  {logoUrl && (
+                    <div className="mt-2">
+                      <p className="text-xs font-semibold text-slate-500 mb-2 uppercase tracking-wider">Xem trước:</p>
+                      <div className="border border-border rounded-xl p-4 bg-muted/30 flex items-center justify-center min-h-[80px]">
+                        {!logoError ? (
+                          <img
+                            src={logoUrl}
+                            alt="Logo preview"
+                            className="max-h-16 max-w-[240px] object-contain"
+                            onError={() => setLogoError(true)}
+                          />
+                        ) : (
+                          <p className="text-xs text-rose-500 font-semibold">Không thể tải ảnh — URL không hợp lệ.</p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Settings className="w-4 h-4 text-primary" />
+                    Favicon
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-5">
+                  <Input
+                    label="URL Favicon"
+                    placeholder="https://example.com/favicon.ico"
+                    value={faviconUrl}
+                    onChange={(e) => setFaviconUrl(e.target.value)}
+                  />
+                  <div className="text-xs text-muted-foreground">
+                    Favicon hiển thị trên tab trình duyệt. Hỗ trợ: ICO, PNG, SVG. Kích thước: 32×32 px.
+                  </div>
+                  {faviconUrl && (
+                    <div className="mt-2">
+                      <p className="text-xs font-semibold text-slate-500 mb-2 uppercase tracking-wider">Xem trước:</p>
+                      <div className="border border-border rounded-xl p-4 bg-muted/30 flex items-center gap-3">
+                        <img
+                          src={faviconUrl}
+                          alt="Favicon preview"
+                          className="w-8 h-8 object-contain rounded"
+                          onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                        />
+                        <span className="text-xs text-muted-foreground">Favicon trong tab trình duyệt</span>
+                      </div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+          )}
+
+          {/* Tab: Bảo mật đăng nhập */}
+          {activeTab === 'security' && (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Shield className="w-4 h-4 text-primary" />
+                    Cài đặt chống Brute-Force
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  {/* Toggle: Enable lock */}
+                  <div className="flex items-center justify-between p-4 rounded-xl border border-border bg-muted/30">
+                    <div>
+                      <p className="text-sm font-bold text-foreground">Bật khóa IP tự động</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        Tự động tạm khóa địa chỉ IP nếu đăng nhập sai quá nhiều lần liên tiếp.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setLoginLockEnabled(!loginLockEnabled)}
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 cursor-pointer focus:outline-none
+                        ${loginLockEnabled ? 'bg-primary' : 'bg-slate-300 dark:bg-slate-600'}`}
+                      aria-pressed={loginLockEnabled}
+                    >
+                      <span
+                        className={`inline-block h-4 w-4 transform rounded-full bg-white shadow-md transition-transform duration-200
+                          ${loginLockEnabled ? 'translate-x-6' : 'translate-x-1'}`}
+                      />
+                    </button>
+                  </div>
+
+                  {loginLockEnabled && (
+                    <>
+                      <div>
+                        <label className="block text-sm font-semibold text-foreground mb-1.5">
+                          Số lần đăng nhập sai tối đa
+                        </label>
+                        <div className="flex items-center gap-3">
+                          <input
+                            type="range"
+                            min="3"
+                            max="10"
+                            value={loginMaxAttempts}
+                            onChange={(e) => setLoginMaxAttempts(parseInt(e.target.value))}
+                            className="flex-1 cursor-pointer accent-primary"
+                          />
+                          <span className="w-10 text-center font-black text-primary text-lg">{loginMaxAttempts}</span>
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Sau {loginMaxAttempts} lần nhập sai, IP sẽ bị tạm khóa.
+                        </p>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-semibold text-foreground mb-1.5">
+                          Thời gian khóa (phút)
+                        </label>
+                        <div className="flex items-center gap-3">
+                          <input
+                            type="range"
+                            min="5"
+                            max="60"
+                            step="5"
+                            value={loginLockDurationMins}
+                            onChange={(e) => setLoginLockDurationMins(parseInt(e.target.value))}
+                            className="flex-1 cursor-pointer accent-primary"
+                          />
+                          <span className="w-16 text-center font-black text-primary text-lg">{loginLockDurationMins} phút</span>
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          IP sẽ tự động mở khóa sau {loginLockDurationMins} phút.
+                        </p>
+                      </div>
+                    </>
+                  )}
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Shield className="w-4 h-4 text-emerald-500" />
+                    Tóm tắt cấu hình bảo mật
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className={`flex items-center gap-3 p-3 rounded-xl border ${loginLockEnabled ? 'bg-emerald-50 border-emerald-200' : 'bg-slate-50 border-border'}`}>
+                    <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${loginLockEnabled ? 'bg-emerald-500' : 'bg-slate-300'}`} />
+                    <div>
+                      <p className={`text-sm font-bold ${loginLockEnabled ? 'text-emerald-700' : 'text-slate-500'}`}>
+                        {loginLockEnabled ? 'Đang bảo vệ — Tính năng khóa IP đang bật' : 'Tắt — Không có giới hạn đăng nhập'}
+                      </p>
+                    </div>
+                  </div>
+
+                  {loginLockEnabled && (
+                    <>
+                      <div className="space-y-2 text-sm">
+                        <div className="flex justify-between border-b border-border pb-2">
+                          <span className="text-muted-foreground">Số lần tối đa:</span>
+                          <span className="font-bold text-foreground">{loginMaxAttempts} lần</span>
+                        </div>
+                        <div className="flex justify-between border-b border-border pb-2">
+                          <span className="text-muted-foreground">Thời gian khóa:</span>
+                          <span className="font-bold text-foreground">{loginLockDurationMins} phút</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Theo dõi theo:</span>
+                          <span className="font-bold text-foreground">Địa chỉ IP</span>
+                        </div>
+                      </div>
+                      <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-700 font-medium">
+                        ⚠️ Sau khi bị khóa, Admin có thể xóa lịch sử thử đăng nhập trong database để mở khóa thủ công nếu cần.
+                      </div>
+                    </>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+          )}
+        </>
+      )}
+
+      {/* Bottom Save Button */}
+      <div className="flex justify-end">
+        <Button onClick={handleSave} loading={saving} className="flex items-center gap-2 cursor-pointer px-8">
+          <Save className="w-4 h-4" />
+          <span>Lưu tất cả thay đổi</span>
+        </Button>
+      </div>
+    </div>
+  );
+}

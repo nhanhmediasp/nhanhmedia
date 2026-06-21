@@ -302,6 +302,7 @@ export default function AdminUsersPage() {
             <table className="w-full border-collapse text-left text-sm">
               <thead>
                 <tr className="border-b border-border bg-muted/40 text-muted-foreground font-semibold">
+                  <th className="px-4 py-5 w-[48px] text-center">STT</th>
                   <SortableHeader label="Tài khoản" field="name" currentField={sortField} currentDirection={sortDirection} onSort={handleSort} />
                   <th className="px-6 py-5">Số điện thoại</th>
                   <th className="px-6 py-5 text-center">Vai trò</th>
@@ -312,8 +313,9 @@ export default function AdminUsersPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-border bg-card">
-                {sortedUsers.map((u) => (
+                {sortedUsers.map((u, idx) => (
                   <tr key={u.id} className="hover:bg-muted/20 transition-colors">
+                    <td className="px-4 py-5 text-center text-xs font-bold text-slate-400">{idx + 1}</td>
                     <td className="px-6 py-5">
                       <div className="flex items-center gap-3">
                         {u.avatarUrl ? (

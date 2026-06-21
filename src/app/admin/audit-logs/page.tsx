@@ -284,6 +284,7 @@ export default function AdminAuditLogsPage() {
                 <table className="w-full text-left text-xs border-collapse">
                   <thead>
                     <tr className="border-b border-border bg-[#f5f5f9] text-slate-500 font-semibold uppercase tracking-wider">
+                      <th className="px-4 py-4 w-[48px] text-center">STT</th>
                       <th className="px-5 py-4 w-[160px]">Thời gian</th>
                       <th className="px-5 py-4">Người thực hiện</th>
                       <th className="px-5 py-4 w-[100px]">Vai trò</th>
@@ -295,8 +296,9 @@ export default function AdminAuditLogsPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border bg-card">
-                    {logs.map((log) => (
+                    {logs.map((log, idx) => (
                       <tr key={log.id} className="hover:bg-[#f8f7fa] transition-colors duration-150">
+                        <td className="px-4 py-3.5 text-center text-xs font-bold text-slate-400">{(page - 1) * 20 + idx + 1}</td>
                         <td className="px-5 py-3.5 whitespace-nowrap text-slate-500 font-mono">{formatDate(log.createdAt)}</td>
                         <td className="px-5 py-3.5">
                           <div className="font-semibold text-slate-800">{log.actorName}</div>
@@ -366,10 +368,10 @@ export default function AdminAuditLogsPage() {
 
       {/* Log details modal */}
       {activeLog && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
-          <div className="w-full max-w-4xl bg-card rounded-2xl border border-border shadow-2xl overflow-hidden animate-scale-in">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm overflow-y-auto">
+          <div className="w-full max-w-4xl bg-card rounded-2xl border border-border shadow-2xl overflow-hidden animate-scale-in my-auto">
             {/* Header */}
-            <div className="px-6 py-5 border-b border-border flex items-center justify-between">
+            <div className="px-6 py-5 border-b border-border flex items-center justify-between shrink-0">
               <h3 className="text-base font-bold text-slate-800">Chi tiết nhật ký hoạt động</h3>
               <button 
                 onClick={() => setActiveLog(null)} 
@@ -379,7 +381,7 @@ export default function AdminAuditLogsPage() {
               </button>
             </div>
             {/* Content */}
-            <div className="p-6 overflow-y-auto max-h-[75vh] space-y-6">
+            <div className="p-6 overflow-y-auto max-h-[70vh] space-y-6">
               {/* Meta statistics in grids */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4 text-xs border-b border-border/60 pb-5">
                 <div>

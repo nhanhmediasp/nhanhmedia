@@ -22,6 +22,7 @@ import {
   Megaphone,
   Tag,
   History,
+  Globe,
 } from 'lucide-react';
 import { Badge } from './ui';
 
@@ -44,6 +45,7 @@ const adminMainLinks: NavItem[] = [
 ];
 
 const adminSettingsLinks: NavItem[] = [
+  { label: 'Tùy chỉnh Website',  href: '/admin/settings/website',  icon: Globe },
   { label: 'Quản lý Thông báo',  href: '/admin/notifications',      icon: Megaphone },
   { label: 'Cấu hình SMTP',      href: '/admin/settings/email',     icon: Settings },
   { label: 'Cấu hình Nhắc hạn', href: '/admin/settings/reminders', icon: Bell },

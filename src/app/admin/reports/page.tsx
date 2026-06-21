@@ -564,6 +564,7 @@ export default function AdminReportsPage() {
               <table className="w-full text-left text-xs border-collapse">
                 <thead>
                   <tr className="border-b border-border bg-[#f5f5f9] text-slate-500 font-semibold uppercase tracking-wider">
+                    <th className="px-4 py-4 w-[48px] text-center">STT</th>
                     <th 
                       onClick={() => handleSort('createdAt')} 
                       className="px-4 py-4 cursor-pointer hover:bg-slate-200/50 transition-colors select-none group font-semibold uppercase tracking-wider"
@@ -686,6 +687,7 @@ export default function AdminReportsPage() {
                 <tbody className="divide-y divide-border bg-card">
                   {paginatedReportData.map((item, idx) => (
                     <tr key={idx} className="hover:bg-[#f8f7fa] transition-colors duration-150">
+                      <td className="px-4 py-3 text-center text-xs font-bold text-slate-400">{(currentPage - 1) * PAGE_SIZE + idx + 1}</td>
                       <td className="px-4 py-3 whitespace-nowrap text-slate-500">{formatDate(item.createdAt)}</td>
                       <td className="px-4 py-3 font-semibold text-slate-800">{item.orderCode}</td>
                       <td className="px-4 py-3">
