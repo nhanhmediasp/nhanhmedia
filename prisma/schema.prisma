@@ -1,5 +1,5 @@
 datasource db {
-  provider = "mysql"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
@@ -8,22 +8,22 @@ generator client {
 }
 
 model User {
-  id           String   @id @default(uuid())
-  name         String
-  email        String   @unique
-  passwordHash String   @map("password_hash")
-  phone        String?
-  role         String   @default("member") // admin, member, collaborator, agency
-  status       String   @default("active") // active, inactive, locked
-  note         String?  @db.Text
-  avatarUrl    String?  @map("avatar_url")
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
+  id            String   @id @default(uuid())
+  name          String
+  email         String   @unique
+  passwordHash  String   @map("password_hash")
+  phone         String?
+  role          String   @default("member") // admin, member, collaborator, agency
+  status        String   @default("active") // active, inactive, locked
+  note          String?
+  avatarUrl     String?  @map("avatar_url")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
 
-  customers         Customer[]
-  orders            Order[]
-  renewals          OrderRenewal[]
-  notifications     Notification[]     @relation("NotificationCreator")
+  customers      Customer[]
+  orders         Order[]
+  renewals       OrderRenewal[]
+  notifications  Notification[]     @relation("NotificationCreator")
   notificationReads NotificationRead[] @relation("NotificationReadByUser")
 
   @@index([role])
@@ -33,20 +33,20 @@ model User {
 }
 
 model Customer {
-  id              String   @id @default(uuid())
-  name            String
-  phone           String   @unique
-  facebook        String?
-  zalo            String?
-  email           String?
-  createdByUserId String   @map("created_by_user_id")
-  note            String?  @db.Text
-  createdAt       DateTime @default(now()) @map("created_at")
-  updatedAt       DateTime @updatedAt @map("updated_at")
+  id               String   @id @default(uuid())
+  name             String
+  phone            String   @unique
+  facebook         String?
+  zalo             String?
+  email            String?
+  createdByUserId  String   @map("created_by_user_id")
+  note             String?
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
 
-  createdByUser User       @relation(fields: [createdByUserId], references: [id], onDelete: Cascade)
-  orders        Order[]
-  emailLogs     EmailLog[]
+  createdByUser    User     @relation(fields: [createdByUserId], references: [id], onDelete: Cascade)
+  orders           Order[]
+  emailLogs        EmailLog[]
 
   @@index([createdByUserId])
   @@index([createdAt])
@@ -57,7 +57,7 @@ model Product {
   id           String   @id @default(uuid())
   name         String
   slug         String   @unique
-  description  String?  @db.Text
+  description  String?
   imageUrl     String?  @map("image_url")
   status       String   @default("active") // active, inactive
   importPrice  Float?   @map("import_price")
@@ -66,8 +66,8 @@ model Product {
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
 
-  variants ProductVariant[]
-  orders   Order[]
+  variants    ProductVariant[]
+  orders      Order[]
 
   @@index([status])
   @@index([createdAt])
@@ -84,10 +84,10 @@ model ProductVariant {
   createdAt     DateTime @default(now()) @map("created_at")
   updatedAt     DateTime @updatedAt @map("updated_at")
 
-  product  Product               @relation(fields: [productId], references: [id], onDelete: Cascade)
-  prices   ProductVariantPrice[]
-  orders   Order[]
-  renewals OrderRenewal[]
+  product       Product               @relation(fields: [productId], references: [id], onDelete: Cascade)
+  prices        ProductVariantPrice[]
+  orders        Order[]
+  renewals      OrderRenewal[]
 
   @@index([productId])
   @@index([status])
@@ -96,38 +96,38 @@ model ProductVariant {
 }
 
 model ProductVariantPrice {
-  id        String   @id @default(uuid())
-  variantId String   @map("variant_id")
-  role      String // member, collaborator, agency
-  price     Float
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  id         String   @id @default(uuid())
+  variantId  String   @map("variant_id")
+  role       String   // member, collaborator, agency
+  price      Float
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
 
-  variant ProductVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  variant    ProductVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
 
   @@unique([variantId, role])
   @@map("product_variant_prices")
 }
 
 model Order {
-  id              String    @id @default(uuid())
-  orderCode       String    @unique @map("order_code")
-  customerId      String    @map("customer_id")
-  createdByUserId String    @map("created_by_user_id")
-  productId       String    @map("product_id")
-  variantId       String    @map("variant_id")
-  supplierId      String?   @map("supplier_id")
+  id              String   @id @default(uuid())
+  orderCode       String   @unique @map("order_code")
+  customerId      String   @map("customer_id")
+  createdByUserId String   @map("created_by_user_id")
+  productId       String   @map("product_id")
+  variantId       String   @map("variant_id")
+  supplierId      String?  @map("supplier_id")
   price           Float
-  customPrice     Float?    @map("custom_price")
-  importPrice     Float?    @map("import_price")
-  status          String    @default("new") // new, processing, running, expired_soon, expired, cancelled
-  startDate       DateTime  @map("start_date")
-  endDate         DateTime  @map("end_date")
-  note            String?   @db.Text
-  internalNote    String?   @map("internal_note") @db.Text
-  createdAt       DateTime  @default(now()) @map("created_at")
-  updatedAt       DateTime  @updatedAt @map("updated_at")
-  refundAmount    Float?    @map("refund_amount")
+  customPrice     Float?   @map("custom_price")
+  importPrice     Float?   @map("import_price")
+  status          String   @default("new") // new, processing, running, expired_soon, expired, cancelled
+  startDate       DateTime @map("start_date")
+  endDate         DateTime @map("end_date")
+  note            String?
+  internalNote    String?  @map("internal_note")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+  refundAmount    Float?   @map("refund_amount")
   refundedAt      DateTime? @map("refunded_at")
 
   customer      Customer       @relation(fields: [customerId], references: [id])
@@ -145,23 +145,23 @@ model Order {
   @@index([productId])
   @@index([supplierId])
   @@index([endDate])
-  @@index([createdAt, status]) // composite: range + status filter
+  @@index([createdAt, status])  // composite: range + status filter
   @@map("orders")
 }
 
 model OrderRenewal {
-  id              String   @id @default(uuid())
-  orderId         String   @map("order_id")
-  oldEndDate      DateTime @map("old_end_date")
-  newEndDate      DateTime @map("new_end_date")
-  variantId       String   @map("variant_id")
-  price           Float
-  renewedByUserId String   @map("renewed_by_user_id")
-  createdAt       DateTime @default(now()) @map("created_at")
+  id                String   @id @default(uuid())
+  orderId           String   @map("order_id")
+  oldEndDate        DateTime @map("old_end_date")
+  newEndDate        DateTime @map("new_end_date")
+  variantId         String   @map("variant_id")
+  price             Float
+  renewedByUserId   String   @map("renewed_by_user_id")
+  createdAt         DateTime @default(now()) @map("created_at")
 
-  order         Order          @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  variant       ProductVariant @relation(fields: [variantId], references: [id])
-  renewedByUser User           @relation(fields: [renewedByUserId], references: [id])
+  order             Order          @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  variant           ProductVariant @relation(fields: [variantId], references: [id])
+  renewedByUser     User           @relation(fields: [renewedByUserId], references: [id])
 
   @@index([createdAt])
   @@index([renewedByUserId])
@@ -188,8 +188,8 @@ model EmailTemplate {
   id        String   @id @default(uuid())
   name      String   @unique
   subject   String
-  body      String   @db.Text
-  type      String // reminder_7_days, reminder_3_days, reminder_1_day, reminder_expired
+  body      String
+  type      String   // reminder_7_days, reminder_3_days, reminder_1_day, reminder_expired
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
@@ -202,13 +202,13 @@ model EmailLog {
   customerId   String   @map("customer_id")
   emailTo      String   @map("email_to")
   subject      String
-  body         String   @db.Text
-  status       String // success, failed
+  body         String
+  status       String   // success, failed
   sentAt       DateTime @default(now()) @map("sent_at")
-  errorMessage String?  @map("error_message") @db.Text
+  errorMessage String?  @map("error_message")
 
-  order    Order?   @relation(fields: [orderId], references: [id], onDelete: SetNull)
-  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  order        Order?    @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  customer     Customer  @relation(fields: [customerId], references: [id], onDelete: Cascade)
 
   @@map("email_logs")
 }
@@ -231,8 +231,8 @@ model Notification {
   createdByUserId String   @map("created_by_user_id")
   createdAt       DateTime @default(now()) @map("created_at")
 
-  createdByUser User               @relation("NotificationCreator", fields: [createdByUserId], references: [id], onDelete: Cascade)
-  reads         NotificationRead[]
+  createdByUser   User               @relation("NotificationCreator", fields: [createdByUserId], references: [id], onDelete: Cascade)
+  reads           NotificationRead[]
 
   @@index([targetRole])
   @@index([createdAt])
@@ -245,37 +245,40 @@ model NotificationRead {
   userId         String   @map("user_id")
   readAt         DateTime @default(now()) @map("read_at")
 
-  notification Notification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
-  user         User         @relation("NotificationReadByUser", fields: [userId], references: [id], onDelete: Cascade)
+  notification   Notification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+  user           User         @relation("NotificationReadByUser", fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([notificationId, userId])
   @@index([userId])
   @@map("notification_reads")
 }
 
+
+
+
 model AuditLog {
-  id            String   @id @default(uuid())
-  actorUserId   String?  @map("actor_user_id")
-  actorName     String   @map("actor_name")
-  actorEmail    String?  @map("actor_email")
-  actorRole     String   @map("actor_role") // guest, admin, member, collaborator, agency
-  action        String
-  actionLabel   String   @map("action_label")
-  module        String // users, customers, products, orders, settings, auth, reports
-  entityType    String?  @map("entity_type")
-  entityId      String?  @map("entity_id")
-  entityName    String?  @map("entity_name")
-  description   String   @db.Text
-  oldValues     String?  @map("old_values") @db.Text // JSON string
-  newValues     String?  @map("new_values") @db.Text // JSON string
-  changedFields String?  @map("changed_fields") @db.Text // JSON array string
-  ipAddress     String?  @map("ip_address")
-  userAgent     String?  @map("user_agent") @db.Text
-  requestMethod String?  @map("request_method")
-  requestPath   String?  @map("request_path")
-  status        String   @default("success") // success, failed
-  errorMessage  String?  @map("error_message") @db.Text
-  createdAt     DateTime @default(now()) @map("created_at")
+  id              String   @id @default(uuid())
+  actorUserId     String?  @map("actor_user_id")
+  actorName       String   @map("actor_name")
+  actorEmail      String?  @map("actor_email")
+  actorRole       String   @map("actor_role") // guest, admin, member, collaborator, agency
+  action          String
+  actionLabel     String   @map("action_label")
+  module          String   // users, customers, products, orders, settings, auth, reports
+  entityType      String?  @map("entity_type")
+  entityId        String?  @map("entity_id")
+  entityName      String?  @map("entity_name")
+  description     String
+  oldValues       String?  @map("old_values") // JSON string
+  newValues       String?  @map("new_values") // JSON string
+  changedFields   String?  @map("changed_fields") // JSON array string
+  ipAddress       String?  @map("ip_address")
+  userAgent       String?  @map("user_agent")
+  requestMethod   String?  @map("request_method")
+  requestPath     String?  @map("request_path")
+  status          String   @default("success") // success, failed
+  errorMessage    String?  @map("error_message")
+  createdAt       DateTime @default(now()) @map("created_at")
 
   @@index([createdAt])
   @@index([actorUserId])
@@ -287,7 +290,6 @@ model AuditLog {
   @@index([status])
   @@map("audit_logs")
 }
-
 model Supplier {
   id         String   @id @default(uuid())
   name       String   @unique
@@ -296,8 +298,9 @@ model Supplier {
   createdAt  DateTime @default(now()) @map("created_at")
   updatedAt  DateTime @updatedAt @map("updated_at")
 
-  orders Order[]
+  orders     Order[]
 
   @@index([createdAt])
   @@map("suppliers")
 }
+
