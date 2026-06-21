@@ -82,7 +82,7 @@ export async function PUT(
     }
 
     const body = await req.json();
-    const { status, startDate, endDate, note, internalNote, customPrice, importPrice } = body;
+    const { status, startDate, endDate, note, internalNote, customPrice, importPrice, amountPaid, supplierId } = body;
 
     const order = await prisma.order.findUnique({
       where: { id },
@@ -101,6 +101,10 @@ export async function PUT(
     const updateData: any = {
       note: note !== undefined ? (note ? note.trim() : null) : order.note,
     };
+
+    if (amountPaid !== undefined) {
+      updateData.amountPaid = amountPaid === '' || amountPaid === null ? 0 : parseFloat(amountPaid);
+    }
 
     if (isAdmin) {
       updateData.internalNote = internalNote !== undefined ? (internalNote ? internalNote.trim() : null) : order.internalNote;
@@ -126,6 +130,10 @@ export async function PUT(
       if (importPrice !== undefined) {
         updateData.importPrice = importPrice === '' || importPrice === null ? null : parseFloat(importPrice);
       }
+
+      if (supplierId !== undefined) {
+        updateData.supplierId = supplierId === '' || supplierId === null ? null : supplierId;
+      }
     } else {
       // Non-admin: can only cancel (if new/processing) or update note
       if (status === 'cancelled') {
@@ -145,10 +153,39 @@ export async function PUT(
       data: updateData,
       include: {
         customer: true,
-        product: true,
+        createdByUser: {
+          select: { id: true, name: true, role: true },
+        },
+        product: {
+          include: {
+            variants: {
+              where: { status: 'active' },
+              orderBy: { createdAt: 'asc' },
+            },
+          },
+        },
         variant: true,
+        renewals: {
+          include: {
+            renewedByUser: { select: { id: true, name: true } },
+            variant: true,
+          },
+          orderBy: { createdAt: 'desc' },
+        },
+        emailLogs: {
+          orderBy: { sentAt: 'desc' },
+        },
       },
     });
+
+    // Hide importPrice from non-admin
+    if (!isAdmin) {
+      const { importPrice: _, ...rest } = updatedOrder as any;
+      return NextResponse.json({
+        message: 'Cập nhật đơn hàng thành công!',
+        order: rest,
+      });
+    }
 
     return NextResponse.json({
       message: 'Cập nhật đơn hàng thành công!',

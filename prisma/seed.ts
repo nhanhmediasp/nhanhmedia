@@ -252,6 +252,7 @@ async function main() {
       productId: productA.id,
       variantId: variantA3.id,
       price: 550000,
+      amountPaid: 550000,
       status: 'running',
       startDate: order1Start,
       endDate: order1End,
@@ -296,6 +297,7 @@ async function main() {
       productId: productB.id,
       variantId: variantB1.id,
       price: 4000000, // Agency price
+      amountPaid: 4000000,
       status: 'expired',
       startDate: order3Start,
       endDate: order3End,

@@ -120,6 +120,7 @@ model Order {
   price           Float
   customPrice     Float?   @map("custom_price")
   importPrice     Float?   @map("import_price")
+  amountPaid      Float    @default(0) @map("amount_paid")
   status          String   @default("new") // new, processing, running, expired_soon, expired, cancelled
   startDate       DateTime @map("start_date")
   endDate         DateTime @map("end_date")
