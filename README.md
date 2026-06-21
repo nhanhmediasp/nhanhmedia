@@ -1,114 +1,200 @@
-# Hệ thống Quản trị Khách hàng, Cộng tác viên và Đơn hàng Dịch vụ - Nhanh Media
+# 🟣 NhanhMedia – Hệ Thống Quản Lý Dịch Vụ
 
-Hệ thống quản lý thông tin khách hàng, cộng tác viên nội bộ (CTV), đại lý và đơn hàng kích hoạt dịch vụ cho **Nhanh Media** (Tông màu tím chủ đạo). Được phát triển bằng **Next.js (App Router)**, **TypeScript**, **Tailwind CSS v4**, và **Prisma ORM**.
-
----
-
-## 🚀 Công nghệ sử dụng
-- **Frontend/Backend**: Next.js + TypeScript (App Router, Route Handlers, Middlewares).
-- **Styling**: Tailwind CSS v4 với thiết kế Premium (Glassmorphic, Gradient, Responsive đầy đủ cho Desktop/Tablet/Mobile).
-- **Icons**: Lucide React.
-- **ORM & Database**: Prisma ORM + SQLite (Mặc định chạy ngay không cần cài đặt) hoặc PostgreSQL.
-- **Security**: Custom JWT Cookie-based Session + Hóa mật khẩu bằng `bcryptjs` + Mã hóa mật khẩu SMTP bằng `AES-256-CBC`.
-- **Email**: Nodemailer gửi thư cảnh báo qua SMTP cấu hình linh hoạt trong Admin Dashboard.
+Hệ thống quản lý khách hàng, cộng tác viên (CTV), đại lý và đơn hàng dịch vụ cho **Nhanh Media**.  
+Xây dựng bằng **Next.js 16 App Router**, **TypeScript**, **Tailwind CSS v4**, **Prisma ORM** và **MySQL**.
 
 ---
 
-## 🛠️ Cài đặt & Chạy dự án
+## 🚀 Công Nghệ Sử Dụng
 
-### 1. Chuẩn bị Môi trường
-Đảm bảo bạn đã cài đặt **Node.js** (Khuyên dùng v18 trở lên).
+| Lớp | Công nghệ |
+|---|---|
+| Frontend/Backend | Next.js 16 (App Router, Route Handlers, Middleware) |
+| Ngôn ngữ | TypeScript |
+| Styling | Tailwind CSS v4 – Giao diện Premium, Glassmorphic, Responsive |
+| Icons | Lucide React |
+| ORM & Database | Prisma ORM + **MySQL / MariaDB** |
+| Xác thực | JWT Cookie-based Session + `bcryptjs` |
+| Mã hóa | AES-256-CBC (mã hóa mật khẩu SMTP trong DB) |
+| Email | Nodemailer – SMTP cấu hình trong Admin Dashboard |
+| Process Manager | PM2 (production) |
 
-### 2. Thiết lập cấu hình `.env`
-Nhân bản file `.env.example` thành `.env` (Hệ thống đã tự động cấu hình sẵn giá trị mặc định cho SQLite):
-```env
-# Mặc định sử dụng SQLite để chạy ngay lập tức không cần cài đặt DB server
-DATABASE_URL="file:./dev.db"
+---
 
-# JWT Secret
-JWT_SECRET="nhanh_media_secret_key_for_jwt_tokens_2026_purple_theme"
+## 📋 Tính Năng Chính
 
-# Cron Token (Bảo vệ API tự động nhắc gia hạn)
-CRON_SECRET="nhanh_media_cron_job_secret_key_2026_v1"
+- **Quản lý người dùng** – 4 cấp phân quyền: Admin, Member, CTV, Agency
+- **Quản lý khách hàng** – Tạo, sửa, xóa, tìm kiếm, phân quyền theo người tạo
+- **Quản lý sản phẩm & gói dịch vụ** – Biến thể, thời hạn, giá theo từng role
+- **Quản lý đơn hàng** – Tạo đơn, gia hạn, theo dõi trạng thái, hoàn tiền
+- **Nhà cung cấp (Supplier)** – Quản lý thông tin nhà cung cấp gắn với đơn hàng
+- **Thông báo nội bộ** – Gửi thông báo theo role hoặc toàn hệ thống
+- **Nhắc hạn tự động** – Cron job gửi email trước 7/3/1 ngày và khi hết hạn
+- **Audit Log** – Ghi nhật ký toàn bộ hành động trong hệ thống
+- **Báo cáo doanh thu** – Thống kê theo thời gian, role, sản phẩm
+- **Cài đặt SMTP** – Cấu hình email trong Admin, mật khẩu được mã hóa AES-256
 
-# Khóa 32-byte (Dạng hex) mã hóa mật khẩu SMTP lưu trong Database
-SMTP_ENCRYPTION_KEY="d7c95a289b4b0e515d48721c5a92a543ee7d216f9fdfa7ab725841cb648b292e"
-```
+---
 
-### 3. Cài đặt các gói thư viện
-Mở terminal tại thư mục dự án và chạy:
+## 🛠️ Cài Đặt & Chạy Local (Development)
+
+### 1. Yêu cầu
+
+- **Node.js** v20 LTS trở lên
+- **MySQL 8.0+** hoặc **MariaDB 10.6+**
+
+### 2. Clone và cài dependency
+
 ```bash
+git clone https://github.com/your-username/nhanhmedia.git
+cd nhanhmedia
 npm install
 ```
 
-### 4. Khởi tạo Cơ sở Dữ liệu & Tạo Dữ liệu mẫu (Seeding)
-Tự động đồng bộ cấu hình Schema và điền dữ liệu mẫu (Admin, CTV, Đại lý, sản phẩm và đơn hàng ví dụ) chỉ bằng 2 dòng lệnh:
+### 3. Tạo file `.env`
+
 ```bash
+cp .env.example .env
+```
+
+Chỉnh sửa `.env` với thông tin database local:
+
+```env
+DATABASE_URL="mysql://root:password@127.0.0.1:3306/nhanhmedia_dev"
+JWT_SECRET="your-random-secret-here"
+CRON_SECRET="your-cron-secret"
+SMTP_ENCRYPTION_KEY="d7c95a289b4b0e515d48721c5a92a543ee7d216f9fdfa7ab725841cb648b292e"
+NEXT_PUBLIC_APP_URL="http://localhost:3000"
+```
+
+### 4. Khởi tạo Database
+
+```bash
+# Tạo bảng từ schema (không cần migration files)
+npx prisma db push
+
+# Hoặc dùng migrate (tạo migration file lưu lại lịch sử)
 npx prisma migrate dev --name init
-npx prisma db seed
 ```
 
-### 5. Chạy Kiểm thử Tự động (Unit Tests)
-Kiểm tra tính đúng đắn của Hashing, JWT, Mã hóa AES, Lọc mốc thời gian và Gợi ý Email:
+### 5. Seed dữ liệu mẫu
+
 ```bash
-npm run test
+npm run db:seed
 ```
 
-### 6. Khởi động Server Phát triển
-Chạy ứng dụng ở môi trường local:
+### 6. Chạy server dev
+
 ```bash
 npm run dev
 ```
-Truy cập ứng dụng tại địa chỉ: [http://localhost:3000](http://localhost:3000)
+
+Truy cập: [http://localhost:3000](http://localhost:3000)
 
 ---
 
-## 🔐 Tài khoản Kiểm thử (Mật khẩu mặc định: `123456`)
+## 🔐 Tài Khoản Mặc Định (Sau khi seed)
 
-Hệ thống đã có sẵn 4 tài khoản test đại diện cho 4 cấp phân quyền:
+> Mật khẩu mặc định cho tất cả tài khoản: **`123456`**  
+> ⚠️ Đổi mật khẩu ngay sau khi đăng nhập lần đầu!
 
-1. **Quản trị viên (Admin)**
-   - **Email**: `admin@example.com`
-   - **Quyền hạn**: Toàn quyền cấu hình SMTP, mốc nhắc hạn, quản lý sản phẩm, chỉnh sửa giá thủ công, xem toàn bộ báo cáo doanh thu hệ thống và tất cả khách hàng.
-
-2. **Thành viên (Member)**
-   - **Email**: `member@example.com`
-   - **Quyền hạn**: Đăng nhập trang User, mua sản phẩm với mức **Giá Thành viên**, tự tạo và quản lý khách hàng & đơn hàng của riêng mình.
-
-3. **Cộng tác viên (CTV)**
-   - **Email**: `ctv@example.com`
-   - **Quyền hạn**: Đăng nhập trang User, mua sản phẩm với mức **Giá Cộng tác viên**, tự quản lý khách hàng của riêng mình và theo dõi doanh thu cá nhân.
-
-4. **Đại lý (Agency)**
-   - **Email**: `agency@example.com`
-   - **Quyền hạn**: Đăng nhập trang User, mua sản phẩm với mức **Giá Đại lý (Thường ưu đãi nhất)**, tự tạo đơn và theo dõi doanh thu cá nhân.
+| Role | Email | Quyền hạn |
+|---|---|---|
+| **Admin** | `admin@example.com` | Toàn quyền: cấu hình, sản phẩm, báo cáo, người dùng |
+| **Member** | `member@example.com` | Tạo khách hàng & đơn hàng với giá thành viên |
+| **CTV** | `ctv@example.com` | Tạo khách hàng & đơn hàng với giá cộng tác viên |
+| **Agency** | `agency@example.com` | Tạo khách hàng & đơn hàng với giá đại lý (ưu đãi nhất) |
 
 ---
 
-## 🛠️ Chuyển đổi sang PostgreSQL (Tùy chọn)
+## 📦 Scripts
 
-Nếu bạn muốn cấu hình chạy thực tế với cơ sở dữ liệu **PostgreSQL**:
-
-1. Chạy cơ sở dữ liệu PostgreSQL cục bộ bằng Docker (Đã cấu hình sẵn file `docker-compose.yml`):
-   ```bash
-   docker-compose up -d
-   ```
-2. Thay đổi cấu hình `DATABASE_URL` trong file `.env` sang link PostgreSQL của bạn.
-3. Thay đổi dòng `provider = "sqlite"` thành `provider = "postgresql"` trong file [prisma/schema.prisma](file:///E:/AI/prisma/schema.prisma).
-4. Thực thi migrate và seed lại:
-   ```bash
-   npx prisma migrate dev --name init-postgres
-   npx prisma db seed
-   ```
-
----
-
-## ⏰ Cấu hình gửi Mail Nhắc hạn Tự động (Cron Job)
-
-Hệ thống tự động rà soát hạn dùng và gửi email cho khách hàng & người tạo đơn qua API: `/api/cron/reminders?token=nhanh_media_cron_job_secret_key_2026_v1` (Token bảo vệ được lấy từ cấu hình `CRON_SECRET` trong file `.env`).
-
-Bạn có thể thiết lập công việc chạy định kỳ hàng ngày (ví dụ 07:00 AM) bằng các dịch vụ như **Vercel Cron**, **EasyCron**, hoặc **Crontab** trên server:
 ```bash
-0 7 * * * curl -X POST "http://domain.com/api/cron/reminders?token=YOUR_CRON_SECRET"
+npm run dev          # Chạy môi trường development
+npm run build        # Build production (prisma generate + next build)
+npm run start        # Khởi động production server (port 3000)
+npm run lint         # Kiểm tra lỗi ESLint
+npm run test         # Chạy unit tests (JWT, bcrypt, AES, ...)
+
+npm run db:migrate   # Chạy prisma migrate deploy (production)
+npm run db:push      # Đồng bộ schema → database (không cần migration files)
+npm run db:seed      # Seed dữ liệu mẫu vào database
 ```
-#
+
+---
+
+## ⏰ Cron Job – Nhắc Hạn Tự Động
+
+API endpoint nhắc hạn: `POST /api/cron/reminders`  
+Header bảo vệ: `x-cron-secret: <CRON_SECRET>`
+
+Cấu hình crontab chạy hàng ngày lúc 0h:
+
+```bash
+0 0 * * * curl -s -X POST -H "x-cron-secret: YOUR_CRON_SECRET" https://yourdomain.com/api/cron/reminders
+```
+
+Hoặc dùng **aaPanel Cron Jobs** để thiết lập theo giao diện.
+
+---
+
+## 🖥️ Deploy Production – aaPanel
+
+Xem hướng dẫn chi tiết: **[DEPLOY_AAPANEL.md](./DEPLOY_AAPANEL.md)**
+
+Tóm tắt quy trình:
+
+```bash
+# Trên server aaPanel
+cd /www/wwwroot/yourdomain.com
+cp .env.example .env && nano .env   # Điền thông tin MySQL thực
+npm install
+npx prisma db push                  # Tạo bảng MySQL
+npm run db:seed                     # (Tuỳ chọn) Seed dữ liệu mẫu
+npm run build                       # Build production
+mkdir -p logs
+pm2 start ecosystem.config.js --env production
+pm2 save && pm2 startup
+```
+
+---
+
+## 🗂️ Cấu Trúc Thư Mục
+
+```
+.
+├── prisma/
+│   ├── schema.prisma       # Prisma schema (MySQL)
+│   ├── seed.ts             # Dữ liệu mẫu
+│   └── migrations/         # Migration files
+├── src/
+│   ├── app/
+│   │   ├── admin/          # Trang quản trị (dashboard, users, products, orders, ...)
+│   │   ├── api/            # API Route Handlers
+│   │   ├── login/          # Trang đăng nhập
+│   │   └── ...             # Các trang user (customers, orders, reports, ...)
+│   ├── components/         # React components tái sử dụng
+│   └── lib/                # Utilities (auth, db, crypto, audit)
+├── public/                 # Static assets
+├── ecosystem.config.js     # PM2 config
+├── DEPLOY_AAPANEL.md       # Hướng dẫn deploy aaPanel
+├── next.config.ts          # Next.js config (standalone output)
+└── .env.example            # Template biến môi trường
+```
+
+---
+
+## 🔒 Bảo Mật
+
+- JWT lưu trong HttpOnly Cookie, hết hạn sau 7 ngày
+- Mật khẩu hash bằng `bcryptjs` (cost factor 10)
+- Mật khẩu SMTP mã hóa `AES-256-CBC` trước khi lưu vào DB
+- Middleware kiểm tra quyền hạn trên tất cả route `/admin/*`
+- Không hard-code credential trong source code
+- File `.env` được ignore trong `.gitignore`
+
+---
+
+## 📄 License
+
+MIT © Nhanh Media

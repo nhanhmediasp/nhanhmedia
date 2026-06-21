@@ -46,3 +46,9 @@ next-env.d.ts
 .env.local
 .env.production
 prisma/.env
+prisma/dev.db
+prisma/dev.db-journal
+
+# PM2 logs
+logs/
+*.log

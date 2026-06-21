@@ -5,10 +5,13 @@
   "scripts": {
     "dev": "next dev",
     "build": "prisma generate && next build",
+    "start": "next start -p 3000",
     "postinstall": "prisma generate",
-    "start": "next start",
     "lint": "eslint",
-    "test": "npx tsx src/lib/test-all.ts"
+    "test": "npx tsx src/lib/test-all.ts",
+    "db:migrate": "prisma migrate deploy",
+    "db:push": "prisma db push",
+    "db:seed": "npx tsx prisma/seed.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.19.3",
