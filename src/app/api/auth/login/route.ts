@@ -11,6 +11,64 @@ function getClientIP(req: Request): string {
   return '127.0.0.1';
 }
 
+/** Safely load website security settings — never throws */
+async function getSecuritySettings() {
+  try {
+    const settings = await prisma.websiteSettings.findUnique({
+      where: { id: 'default' },
+      select: { loginLockEnabled: true, loginMaxAttempts: true, loginLockDurationMins: true },
+    });
+    return {
+      lockEnabled: settings?.loginLockEnabled ?? false,
+      maxAttempts: settings?.loginMaxAttempts ?? 5,
+      lockDurationMins: settings?.loginLockDurationMins ?? 15,
+    };
+  } catch {
+    // Table may not exist yet — fall back to disabled
+    return { lockEnabled: false, maxAttempts: 5, lockDurationMins: 15 };
+  }
+}
+
+/** Record a failed attempt and return the new state — never throws */
+async function recordFailedAttempt(
+  ip: string,
+  email: string,
+  maxAttempts: number,
+  lockDurationMins: number
+): Promise<{ attempts: number; isLocked: boolean }> {
+  try {
+    const existing = await prisma.loginAttempt.findFirst({ where: { ipAddress: ip } });
+
+    if (existing) {
+      const newAttempts = existing.attempts + 1;
+      const isLocked = newAttempts >= maxAttempts;
+      const lockedUntil = isLocked ? new Date(Date.now() + lockDurationMins * 60 * 1000) : null;
+
+      await prisma.loginAttempt.update({
+        where: { id: existing.id },
+        data: { attempts: newAttempts, lastAttempt: new Date(), email, lockedUntil },
+      });
+      return { attempts: newAttempts, isLocked };
+    } else {
+      await prisma.loginAttempt.create({
+        data: { ipAddress: ip, email, attempts: 1, lastAttempt: new Date() },
+      });
+      return { attempts: 1, isLocked: false };
+    }
+  } catch {
+    return { attempts: 1, isLocked: false };
+  }
+}
+
+/** Clear failed attempts on successful login — never throws */
+async function clearAttempts(ip: string) {
+  try {
+    await prisma.loginAttempt.deleteMany({ where: { ipAddress: ip } });
+  } catch {
+    // Ignore
+  }
+}
+
 export async function POST(req: Request) {
   const ip = getClientIP(req);
 
@@ -24,39 +82,41 @@ export async function POST(req: Request) {
       );
     }
 
-    // Load website settings for login lock config
-    const websiteSettings = await prisma.websiteSettings.findUnique({
-      where: { id: 'default' }
-    });
-    const lockEnabled = websiteSettings?.loginLockEnabled ?? true;
-    const maxAttempts = websiteSettings?.loginMaxAttempts ?? 5;
-    const lockDurationMins = websiteSettings?.loginLockDurationMins ?? 15;
+    // Load security settings (safe — never throws)
+    const { lockEnabled, maxAttempts, lockDurationMins } = await getSecuritySettings();
 
-    // Check login attempt block (per IP) if lock is enabled
+    // Check if IP is currently locked
     if (lockEnabled) {
-      const existingAttempt = await prisma.loginAttempt.findFirst({
-        where: { ipAddress: ip }
-      });
+      try {
+        const existingAttempt = await prisma.loginAttempt.findFirst({
+          where: { ipAddress: ip },
+        });
 
-      if (existingAttempt) {
-        // Check if still locked
-        if (existingAttempt.lockedUntil && existingAttempt.lockedUntil > new Date()) {
-          const minutesLeft = Math.ceil((existingAttempt.lockedUntil.getTime() - Date.now()) / 60000);
-          return NextResponse.json(
-            { error: `Địa chỉ IP của bạn đã bị tạm khóa do đăng nhập sai quá ${maxAttempts} lần. Vui lòng thử lại sau ${minutesLeft} phút.` },
-            { status: 429 }
-          );
-        }
+        if (existingAttempt) {
+          // Still within lock period?
+          if (existingAttempt.lockedUntil && existingAttempt.lockedUntil > new Date()) {
+            const minutesLeft = Math.ceil(
+              (existingAttempt.lockedUntil.getTime() - Date.now()) / 60000
+            );
+            return NextResponse.json(
+              {
+                error: `Địa chỉ IP của bạn đã bị tạm khóa do đăng nhập sai quá ${maxAttempts} lần. Vui lòng thử lại sau ${minutesLeft} phút.`,
+              },
+              { status: 429 }
+            );
+          }
 
-        // Reset if lock window has expired (older than lockDurationMins)
-        const lockWindowStart = new Date(Date.now() - lockDurationMins * 60 * 1000);
-        if (existingAttempt.lastAttempt < lockWindowStart) {
-          // Reset attempts since window expired
-          await prisma.loginAttempt.update({
-            where: { id: existingAttempt.id },
-            data: { attempts: 0, lockedUntil: null, lastAttempt: new Date() }
-          });
+          // Lock window expired — reset counter
+          const lockWindowStart = new Date(Date.now() - lockDurationMins * 60 * 1000);
+          if (existingAttempt.lastAttempt < lockWindowStart) {
+            await prisma.loginAttempt.update({
+              where: { id: existingAttempt.id },
+              data: { attempts: 0, lockedUntil: null, lastAttempt: new Date() },
+            });
+          }
         }
+      } catch {
+        // Ignore — don't block login if attempt table is unavailable
       }
     }
 
@@ -66,9 +126,7 @@ export async function POST(req: Request) {
     });
 
     if (!user) {
-      if (lockEnabled) {
-        await recordFailedAttempt(ip, email, maxAttempts, lockDurationMins);
-      }
+      if (lockEnabled) await recordFailedAttempt(ip, email, maxAttempts, lockDurationMins);
       await createAuditLog({
         action: 'LOGIN_FAILED',
         actionLabel: 'Đăng nhập thất bại',
@@ -76,7 +134,7 @@ export async function POST(req: Request) {
         description: `Đăng nhập thất bại với email: ${email}`,
         request: req,
         status: 'failed',
-        errorMessage: 'Email hoặc mật khẩu không chính xác.'
+        errorMessage: 'Email hoặc mật khẩu không chính xác.',
       });
       return NextResponse.json(
         { error: 'Email hoặc mật khẩu không chính xác.' },
@@ -87,40 +145,35 @@ export async function POST(req: Request) {
     // 2. Check password
     const passwordMatch = comparePassword(password, user.passwordHash);
     if (!passwordMatch) {
+      let errorMsg = 'Email hoặc mật khẩu không chính xác.';
+
       if (lockEnabled) {
         const attemptResult = await recordFailedAttempt(ip, email, maxAttempts, lockDurationMins);
+
         if (attemptResult.isLocked) {
           await createAuditLog({
             action: 'LOGIN_FAILED',
             actionLabel: 'Đăng nhập thất bại - IP bị khóa',
             module: 'auth',
-            description: `IP ${ip} bị khóa sau ${maxAttempts} lần đăng nhập sai liên tiếp`,
+            description: `IP ${ip} bị khóa sau ${maxAttempts} lần sai liên tiếp`,
             request: req,
             status: 'failed',
-            errorMessage: `Tài khoản tạm khóa sau ${maxAttempts} lần sai`
+            errorMessage: `IP bị khóa sau ${maxAttempts} lần sai`,
           });
           return NextResponse.json(
-            { error: `Đăng nhập sai quá ${maxAttempts} lần. Địa chỉ IP của bạn bị tạm khóa trong ${lockDurationMins} phút.` },
+            {
+              error: `Đăng nhập sai quá ${maxAttempts} lần. IP của bạn bị tạm khóa trong ${lockDurationMins} phút.`,
+            },
             { status: 429 }
           );
         }
+
         const remaining = maxAttempts - attemptResult.attempts;
         if (remaining > 0 && remaining <= 2) {
-          await createAuditLog({
-            action: 'LOGIN_FAILED',
-            actionLabel: 'Đăng nhập thất bại',
-            module: 'auth',
-            description: `Đăng nhập thất bại với email: ${email} (còn ${remaining} lần trước khi khóa)`,
-            request: req,
-            status: 'failed',
-            errorMessage: 'Email hoặc mật khẩu không chính xác.'
-          });
-          return NextResponse.json(
-            { error: `Email hoặc mật khẩu không chính xác. Còn ${remaining} lần thử trước khi bị khóa.` },
-            { status: 400 }
-          );
+          errorMsg = `Email hoặc mật khẩu không chính xác. Còn ${remaining} lần thử trước khi bị khóa.`;
         }
       }
+
       await createAuditLog({
         action: 'LOGIN_FAILED',
         actionLabel: 'Đăng nhập thất bại',
@@ -128,24 +181,21 @@ export async function POST(req: Request) {
         description: `Đăng nhập thất bại với email: ${email}`,
         request: req,
         status: 'failed',
-        errorMessage: 'Email hoặc mật khẩu không chính xác.'
+        errorMessage: 'Sai mật khẩu.',
       });
-      return NextResponse.json(
-        { error: 'Email hoặc mật khẩu không chính xác.' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: errorMsg }, { status: 400 });
     }
 
-    // 3. Check status
+    // 3. Check account status
     if (user.status === 'inactive') {
       await createAuditLog({
         action: 'LOGIN_FAILED',
         actionLabel: 'Đăng nhập thất bại',
         module: 'auth',
-        description: `Tài khoản ${user.email} đăng nhập thất bại do ngừng hoạt động`,
+        description: `Tài khoản ${user.email} bị ngừng hoạt động`,
         request: req,
         status: 'failed',
-        errorMessage: 'Tài khoản của bạn đã bị ngừng hoạt động.'
+        errorMessage: 'Tài khoản đã bị ngừng hoạt động.',
       });
       return NextResponse.json(
         { error: 'Tài khoản của bạn đã bị ngừng hoạt động.' },
@@ -158,10 +208,10 @@ export async function POST(req: Request) {
         action: 'LOGIN_FAILED',
         actionLabel: 'Đăng nhập thất bại',
         module: 'auth',
-        description: `Tài khoản ${user.email} đăng nhập thất bại do bị khóa`,
+        description: `Tài khoản ${user.email} bị khóa`,
         request: req,
         status: 'failed',
-        errorMessage: 'Tài khoản của bạn đã bị khóa. Vui lòng liên hệ Admin.'
+        errorMessage: 'Tài khoản bị khóa.',
       });
       return NextResponse.json(
         { error: 'Tài khoản của bạn đã bị khóa. Vui lòng liên hệ Admin.' },
@@ -169,10 +219,8 @@ export async function POST(req: Request) {
       );
     }
 
-    // 4. Login success - clear failed attempts for this IP
-    if (lockEnabled) {
-      await prisma.loginAttempt.deleteMany({ where: { ipAddress: ip } });
-    }
+    // 4. Login success — clear any failed attempts
+    if (lockEnabled) await clearAttempts(ip);
 
     // 5. Generate token
     const token = signToken({
@@ -182,7 +230,7 @@ export async function POST(req: Request) {
       role: user.role,
     });
 
-    // 6. Build response and set HttpOnly Cookie
+    // 6. Build response with HttpOnly cookie
     const response = NextResponse.json({
       message: 'Đăng nhập thành công!',
       user: {
@@ -205,18 +253,13 @@ export async function POST(req: Request) {
     });
 
     await createAuditLog({
-      actor: {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        role: user.role
-      },
+      actor: { id: user.id, name: user.name, email: user.email, role: user.role },
       action: 'LOGIN_SUCCESS',
       actionLabel: 'Đăng nhập thành công',
       module: 'auth',
       description: `${user.name} đã đăng nhập vào hệ thống`,
       request: req,
-      status: 'success'
+      status: 'success',
     });
 
     return response;
@@ -226,36 +269,5 @@ export async function POST(req: Request) {
       { error: 'Đã xảy ra lỗi máy chủ trong quá trình đăng nhập.' },
       { status: 500 }
     );
-  }
-}
-
-async function recordFailedAttempt(ip: string, email: string, maxAttempts: number, lockDurationMins: number): Promise<{ attempts: number; isLocked: boolean }> {
-  const existing = await prisma.loginAttempt.findFirst({ where: { ipAddress: ip } });
-
-  if (existing) {
-    const newAttempts = existing.attempts + 1;
-    const isLocked = newAttempts >= maxAttempts;
-    const lockedUntil = isLocked ? new Date(Date.now() + lockDurationMins * 60 * 1000) : null;
-
-    await prisma.loginAttempt.update({
-      where: { id: existing.id },
-      data: {
-        attempts: newAttempts,
-        lastAttempt: new Date(),
-        email,
-        lockedUntil,
-      }
-    });
-    return { attempts: newAttempts, isLocked };
-  } else {
-    await prisma.loginAttempt.create({
-      data: {
-        ipAddress: ip,
-        email,
-        attempts: 1,
-        lastAttempt: new Date(),
-      }
-    });
-    return { attempts: 1, isLocked: false };
   }
 }
