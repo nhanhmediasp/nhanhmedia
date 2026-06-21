@@ -1,9 +1,9 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { Button, Card, CardHeader, CardTitle, CardContent, Input, showToast, PageHeader } from '@/components/ui';
-import { Globe, Image, Shield, Save, ExternalLink, Eye, EyeOff, ArrowLeft, Mail, Settings } from 'lucide-react';
+import { Globe, Image, Shield, Save, Mail, Settings, Share2, Upload } from 'lucide-react';
 
 interface WebsiteSettings {
   id: string;
@@ -14,6 +14,9 @@ interface WebsiteSettings {
   adminEmail: string | null;
   adminPhone: string | null;
   adminAddress: string | null;
+  facebookUrl: string | null;
+  zaloUrl: string | null;
+  telegramUrl: string | null;
   loginMaxAttempts: number;
   loginLockEnabled: boolean;
   loginLockDurationMins: number;
@@ -33,10 +36,24 @@ export default function WebsiteSettingsPage() {
   const [adminPhone, setAdminPhone] = useState('');
   const [adminAddress, setAdminAddress] = useState('');
 
+  // Social info
+  const [facebookUrl, setFacebookUrl] = useState('');
+  const [zaloUrl, setZaloUrl] = useState('');
+  const [telegramUrl, setTelegramUrl] = useState('');
+
   // Images
   const [logoUrl, setLogoUrl] = useState('');
   const [faviconUrl, setFaviconUrl] = useState('');
   const [logoError, setLogoError] = useState(false);
+  const [faviconError, setFaviconError] = useState(false);
+
+  // Upload states
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+  const [uploadingFavicon, setUploadingFavicon] = useState(false);
+
+  // Input refs
+  const logoInputRef = useRef<HTMLInputElement>(null);
+  const faviconInputRef = useRef<HTMLInputElement>(null);
 
   // Security
   const [loginLockEnabled, setLoginLockEnabled] = useState(true);
@@ -55,6 +72,9 @@ export default function WebsiteSettingsPage() {
         setAdminEmail(s.adminEmail || '');
         setAdminPhone(s.adminPhone || '');
         setAdminAddress(s.adminAddress || '');
+        setFacebookUrl(s.facebookUrl || '');
+        setZaloUrl(s.zaloUrl || '');
+        setTelegramUrl(s.telegramUrl || '');
         setLogoUrl(s.logoUrl || '');
         setFaviconUrl(s.faviconUrl || '');
         setLoginLockEnabled(s.loginLockEnabled);
@@ -74,6 +94,49 @@ export default function WebsiteSettingsPage() {
     fetchSettings();
   }, []);
 
+  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>, type: 'logo' | 'favicon') => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 2 * 1024 * 1024) {
+      showToast('Kích thước ảnh không được vượt quá 2MB.', 'error');
+      return;
+    }
+
+    if (type === 'logo') setUploadingLogo(true);
+    else setUploadingFavicon(true);
+
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const res = await fetch('/api/admin/upload', {
+        method: 'POST',
+        body: formData,
+      });
+
+      const data = await res.json();
+      if (res.ok && data.url) {
+        if (type === 'logo') {
+          setLogoUrl(data.url);
+          setLogoError(false);
+          showToast('Tải logo lên thành công!', 'success');
+        } else {
+          setFaviconUrl(data.url);
+          setFaviconError(false);
+          showToast('Tải favicon lên thành công!', 'success');
+        }
+      } else {
+        showToast(data.error || 'Lỗi khi tải ảnh lên.', 'error');
+      }
+    } catch (err) {
+      showToast('Lỗi kết nối máy chủ khi upload.', 'error');
+    } finally {
+      if (type === 'logo') setUploadingLogo(false);
+      else setUploadingFavicon(false);
+    }
+  };
+
   const handleSave = async () => {
     setSaving(true);
     try {
@@ -86,6 +149,9 @@ export default function WebsiteSettingsPage() {
           adminEmail,
           adminPhone,
           adminAddress,
+          facebookUrl,
+          zaloUrl,
+          telegramUrl,
           logoUrl,
           faviconUrl,
           loginLockEnabled,
@@ -161,60 +227,92 @@ export default function WebsiteSettingsPage() {
         <>
           {/* Tab: Thông tin Website */}
           {activeTab === 'info' && (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Globe className="w-4 h-4 text-primary" />
-                    Thông tin Website
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-5">
-                  <Input
-                    label="Tên website"
-                    placeholder="Ví dụ: Nhanh Media"
-                    value={siteName}
-                    onChange={(e) => setSiteName(e.target.value)}
-                  />
-                  <div>
-                    <label className="block text-sm font-semibold text-foreground mb-1.5">Mô tả website</label>
-                    <textarea
-                      placeholder="Mô tả ngắn về website, hiển thị dưới tiêu đề trang..."
-                      value={siteDescription}
-                      onChange={(e) => setSiteDescription(e.target.value)}
-                      rows={3}
-                      className="w-full px-4 py-2.5 text-sm bg-input border border-border rounded-xl text-foreground placeholder-slate-400 focus:outline-none focus:border-primary focus:ring-2 focus:ring-ring transition-all duration-200 resize-none"
+            <div className="space-y-6">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <Globe className="w-4 h-4 text-primary" />
+                      Thông tin Website
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-5">
+                    <Input
+                      label="Tên website"
+                      placeholder="Ví dụ: Nhanh Media"
+                      value={siteName}
+                      onChange={(e) => setSiteName(e.target.value)}
                     />
-                  </div>
-                </CardContent>
-              </Card>
+                    <div>
+                      <label className="block text-sm font-semibold text-foreground mb-1.5">Mô tả website</label>
+                      <textarea
+                        placeholder="Mô tả ngắn về website, hiển thị dưới tiêu đề trang..."
+                        value={siteDescription}
+                        onChange={(e) => setSiteDescription(e.target.value)}
+                        rows={3}
+                        className="w-full px-4 py-2.5 text-sm bg-input border border-border rounded-xl text-foreground placeholder-slate-400 focus:outline-none focus:border-primary focus:ring-2 focus:ring-ring transition-all duration-200 resize-none"
+                      />
+                    </div>
+                  </CardContent>
+                </Card>
 
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <Mail className="w-4 h-4 text-primary" />
+                      Thông tin liên hệ Admin
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-5">
+                    <Input
+                      label="Email liên hệ"
+                      type="email"
+                      placeholder="contact@nhanhmedia.vn"
+                      value={adminEmail}
+                      onChange={(e) => setAdminEmail(e.target.value)}
+                    />
+                    <Input
+                      label="Số điện thoại liên hệ"
+                      placeholder="0977 111 222"
+                      value={adminPhone}
+                      onChange={(e) => setAdminPhone(e.target.value)}
+                    />
+                    <Input
+                      label="Địa chỉ"
+                      placeholder="Số 123, Đường ABC, Q.1, TP.HCM"
+                      value={adminAddress}
+                      onChange={(e) => setAdminAddress(e.target.value)}
+                    />
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Social Channels */}
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
-                    <Mail className="w-4 h-4 text-primary" />
-                    Thông tin liên hệ Admin
+                    <Share2 className="w-4 h-4 text-primary" />
+                    Kênh liên hệ Mạng xã hội
                   </CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-5">
+                <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-5">
                   <Input
-                    label="Email liên hệ"
-                    type="email"
-                    placeholder="contact@nhanhmedia.vn"
-                    value={adminEmail}
-                    onChange={(e) => setAdminEmail(e.target.value)}
+                    label="Link Facebook"
+                    placeholder="Ví dụ: https://facebook.com/nhanhmedia"
+                    value={facebookUrl}
+                    onChange={(e) => setFacebookUrl(e.target.value)}
                   />
                   <Input
-                    label="Số điện thoại liên hệ"
-                    placeholder="0977 111 222"
-                    value={adminPhone}
-                    onChange={(e) => setAdminPhone(e.target.value)}
+                    label="Số điện thoại/Link Zalo"
+                    placeholder="Ví dụ: https://zalo.me/0977111222"
+                    value={zaloUrl}
+                    onChange={(e) => setZaloUrl(e.target.value)}
                   />
                   <Input
-                    label="Địa chỉ"
-                    placeholder="Số 123, Đường ABC, Q.1, TP.HCM"
-                    value={adminAddress}
-                    onChange={(e) => setAdminAddress(e.target.value)}
+                    label="Link Telegram"
+                    placeholder="Ví dụ: https://t.me/nhanhmedia"
+                    value={telegramUrl}
+                    onChange={(e) => setTelegramUrl(e.target.value)}
                   />
                 </CardContent>
               </Card>
@@ -232,17 +330,38 @@ export default function WebsiteSettingsPage() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-5">
-                  <Input
-                    label="URL hình ảnh Logo"
-                    placeholder="https://example.com/logo.png"
-                    value={logoUrl}
-                    onChange={(e) => {
-                      setLogoUrl(e.target.value);
-                      setLogoError(false);
-                    }}
-                  />
+                  <div className="flex gap-3 items-end">
+                    <div className="flex-1">
+                      <Input
+                        label="URL hình ảnh Logo"
+                        placeholder="https://example.com/logo.png"
+                        value={logoUrl}
+                        onChange={(e) => {
+                          setLogoUrl(e.target.value);
+                          setLogoError(false);
+                        }}
+                      />
+                    </div>
+                    <input
+                      type="file"
+                      ref={logoInputRef}
+                      accept="image/*"
+                      onChange={(e) => handleUpload(e, 'logo')}
+                      className="hidden"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      loading={uploadingLogo}
+                      onClick={() => logoInputRef.current?.click()}
+                      className="cursor-pointer shrink-0 h-[42px] flex items-center gap-1.5"
+                    >
+                      <Upload className="w-4 h-4" />
+                      <span>Tải ảnh lên</span>
+                    </Button>
+                  </div>
                   <div className="text-xs text-muted-foreground">
-                    Hỗ trợ định dạng: PNG, JPG, SVG, WebP. Kích thước khuyến nghị: 200×60 px.
+                    Hỗ trợ tải lên file trực tiếp hoặc dán URL liên kết ngoài. PNG, JPG, SVG, WebP. Khuyến nghị: 200×60 px.
                   </div>
                   {logoUrl && (
                     <div className="mt-2">
@@ -272,26 +391,54 @@ export default function WebsiteSettingsPage() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-5">
-                  <Input
-                    label="URL Favicon"
-                    placeholder="https://example.com/favicon.ico"
-                    value={faviconUrl}
-                    onChange={(e) => setFaviconUrl(e.target.value)}
-                  />
+                  <div className="flex gap-3 items-end">
+                    <div className="flex-1">
+                      <Input
+                        label="URL Favicon"
+                        placeholder="https://example.com/favicon.ico"
+                        value={faviconUrl}
+                        onChange={(e) => {
+                          setFaviconUrl(e.target.value);
+                          setFaviconError(false);
+                        }}
+                      />
+                    </div>
+                    <input
+                      type="file"
+                      ref={faviconInputRef}
+                      accept="image/x-icon,image/png,image/svg+xml"
+                      onChange={(e) => handleUpload(e, 'favicon')}
+                      className="hidden"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      loading={uploadingFavicon}
+                      onClick={() => faviconInputRef.current?.click()}
+                      className="cursor-pointer shrink-0 h-[42px] flex items-center gap-1.5"
+                    >
+                      <Upload className="w-4 h-4" />
+                      <span>Tải ảnh lên</span>
+                    </Button>
+                  </div>
                   <div className="text-xs text-muted-foreground">
-                    Favicon hiển thị trên tab trình duyệt. Hỗ trợ: ICO, PNG, SVG. Kích thước: 32×32 px.
+                    Favicon hiển thị trên tab trình duyệt. Hỗ trợ: ICO, PNG, SVG. Kích thước khuyến nghị: 32×32 px.
                   </div>
                   {faviconUrl && (
                     <div className="mt-2">
                       <p className="text-xs font-semibold text-slate-500 mb-2 uppercase tracking-wider">Xem trước:</p>
                       <div className="border border-border rounded-xl p-4 bg-muted/30 flex items-center gap-3">
-                        <img
-                          src={faviconUrl}
-                          alt="Favicon preview"
-                          className="w-8 h-8 object-contain rounded"
-                          onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-                        />
-                        <span className="text-xs text-muted-foreground">Favicon trong tab trình duyệt</span>
+                        {!faviconError ? (
+                          <img
+                            src={faviconUrl}
+                            alt="Favicon preview"
+                            className="w-8 h-8 object-contain rounded"
+                            onError={() => setFaviconError(true)}
+                          />
+                        ) : (
+                          <div className="w-8 h-8 bg-rose-100 text-rose-500 rounded flex items-center justify-center font-bold text-[10px]">ERR</div>
+                        )}
+                        <span className="text-xs text-muted-foreground">Favicon trên tab trình duyệt</span>
                       </div>
                     </div>
                   )}

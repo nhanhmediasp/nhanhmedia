@@ -38,6 +38,9 @@ export async function PUT(req: Request) {
       adminEmail,
       adminPhone,
       adminAddress,
+      facebookUrl,
+      zaloUrl,
+      telegramUrl,
       loginMaxAttempts,
       loginLockEnabled,
       loginLockDurationMins,
@@ -56,6 +59,9 @@ export async function PUT(req: Request) {
         adminEmail: adminEmail || null,
         adminPhone: adminPhone || null,
         adminAddress: adminAddress || null,
+        facebookUrl: facebookUrl || null,
+        zaloUrl: zaloUrl || null,
+        telegramUrl: telegramUrl || null,
         loginMaxAttempts: loginMaxAttempts !== undefined ? parseInt(loginMaxAttempts) : 5,
         loginLockEnabled: typeof loginLockEnabled === 'boolean' ? loginLockEnabled : true,
         loginLockDurationMins: loginLockDurationMins !== undefined ? parseInt(loginLockDurationMins) : 15,
@@ -68,6 +74,9 @@ export async function PUT(req: Request) {
         adminEmail: adminEmail !== undefined ? adminEmail : undefined,
         adminPhone: adminPhone !== undefined ? adminPhone : undefined,
         adminAddress: adminAddress !== undefined ? adminAddress : undefined,
+        facebookUrl: facebookUrl !== undefined ? facebookUrl : undefined,
+        zaloUrl: zaloUrl !== undefined ? zaloUrl : undefined,
+        telegramUrl: telegramUrl !== undefined ? telegramUrl : undefined,
         loginMaxAttempts: loginMaxAttempts !== undefined ? parseInt(loginMaxAttempts) : undefined,
         loginLockEnabled: typeof loginLockEnabled === 'boolean' ? loginLockEnabled : undefined,
         loginLockDurationMins: loginLockDurationMins !== undefined ? parseInt(loginLockDurationMins) : undefined,
@@ -99,8 +108,8 @@ export async function PUT(req: Request) {
     });
 
     return NextResponse.json({ message: 'Đã lưu cài đặt website thành công!', settings });
-  } catch (error) {
+  } catch (error: any) {
     console.error('PUT website settings error:', error);
-    return NextResponse.json({ error: 'Lỗi máy chủ khi lưu cài đặt.' }, { status: 500 });
+    return NextResponse.json({ error: `Lỗi máy chủ khi lưu cài đặt: ${error?.message || error}` }, { status: 500 });
   }
 }

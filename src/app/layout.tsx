@@ -4,6 +4,7 @@ import './globals.css';
 import { AuthProvider } from '@/components/AuthContext';
 import Navigation from '@/components/Navigation';
 import { ToastContainer } from '@/components/ui';
+import { prisma } from '@/lib/db';
 
 const inter = Inter({
   subsets: ['latin'],
@@ -12,14 +13,38 @@ const inter = Inter({
   display: 'swap',
 });
 
-export const metadata: Metadata = {
-  title: 'Hệ thống Quản lý Dịch vụ - Nhanh Media',
-  description: 'Website quản lý khách hàng, cộng tác viên nội bộ, đại lý và đơn hàng dịch vụ của Nhanh Media.',
-  robots: {
-    index: false,
-    follow: false,
-  },
-};
+export async function generateMetadata(): Promise<Metadata> {
+  try {
+    const settings = await prisma.websiteSettings.findUnique({
+      where: { id: 'default' },
+    });
+
+    return {
+      title: settings?.siteName || 'Hệ thống Quản lý Dịch vụ - Nhanh Media',
+      description: settings?.siteDescription || 'Website quản lý khách hàng, cộng tác viên nội bộ, đại lý và đơn hàng dịch vụ của Nhanh Media.',
+      icons: {
+        icon: settings?.faviconUrl || '/favicon.ico',
+      },
+      robots: {
+        index: false,
+        follow: false,
+      },
+    };
+  } catch (error) {
+    console.error('generateMetadata error:', error);
+    return {
+      title: 'Hệ thống Quản lý Dịch vụ - Nhanh Media',
+      description: 'Website quản lý khách hàng, cộng tác viên nội bộ, đại lý và đơn hàng dịch vụ của Nhanh Media.',
+      icons: {
+        icon: '/favicon.ico',
+      },
+      robots: {
+        index: false,
+        follow: false,
+      },
+    };
+  }
+}
 
 export const viewport: Viewport = {
   width: 'device-width',
@@ -34,9 +59,6 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="vi" className={`h-full ${inter.variable}`} suppressHydrationWarning>
-      <head>
-        <link rel="icon" href="/favicon.ico" />
-      </head>
       <body className="min-h-full flex flex-col antialiased" suppressHydrationWarning>
         <AuthProvider>
           <Navigation>{children}</Navigation>

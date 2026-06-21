@@ -23,6 +23,7 @@ import {
   Tag,
   History,
   Globe,
+  Mail,
 } from 'lucide-react';
 import { Badge } from './ui';
 
@@ -68,6 +69,28 @@ export default function Navigation({ children }: { children: React.ReactNode }) 
   const [showNotifications, setShowNotifications] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [showUserDropdown, setShowUserDropdown] = useState(false);
+
+  // Dynamic branding & public website settings
+  const [siteName, setSiteName] = useState('Nhanh Media');
+  const [logoUrl, setLogoUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchSettings = async () => {
+      try {
+        const res = await fetch('/api/public/settings');
+        if (res.ok) {
+          const data = await res.json();
+          if (data.settings) {
+            setSiteName(data.settings.siteName || 'Nhanh Media');
+            setLogoUrl(data.settings.logoUrl || null);
+          }
+        }
+      } catch (err) {
+        console.error('Fetch public settings in Navigation error:', err);
+      }
+    };
+    fetchSettings();
+  }, []);
 
   const fetchUserNotifications = async () => {
     try {
@@ -167,23 +190,29 @@ export default function Navigation({ children }: { children: React.ReactNode }) 
       {/* ── Brand ── */}
       <div className="px-5 py-5 shrink-0" style={{ borderBottom: '1px solid rgba(108,117,147,0.08)' }}>
         <div className="flex items-center gap-3">
-          <div
-            className="w-9 h-9 rounded-xl flex items-center justify-center text-white font-black text-base shrink-0"
-            style={{
-              background: 'linear-gradient(135deg,#c060c8 0%,#a145ab 100%)',
-              boxShadow: '0 4px 12px rgba(161,69,171,0.35)',
-            }}
-          >
-            N
-          </div>
-          <div>
-            <div className="font-black text-sm tracking-widest uppercase" style={{ color: '#1e293b' }}>
-              Nhanh Media
-            </div>
-            <div className="text-[9.5px] font-bold uppercase tracking-widest mt-0.5" style={{ color: '#a145ab' }}>
-              Digital Platform
-            </div>
-          </div>
+          {logoUrl ? (
+            <img src={logoUrl} alt={siteName} className="max-h-9 max-w-[180px] object-contain select-none" />
+          ) : (
+            <>
+              <div
+                className="w-9 h-9 rounded-xl flex items-center justify-center text-white font-black text-base shrink-0"
+                style={{
+                  background: 'linear-gradient(135deg,#c060c8 0%,#a145ab 100%)',
+                  boxShadow: '0 4px 12px rgba(161,69,171,0.35)',
+                }}
+              >
+                {siteName.charAt(0).toUpperCase()}
+              </div>
+              <div>
+                <div className="font-black text-sm tracking-widest uppercase truncate max-w-[130px]" style={{ color: '#1e293b' }}>
+                  {siteName}
+                </div>
+                <div className="text-[9.5px] font-bold uppercase tracking-widest mt-0.5" style={{ color: '#a145ab' }}>
+                  Digital Platform
+                </div>
+              </div>
+            </>
+          )}
         </div>
       </div>
 
@@ -379,6 +408,16 @@ export default function Navigation({ children }: { children: React.ReactNode }) 
             Đăng xuất
           </button>
         </div>
+        <div className="mt-2.5">
+          <Link
+            href="/contact"
+            onClick={() => setIsMobileOpen(false)}
+            className="flex items-center justify-center gap-1.5 w-full px-3 py-2 rounded-xl text-xs font-semibold transition-all duration-200 hover:opacity-80 bg-primary/5 hover:bg-primary/10 border border-primary/10 text-primary"
+          >
+            <Mail className="w-3.5 h-3.5" />
+            Liên hệ hỗ trợ
+          </Link>
+        </div>
       </div>
     </div>
   );
@@ -403,13 +442,21 @@ export default function Navigation({ children }: { children: React.ReactNode }) 
         }}
       >
         <div className="flex items-center gap-2.5">
-          <div
-            className="w-7 h-7 rounded-lg flex items-center justify-center text-white font-black text-sm"
-            style={{ background: 'linear-gradient(135deg,#c060c8 0%,#a145ab 100%)' }}
-          >N</div>
-          <span className="font-black text-sm tracking-widest uppercase" style={{ color: '#1e293b' }}>
-            Nhanh Media
-          </span>
+          {logoUrl ? (
+            <img src={logoUrl} alt={siteName} className="max-h-7 max-w-[130px] object-contain select-none" />
+          ) : (
+            <>
+              <div
+                className="w-7 h-7 rounded-lg flex items-center justify-center text-white font-black text-sm"
+                style={{ background: 'linear-gradient(135deg,#c060c8 0%,#a145ab 100%)' }}
+              >
+                {siteName.charAt(0).toUpperCase()}
+              </div>
+              <span className="font-black text-sm tracking-widest uppercase truncate max-w-[120px]" style={{ color: '#1e293b' }}>
+                {siteName}
+              </span>
+            </>
+          )}
         </div>
         <div className="flex items-center gap-3">
           {/* Bell Icon & Dropdown Container for Mobile */}
@@ -708,6 +755,14 @@ export default function Navigation({ children }: { children: React.ReactNode }) 
                     >
                       <User className="w-3.5 h-3.5 text-slate-400" />
                       <span>Thông tin tài khoản</span>
+                    </Link>
+                    <Link
+                      href="/contact"
+                      onClick={() => setShowUserDropdown(false)}
+                      className="flex items-center gap-2 px-4 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
+                    >
+                      <Mail className="w-3.5 h-3.5 text-slate-400" />
+                      <span>Liên hệ hỗ trợ</span>
                     </Link>
                     <div className="h-px bg-border/60" />
                     <button
