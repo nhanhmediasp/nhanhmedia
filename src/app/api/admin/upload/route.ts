@@ -1,13 +1,13 @@
 import { NextResponse } from 'next/server';
-import { writeFile, mkdir } from 'fs/promises';
+import { writeFile, mkdir, chmod } from 'fs/promises';
 import { join } from 'path';
 import { existsSync } from 'fs';
 
 export async function POST(req: Request) {
   try {
     const role = req.headers.get('x-user-role');
-    if (role !== 'admin') {
-      return NextResponse.json({ error: 'Chỉ Admin mới có thể tải ảnh lên.' }, { status: 403 });
+    if (!role || role === 'guest') {
+      return NextResponse.json({ error: 'Bạn cần đăng nhập để thực hiện hành động này.' }, { status: 401 });
     }
 
     const formData = await req.formData();
@@ -32,6 +32,8 @@ export async function POST(req: Request) {
     const filePath = join(uploadDir, uniqueName);
 
     await writeFile(filePath, buffer);
+    // Phân quyền cho file vừa ghi để Nginx/Webserver có thể đọc được (đọc/ghi cho Owner, chỉ đọc cho Group/Others)
+    await chmod(filePath, 0o644);
 
     const fileUrl = `/uploads/${uniqueName}`;
     return NextResponse.json({ success: true, url: fileUrl });

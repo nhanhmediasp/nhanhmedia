@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Button, Input, Select, Textarea, Card, CardHeader, CardTitle, CardContent, showToast } from '@/components/ui';
-import { Plus, Trash2, ArrowLeft, Layers, HelpCircle, ImagePlus, X } from 'lucide-react';
+import { Plus, Trash2, ArrowLeft, Layers, HelpCircle, ImagePlus, X, Upload } from 'lucide-react';
 
 interface VariantForm {
   name: string;
@@ -28,6 +28,42 @@ export default function AdminProductCreatePage() {
   const [imageLoadError, setImageLoadError] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [importPrice, setImportPrice] = useState('');
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const imageInputRef = React.useRef<HTMLInputElement>(null);
+
+  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 2 * 1024 * 1024) {
+      showToast('Kích thước ảnh không được vượt quá 2MB.', 'error');
+      return;
+    }
+
+    setUploadingImage(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const res = await fetch('/api/admin/upload', {
+        method: 'POST',
+        body: formData,
+      });
+
+      const data = await res.json();
+      if (res.ok && data.url) {
+        setImageUrl(data.url);
+        setImageLoadError(false);
+        showToast('Tải ảnh sản phẩm lên thành công!', 'success');
+      } else {
+        showToast(data.error || 'Lỗi khi tải ảnh lên.', 'error');
+      }
+    } catch (err) {
+      showToast('Lỗi kết nối máy chủ khi upload.', 'error');
+    } finally {
+      setUploadingImage(false);
+    }
+  };
   const [supplierName, setSupplierName] = useState('');
   const [supplierLink, setSupplierLink] = useState('');
 
@@ -100,6 +136,7 @@ export default function AdminProductCreatePage() {
 
   const validateImageUrl = (url: string): boolean => {
     if (!url) return true;
+    if (url.startsWith('/uploads/')) return true;
     if (!url.startsWith('https://')) return false;
     const hasValidExtension = /\.(jpg|jpeg|png|webp|gif)(?:\?.*)?$/i.test(url);
     const isTrustedDomain = /https:\/\/([a-z0-9-]+\.)*(cloudinary\.com|i\.ibb\.co|imgur\.com)\//i.test(url);
@@ -265,16 +302,37 @@ export default function AdminProductCreatePage() {
 
                 {/* Image Link Input */}
                 <div>
-                  <Input
-                    label="Link ảnh đại diện sản phẩm"
-                    placeholder="https://example.com/product-image.jpg"
-                    value={imageUrl}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      setImageUrl(val);
-                      setImageLoadError(false);
-                    }}
-                  />
+                  <div className="flex gap-3 items-end">
+                    <div className="flex-1">
+                      <Input
+                        label="Link ảnh đại diện sản phẩm"
+                        placeholder="https://example.com/product-image.jpg"
+                        value={imageUrl}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setImageUrl(val);
+                          setImageLoadError(false);
+                        }}
+                      />
+                    </div>
+                    <input
+                      type="file"
+                      ref={imageInputRef}
+                      accept="image/*"
+                      onChange={handleUpload}
+                      className="hidden"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      loading={uploadingImage}
+                      onClick={() => imageInputRef.current?.click()}
+                      className="cursor-pointer shrink-0 h-[42px] flex items-center gap-1.5"
+                    >
+                      <Upload className="w-4 h-4" />
+                      <span>Tải lên</span>
+                    </Button>
+                  </div>
                   {imageUrl && (
                     <div className="mt-3 relative inline-block">
                       {!imageLoadError ? (

@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { Card, CardHeader, CardTitle, CardContent, Button, Input, showToast, PageHeader, RoleBadge } from '@/components/ui';
 import { useAuth } from '@/components/AuthContext';
-import { User, KeyRound, Lock } from 'lucide-react';
+import { User, KeyRound, Lock, Upload } from 'lucide-react';
 
 export default function UserProfilePage() {
   const { user, checkSession } = useAuth();
@@ -18,6 +18,43 @@ export default function UserProfilePage() {
   const [avatarUrl, setAvatarUrl] = useState('');
   const [urlInput, setUrlInput] = useState('');
   const [imageLoadError, setImageLoadError] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
+
+  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 2 * 1024 * 1024) {
+      showToast('Kích thước ảnh không được vượt quá 2MB.', 'error');
+      return;
+    }
+
+    setUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const res = await fetch('/api/admin/upload', {
+        method: 'POST',
+        body: formData,
+      });
+
+      const data = await res.json();
+      if (res.ok && data.url) {
+        setUrlInput(data.url);
+        setAvatarUrl(data.url);
+        setImageLoadError(false);
+        showToast('Tải ảnh đại diện lên thành công!', 'success');
+      } else {
+        showToast(data.error || 'Lỗi khi tải ảnh lên.', 'error');
+      }
+    } catch (err) {
+      showToast('Lỗi kết nối máy chủ khi upload.', 'error');
+    } finally {
+      setUploading(false);
+    }
+  };
 
   useEffect(() => {
     if (user) {
@@ -45,6 +82,7 @@ export default function UserProfilePage() {
 
   const validateImageUrl = (url: string): boolean => {
     if (!url) return true;
+    if (url.startsWith('/uploads/')) return true;
     if (!url.startsWith('https://')) return false;
     const hasValidExtension = /\.(jpg|jpeg|png|webp|gif)(?:\?.*)?$/i.test(url);
     const isTrustedDomain = /https:\/\/([a-z0-9-]+\.)*(cloudinary\.com|i\.ibb\.co|imgur\.com)\//i.test(url);
@@ -236,23 +274,44 @@ export default function UserProfilePage() {
               </div>
               
               <div className="w-full">
-                <Input
-                  label="Link ảnh đại diện"
-                  placeholder="https://example.com/avatar.jpg"
-                  value={urlInput}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    setUrlInput(val);
-                    setImageLoadError(false);
-                    if (!val) {
-                      setAvatarUrl('');
-                    } else if (validateImageUrl(val)) {
-                      setAvatarUrl(val);
-                    } else {
-                      setImageLoadError(true);
-                    }
-                  }}
-                />
+                <div className="flex gap-3 items-end">
+                  <div className="flex-1">
+                    <Input
+                      label="Link ảnh đại diện"
+                      placeholder="https://example.com/avatar.jpg"
+                      value={urlInput}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setUrlInput(val);
+                        setImageLoadError(false);
+                        if (!val) {
+                          setAvatarUrl('');
+                        } else if (validateImageUrl(val)) {
+                          setAvatarUrl(val);
+                        } else {
+                          setImageLoadError(true);
+                        }
+                      }}
+                    />
+                  </div>
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    accept="image/*"
+                    onChange={handleUpload}
+                    className="hidden"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    loading={uploading}
+                    onClick={() => fileInputRef.current?.click()}
+                    className="cursor-pointer shrink-0 h-[42px] flex items-center gap-1.5"
+                  >
+                    <Upload className="w-4 h-4" />
+                    <span>Tải lên</span>
+                  </Button>
+                </div>
                 {imageLoadError && urlInput && (
                   <p className="text-[10px] text-rose-500 font-semibold mt-1.5">
                     Link ảnh không hợp lệ hoặc không thể tải ảnh
