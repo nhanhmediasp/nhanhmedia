@@ -15,6 +15,10 @@ const inter = Inter({
 export const metadata: Metadata = {
   title: 'Hệ thống Quản lý Dịch vụ - Nhanh Media',
   description: 'Website quản lý khách hàng, cộng tác viên nội bộ, đại lý và đơn hàng dịch vụ của Nhanh Media.',
+  robots: {
+    index: false,
+    follow: false,
+  },
 };
 
 export const viewport: Viewport = {

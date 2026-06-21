@@ -33,6 +33,7 @@ export async function GET(
           },
         },
         variant: true,
+        supplier: true,
         renewals: {
           include: {
             renewedByUser: { select: { id: true, name: true } },
@@ -165,6 +166,7 @@ export async function PUT(
           },
         },
         variant: true,
+        supplier: true,
         renewals: {
           include: {
             renewedByUser: { select: { id: true, name: true } },

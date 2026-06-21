@@ -72,10 +72,10 @@ export async function GET(req: Request) {
     // ── Build raw SQL WHERE clauses for SUM(COALESCE) ─────────────────────
     // Prisma aggregate không hỗ trợ COALESCE nên cần rawQuery
     const whereParts: Prisma.Sql[] = [];
-    if (creatorId)      whereParts.push(Prisma.sql`created_by_user_id = ${creatorId}::uuid`);
-    if (productId)      whereParts.push(Prisma.sql`product_id = ${productId}::uuid`);
+    if (creatorId)      whereParts.push(Prisma.sql`created_by_user_id = ${creatorId}`);
+    if (productId)      whereParts.push(Prisma.sql`product_id = ${productId}`);
     if (statusFilter)   whereParts.push(Prisma.sql`status = ${statusFilter}`);
-    if (supplierId)     whereParts.push(Prisma.sql`supplier_id = ${supplierId}::uuid`);
+    if (supplierId)     whereParts.push(Prisma.sql`supplier_id = ${supplierId}`);
     if (startFilterDate) whereParts.push(Prisma.sql`created_at >= ${startFilterDate}`);
     if (endFilterDate)   whereParts.push(Prisma.sql`created_at <= ${endFilterDate}`);
 
