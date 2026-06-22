@@ -48,8 +48,7 @@ const adminMainLinks: NavItem[] = [
 const adminSettingsLinks: NavItem[] = [
   { label: 'Tùy chỉnh Website',  href: '/admin/settings/website',  icon: Globe },
   { label: 'Quản lý Thông báo',  href: '/admin/notifications',      icon: Megaphone },
-  { label: 'Cấu hình SMTP',      href: '/admin/settings/email',     icon: Settings },
-  { label: 'Cấu hình Nhắc hạn', href: '/admin/settings/reminders', icon: Bell },
+  { label: 'Cấu hình Email',     href: '/admin/settings/email',     icon: Mail },
 ];
 
 const userLinks: NavItem[] = [
@@ -82,7 +81,11 @@ export default function Navigation({ children }: { children: React.ReactNode }) 
           const data = await res.json();
           if (data.settings) {
             setSiteName(data.settings.siteName || 'Nhanh Media');
-            setLogoUrl(data.settings.logoUrl || null);
+            let logo = data.settings.logoUrl || null;
+            if (logo && logo.includes('theselfishmeme.co.uk')) {
+              logo = null;
+            }
+            setLogoUrl(logo);
           }
         }
       } catch (err) {
@@ -183,7 +186,9 @@ export default function Navigation({ children }: { children: React.ReactNode }) 
     }
   };
 
-  const links = isAdmin ? adminMainLinks : userLinks;
+  const links = isAdmin
+    ? adminMainLinks
+    : userLinks.filter(link => !(link.href === '/customers' && user.role === 'collaborator'));
 
   const NavContent = () => (
     <div className="flex flex-col h-full" style={{ background: '#fff' }}>
@@ -191,7 +196,12 @@ export default function Navigation({ children }: { children: React.ReactNode }) 
       <div className="px-5 py-5 shrink-0" style={{ borderBottom: '1px solid rgba(108,117,147,0.08)' }}>
         <div className="flex items-center gap-3">
           {logoUrl ? (
-            <img src={logoUrl} alt={siteName} className="max-h-9 max-w-[180px] object-contain select-none" />
+            <img 
+              src={logoUrl} 
+              alt={siteName} 
+              className="max-h-9 max-w-[180px] object-contain select-none" 
+              onError={() => setLogoUrl(null)}
+            />
           ) : (
             <>
               <div
@@ -443,7 +453,12 @@ export default function Navigation({ children }: { children: React.ReactNode }) 
       >
         <div className="flex items-center gap-2.5">
           {logoUrl ? (
-            <img src={logoUrl} alt={siteName} className="max-h-7 max-w-[130px] object-contain select-none" />
+            <img 
+              src={logoUrl} 
+              alt={siteName} 
+              className="max-h-7 max-w-[130px] object-contain select-none" 
+              onError={() => setLogoUrl(null)}
+            />
           ) : (
             <>
               <div
@@ -783,7 +798,7 @@ export default function Navigation({ children }: { children: React.ReactNode }) 
         </header>
 
         {/* ── Page content ── */}
-        <main className="flex-1 px-8 py-8 overflow-y-auto w-full max-w-[1400px] mx-auto animate-fade-in-up">
+        <main className="flex-1 px-8 py-8 overflow-y-auto w-full max-w-[1400px] mx-auto animate-fade-in">
           {children}
         </main>
       </div>

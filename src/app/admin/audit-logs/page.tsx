@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Card, CardHeader, CardTitle, CardContent, Button, showToast, PageHeader, EmptyState, LoadingSkeleton } from '@/components/ui';
-import { Search, Calendar, Shield, ArrowLeft, Download, Eye, FileText, Activity } from 'lucide-react';
+import { Search, Calendar, Shield, ArrowLeft, Download, Eye, FileText, Activity, Trash2, AlertCircle } from 'lucide-react';
 
 const parseJson = (str: string | null) => {
   if (!str) return null;
@@ -44,7 +44,14 @@ export default function AdminAuditLogsPage() {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
+  const [suppliers, setSuppliers] = useState<{ id: string; name: string }[]>([]);
   
+  // Clear Logs Modal States
+  const [showClearModal, setShowClearModal] = useState(false);
+  const [clearMode, setClearMode] = useState<'all' | 'olderThan'>('olderThan');
+  const [clearDays, setClearDays] = useState('30');
+  const [clearing, setClearing] = useState(false);
+
   // Detail Modal
   const [activeLog, setActiveLog] = useState<AuditLog | null>(null);
 
@@ -55,6 +62,21 @@ export default function AdminAuditLogsPage() {
   const [statusFilter, setStatusFilter] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+
+  useEffect(() => {
+    const fetchSuppliers = async () => {
+      try {
+        const res = await fetch('/api/admin/suppliers');
+        if (res.ok) {
+          const data = await res.json();
+          setSuppliers(data.suppliers || []);
+        }
+      } catch (err) {
+        console.error('Fetch suppliers in logs error:', err);
+      }
+    };
+    fetchSuppliers();
+  }, []);
 
   const fetchLogs = async () => {
     setLoading(true);
@@ -121,6 +143,36 @@ export default function AdminAuditLogsPage() {
     showToast('Đang tải file CSV...', 'info');
   };
 
+  const handleClearLogs = async () => {
+    setClearing(true);
+    try {
+      const queryParams = new URLSearchParams();
+      queryParams.append('mode', clearMode);
+      if (clearMode === 'olderThan') {
+        queryParams.append('days', clearDays);
+      }
+      
+      const res = await fetch(`/api/admin/audit-logs?${queryParams.toString()}`, {
+        method: 'DELETE',
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        showToast(data.message || 'Đã dọn dẹp nhật ký hoạt động thành công!', 'success');
+        setShowClearModal(false);
+        setPage(1);
+        fetchLogs();
+      } else {
+        showToast(data.error || 'Lỗi dọn dẹp nhật ký.', 'error');
+      }
+    } catch (e) {
+      console.error('Clear logs error:', e);
+      showToast('Lỗi kết nối máy chủ.', 'error');
+    } finally {
+      setClearing(false);
+    }
+  };
+
   const formatDate = (dateStr: string) => {
     try {
       const d = new Date(dateStr);
@@ -160,10 +212,16 @@ export default function AdminAuditLogsPage() {
         title="Nhật ký hoạt động"
         description="Theo dõi, giám sát toàn bộ hoạt động truy cập và thay đổi cấu hình trên hệ thống."
       >
-        <Button variant="outline" onClick={handleExport} className="flex items-center gap-2 cursor-pointer shrink-0">
-          <Download className="w-4 h-4" />
-          <span>Xuất Nhật ký CSV</span>
-        </Button>
+        <div className="flex gap-2.5 shrink-0">
+          <Button variant="outline" onClick={() => setShowClearModal(true)} className="flex items-center gap-2 text-rose-500 border-rose-200 hover:bg-rose-50 hover:text-rose-600 cursor-pointer">
+            <Trash2 className="w-4 h-4" />
+            <span>Dọn dẹp Nhật ký</span>
+          </Button>
+          <Button variant="outline" onClick={handleExport} className="flex items-center gap-2 cursor-pointer">
+            <Download className="w-4 h-4" />
+            <span>Xuất Nhật ký CSV</span>
+          </Button>
+        </div>
       </PageHeader>
 
       {/* Filter Options */}
@@ -368,8 +426,8 @@ export default function AdminAuditLogsPage() {
 
       {/* Log details modal */}
       {activeLog && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm overflow-y-auto">
-          <div className="w-full max-w-4xl bg-card rounded-2xl border border-border shadow-2xl overflow-hidden animate-scale-in my-auto">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/10">
+          <div className="w-full max-w-4xl bg-card rounded-2xl border border-border shadow-[0_25px_80px_rgba(0,0,0,0.28)] overflow-hidden animate-scale-in flex flex-col max-h-[90vh]">
             {/* Header */}
             <div className="px-6 py-5 border-b border-border flex items-center justify-between shrink-0">
               <h3 className="text-base font-bold text-slate-800">Chi tiết nhật ký hoạt động</h3>
@@ -459,6 +517,7 @@ export default function AdminAuditLogsPage() {
                   oldStr={activeLog.oldValues}
                   newStr={activeLog.newValues}
                   changedFieldsStr={activeLog.changedFields}
+                  suppliers={suppliers}
                 />
               </div>
             </div>
@@ -471,12 +530,115 @@ export default function AdminAuditLogsPage() {
           </div>
         </div>
       )}
+
+      {/* Clear Logs Modal */}
+      {showClearModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/10">
+          <div className="w-full max-w-md bg-card rounded-2xl border border-border shadow-[0_25px_80px_rgba(0,0,0,0.28)] overflow-hidden animate-scale-in flex flex-col">
+            {/* Header */}
+            <div className="px-6 py-5 border-b border-border flex items-center justify-between shrink-0">
+              <h3 className="text-base font-bold text-rose-600 flex items-center gap-1.5">
+                <Trash2 className="w-5 h-5 text-rose-500" />
+                <span>Dọn dẹp nhật ký hoạt động</span>
+              </h3>
+              <button 
+                onClick={() => setShowClearModal(false)} 
+                className="text-slate-400 hover:text-slate-600 transition-colors text-lg font-bold w-8 h-8 flex items-center justify-center rounded-full hover:bg-slate-100 cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+            {/* Content */}
+            <div className="p-6 space-y-4">
+              <p className="text-xs text-slate-500 leading-relaxed">
+                Hành động dọn dẹp sẽ xóa vĩnh viễn dữ liệu nhật ký hoạt động cũ của hệ thống. Bạn có muốn dọn dẹp các bản ghi này không?
+              </p>
+              
+              <div className="space-y-3">
+                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider">Phương thức dọn dẹp</label>
+                <div className="grid grid-cols-2 gap-3">
+                  <div
+                    onClick={() => setClearMode('olderThan')}
+                    className={`p-3.5 rounded-xl border text-center cursor-pointer select-none transition-all duration-200 ${
+                      clearMode === 'olderThan'
+                        ? 'border-[#a145ab] bg-[#a145ab]/5 text-[#a145ab] font-bold shadow-sm'
+                        : 'border-border bg-card text-slate-600 hover:bg-slate-50'
+                    }`}
+                  >
+                    <div className="text-sm">Xóa nhật ký cũ</div>
+                  </div>
+                  <div
+                    onClick={() => setClearMode('all')}
+                    className={`p-3.5 rounded-xl border text-center cursor-pointer select-none transition-all duration-200 ${
+                      clearMode === 'all'
+                        ? 'border-rose-500 bg-rose-500/5 text-rose-600 font-bold shadow-sm'
+                        : 'border-border bg-card text-slate-600 hover:bg-slate-50'
+                    }`}
+                  >
+                    <div className="text-sm">Xóa tất cả</div>
+                  </div>
+                </div>
+              </div>
+
+              {clearMode === 'olderThan' && (
+                <div className="space-y-2">
+                  <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider">Mốc thời gian xóa</label>
+                  <select
+                    value={clearDays}
+                    onChange={(e) => setClearDays(e.target.value)}
+                    className="w-full px-3 py-2.5 text-sm bg-input border border-border rounded-xl text-foreground focus:outline-none focus:border-primary focus:ring-2 focus:ring-ring cursor-pointer font-semibold text-slate-700"
+                  >
+                    <option value="7">Cũ hơn 7 ngày trước</option>
+                    <option value="30">Cũ hơn 30 ngày trước (Mặc định)</option>
+                    <option value="90">Cũ hơn 90 ngày trước</option>
+                    <option value="180">Cũ hơn 180 ngày trước</option>
+                  </select>
+                </div>
+              )}
+
+              {clearMode === 'all' && (
+                <div className="p-3.5 bg-rose-500/10 border border-rose-500/20 rounded-xl text-rose-700 flex gap-2 items-start">
+                  <AlertCircle className="w-4.5 h-4.5 shrink-0 mt-0.5" />
+                  <span className="text-xs font-semibold leading-relaxed">
+                    Cảnh báo: Hành động này sẽ xóa sạch 100% dữ liệu nhật ký hoạt động hệ thống. Sau khi xóa, chỉ còn lại duy nhất 1 bản ghi lưu vết hành động dọn dẹp này.
+                  </span>
+                </div>
+              )}
+            </div>
+            {/* Footer */}
+            <div className="px-6 py-4 bg-slate-50 border-t border-border flex justify-end gap-2.5">
+              <Button variant="outline" size="sm" onClick={() => setShowClearModal(false)} className="cursor-pointer">
+                Hủy bỏ
+              </Button>
+              <Button 
+                variant={clearMode === 'all' ? 'danger' : 'primary'} 
+                size="sm" 
+                onClick={handleClearLogs} 
+                loading={clearing}
+                className="cursor-pointer font-bold"
+              >
+                Xác nhận xóa
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
 // Side-by-side properties comparison component
-function LogDataDiff({ oldStr, newStr, changedFieldsStr }: { oldStr: string | null; newStr: string | null; changedFieldsStr: string | null }) {
+function LogDataDiff({ 
+  oldStr, 
+  newStr, 
+  changedFieldsStr, 
+  suppliers 
+}: { 
+  oldStr: string | null; 
+  newStr: string | null; 
+  changedFieldsStr: string | null; 
+  suppliers: { id: string; name: string }[];
+}) {
   const oldVal = parseJson(oldStr);
   const newVal = parseJson(newStr);
   const changedFields = parseJson(changedFieldsStr) || [];
@@ -489,9 +651,59 @@ function LogDataDiff({ oldStr, newStr, changedFieldsStr }: { oldStr: string | nu
   const keys = Array.from(new Set([...Object.keys(oldVal || {}), ...Object.keys(newVal || {})]))
     .filter(k => k !== 'updatedAt' && k !== 'updated_at');
 
-  const formatVal = (v: any): string => {
-    if (v === undefined || v === null) return 'null';
-    if (typeof v === 'boolean') return v ? 'true' : 'false';
+  const translateKey = (k: string) => {
+    const mapping: Record<string, string> = {
+      status: 'Trạng thái',
+      price: 'Đơn giá',
+      customPrice: 'Giá tùy chỉnh',
+      importPrice: 'Giá nhập',
+      amountPaid: 'Đã thanh toán',
+      note: 'Ghi chú',
+      internalNote: 'Ghi chú nội bộ',
+      startDate: 'Ngày bắt đầu',
+      endDate: 'Ngày hết hạn',
+      supplierId: 'Nguồn hàng',
+      productId: 'Sản phẩm',
+      variantId: 'Gói dịch vụ',
+      customerId: 'Khách hàng',
+      createdByUserId: 'Người tạo',
+    };
+    return mapping[k] || k;
+  };
+
+  const formatVal = (key: string, v: any): string => {
+    if (v === undefined || v === null) return 'Trống';
+    if (typeof v === 'boolean') return v ? 'Bật' : 'Tắt';
+    if (key === 'status') {
+      const statusMap: Record<string, string> = {
+        new: 'Mới tạo',
+        processing: 'Đang xử lý',
+        running: 'Đang chạy',
+        expired_soon: 'Sắp hết hạn',
+        expired: 'Đã hết hạn',
+        cancelled: 'Đã hủy',
+        refunded: 'Đã bảo hành / Hoàn tiền',
+      };
+      return statusMap[String(v).toLowerCase()] || String(v);
+    }
+    if (key === 'supplierId') {
+      const found = suppliers.find(s => s.id === v);
+      return found ? found.name : String(v);
+    }
+    if (key.toLowerCase().includes('price') || key === 'amountPaid') {
+      try {
+        return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(Number(v));
+      } catch {
+        return String(v);
+      }
+    }
+    if (key.toLowerCase().includes('date')) {
+      try {
+        return new Date(v).toLocaleDateString('vi-VN');
+      } catch {
+        return String(v);
+      }
+    }
     if (typeof v === 'object') return JSON.stringify(v);
     return String(v);
   };
@@ -517,12 +729,12 @@ function LogDataDiff({ oldStr, newStr, changedFieldsStr }: { oldStr: string | nu
                 key={key} 
                 className={`transition-colors duration-150 ${isChanged ? 'bg-amber-50/10' : 'hover:bg-slate-50/10'}`}
               >
-                <td className="px-4 py-3 font-semibold text-slate-700 truncate">{key}</td>
+                <td className="px-4 py-3 font-semibold text-slate-700 truncate">{translateKey(key)}</td>
                 <td className={`px-4 py-3 select-all whitespace-pre-wrap break-all ${isChanged && valBefore !== undefined ? 'bg-rose-50 text-rose-700 font-medium' : 'text-slate-400'}`}>
-                  {formatVal(valBefore)}
+                  {formatVal(key, valBefore)}
                 </td>
                 <td className={`px-4 py-3 select-all whitespace-pre-wrap break-all ${isChanged && valAfter !== undefined ? 'bg-emerald-50 text-emerald-700 font-bold' : 'text-slate-600'}`}>
-                  {formatVal(valAfter)}
+                  {formatVal(key, valAfter)}
                 </td>
               </tr>
             );

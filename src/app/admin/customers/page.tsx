@@ -452,8 +452,8 @@ export default function AdminCustomersPage() {
 
       {/* Add/Edit Modal Dialog */}
       {isOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fade-in">
-          <div className="bg-card border border-border w-full max-w-lg rounded-2xl shadow-xl overflow-hidden animate-fade-in">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/10 animate-fade-in">
+          <div className="bg-card border border-border w-full max-w-lg rounded-2xl shadow-[0_25px_80px_rgba(0,0,0,0.28)] overflow-hidden animate-fade-in">
             <div className="px-6 py-5 border-b border-border">
               <h3 className="text-lg font-bold text-foreground">
                 {editId ? 'Chỉnh sửa thông tin Khách hàng' : 'Thêm Khách hàng Mới'}

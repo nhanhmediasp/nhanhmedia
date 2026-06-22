@@ -91,19 +91,36 @@ export async function createAuditLog(options: AuditLogOptions) {
 
     let currentActor = actor;
     
-    // If actor is not passed, try to extract from cookies
+    // If actor is not passed, try to extract from request headers or cookies
     if (!currentActor) {
-      try {
-        const cookieStore = await cookies();
-        const token = cookieStore.get(TOKEN_COOKIE_NAME)?.value;
-        if (token) {
-          const decoded = verifyToken(token);
-          if (decoded) {
-            currentActor = decoded;
-          }
+      if (request) {
+        const headerId = request.headers.get('x-user-id');
+        const headerName = request.headers.get('x-user-name');
+        const headerEmail = request.headers.get('x-user-email');
+        const headerRole = request.headers.get('x-user-role');
+        if (headerId && headerName) {
+          currentActor = {
+            id: headerId,
+            name: headerName,
+            email: headerEmail || '',
+            role: headerRole || 'member'
+          };
         }
-      } catch (e) {
-        // cookies() might fail if not in a request context
+      }
+
+      if (!currentActor) {
+        try {
+          const cookieStore = await cookies();
+          const token = cookieStore.get(TOKEN_COOKIE_NAME)?.value;
+          if (token) {
+            const decoded = verifyToken(token);
+            if (decoded) {
+              currentActor = decoded;
+            }
+          }
+        } catch (e) {
+          // cookies() might fail if not in a request context
+        }
       }
     }
 

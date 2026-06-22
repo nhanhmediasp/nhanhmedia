@@ -57,6 +57,12 @@ export async function GET(
       return NextResponse.json({ error: 'Bạn không có quyền xem đơn hàng này.' }, { status: 403 });
     }
 
+    // Hide importPrice and auditLogs from non-admin
+    if (!isAdmin) {
+      const { importPrice, ...rest } = order as any;
+      return NextResponse.json({ order: rest, auditLogs: [] });
+    }
+
     const auditLogs = await prisma.auditLog.findMany({
       where: {
         entityId: id,
@@ -66,12 +72,6 @@ export async function GET(
         createdAt: 'desc',
       },
     });
-
-    // Hide importPrice from non-admin
-    if (!isAdmin) {
-      const { importPrice, ...rest } = order as any;
-      return NextResponse.json({ order: rest, auditLogs });
-    }
 
     return NextResponse.json({ order, auditLogs });
   } catch (error) {

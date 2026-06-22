@@ -49,11 +49,20 @@ function SortableHeader({ label, field, currentField, currentDirection, onSort, 
   );
 }
 
+import { useAuth } from '@/components/AuthContext';
+
 export default function UserCustomersPage() {
+  const { user } = useAuth();
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [purchaseFilter, setPurchaseFilter] = useState('');
   const [loading, setLoading] = useState(true);
+
+  React.useEffect(() => {
+    if (user && user.role === 'collaborator') {
+      window.location.href = '/dashboard';
+    }
+  }, [user]);
 
   // Sort state
   const [sortField, setSortField] = useState<SortField | null>(null);
@@ -376,8 +385,8 @@ export default function UserCustomersPage() {
 
       {/* Add/Edit Modal */}
       {isOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fade-in">
-          <div className="bg-card border border-border w-full max-w-lg rounded-2xl shadow-xl overflow-hidden animate-fade-in">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/10 animate-fade-in">
+          <div className="bg-card border border-border w-full max-w-lg rounded-2xl shadow-[0_25px_80px_rgba(0,0,0,0.28)] overflow-hidden animate-fade-in">
             <div className="px-6 py-5 border-b border-border">
               <h3 className="text-lg font-bold text-foreground">
                 {editId ? 'Chỉnh sửa thông tin Khách hàng' : 'Thêm Khách hàng Mới'}

@@ -57,8 +57,9 @@ export async function POST(
       remainingDays = Math.max(0, Math.ceil((end - now) / (1000 * 60 * 60 * 24)));
     }
 
-    // Calculated refund amount
-    const refundAmount = Math.max(0, Math.round(remainingDays * pricePerDay));
+    const usedDays = totalDays - remainingDays;
+    const usedValue = usedDays * pricePerDay;
+    const refundAmount = Math.max(0, Math.round((order.amountPaid ?? 0) - usedValue));
 
     // 3. Update order in database
     const updatedOrder = await prisma.order.update({

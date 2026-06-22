@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
+import { createAuditLog } from '@/lib/audit';
 
 export async function GET(
   req: Request,
@@ -59,6 +60,14 @@ export async function PUT(
       return NextResponse.json({ error: 'Tên nguồn hàng này đã được sử dụng.' }, { status: 400 });
     }
 
+    const oldSupplier = await prisma.supplier.findUnique({
+      where: { id }
+    });
+
+    if (!oldSupplier) {
+      return NextResponse.json({ error: 'Nguồn hàng không tồn tại.' }, { status: 404 });
+    }
+
     const updatedSupplier = await prisma.supplier.update({
       where: { id },
       data: {
@@ -66,6 +75,20 @@ export async function PUT(
         contactUrl: contactUrl ? contactUrl.trim() : null,
         icon: icon !== undefined ? (icon ? icon.trim() : null) : undefined
       }
+    });
+
+    await createAuditLog({
+      action: 'UPDATE_SUPPLIER',
+      actionLabel: 'Cập nhật nguồn hàng',
+      module: 'suppliers',
+      entityType: 'Supplier',
+      entityId: id,
+      entityName: updatedSupplier.name,
+      description: `Đã cập nhật thông tin nguồn hàng "${updatedSupplier.name}"`,
+      oldValues: oldSupplier,
+      newValues: updatedSupplier,
+      request: req,
+      status: 'success'
     });
 
     return NextResponse.json({ message: 'Cập nhật nguồn hàng thành công!', supplier: updatedSupplier });
@@ -82,8 +105,29 @@ export async function DELETE(
   try {
     const { id } = await params;
 
+    const supplierToDelete = await prisma.supplier.findUnique({
+      where: { id }
+    });
+
+    if (!supplierToDelete) {
+      return NextResponse.json({ error: 'Nguồn hàng không tồn tại.' }, { status: 404 });
+    }
+
     await prisma.supplier.delete({
       where: { id }
+    });
+
+    await createAuditLog({
+      action: 'DELETE_SUPPLIER',
+      actionLabel: 'Xóa nguồn hàng',
+      module: 'suppliers',
+      entityType: 'Supplier',
+      entityId: id,
+      entityName: supplierToDelete.name,
+      description: `Đã xóa nguồn hàng "${supplierToDelete.name}"`,
+      oldValues: supplierToDelete,
+      request: req,
+      status: 'success'
     });
 
     return NextResponse.json({ message: 'Xóa nguồn hàng thành công!' });

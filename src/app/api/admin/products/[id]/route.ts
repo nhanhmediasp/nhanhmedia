@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
+import { createAuditLog } from '@/lib/audit';
 
 export async function PUT(
   req: Request,
@@ -12,6 +13,21 @@ export async function PUT(
 
     if (!name || !slug) {
       return NextResponse.json({ error: 'Tên và slug là bắt buộc.' }, { status: 400 });
+    }
+
+    const oldProduct = await prisma.product.findUnique({
+      where: { id },
+      include: {
+        variants: {
+          include: {
+            prices: true
+          }
+        }
+      }
+    });
+
+    if (!oldProduct) {
+      return NextResponse.json({ error: 'Sản phẩm không tồn tại.' }, { status: 404 });
     }
 
     // Check slug uniqueness (exclude current product)
@@ -124,6 +140,31 @@ export async function PUT(
       }
     });
 
+    const newProduct = await prisma.product.findUnique({
+      where: { id },
+      include: {
+        variants: {
+          include: {
+            prices: true
+          }
+        }
+      }
+    });
+
+    await createAuditLog({
+      action: 'UPDATE_PRODUCT',
+      actionLabel: 'Cập nhật sản phẩm',
+      module: 'products',
+      entityType: 'Product',
+      entityId: id,
+      entityName: name,
+      description: `Đã cập nhật thông tin sản phẩm "${name}"`,
+      oldValues: oldProduct,
+      newValues: newProduct,
+      request: req,
+      status: 'success'
+    });
+
     return NextResponse.json({ message: 'Cập nhật sản phẩm thành công!' });
   } catch (error) {
     console.error('Update product error:', error);
@@ -138,6 +179,14 @@ export async function DELETE(
   try {
     const { id } = await params;
 
+    const productToDelete = await prisma.product.findUnique({
+      where: { id }
+    });
+
+    if (!productToDelete) {
+      return NextResponse.json({ error: 'Sản phẩm không tồn tại.' }, { status: 404 });
+    }
+
     const orderCount = await prisma.order.count({
       where: { productId: id },
     });
@@ -151,6 +200,19 @@ export async function DELETE(
 
     await prisma.product.delete({
       where: { id },
+    });
+
+    await createAuditLog({
+      action: 'DELETE_PRODUCT',
+      actionLabel: 'Xóa sản phẩm',
+      module: 'products',
+      entityType: 'Product',
+      entityId: id,
+      entityName: productToDelete.name,
+      description: `Đã xóa sản phẩm "${productToDelete.name}" (Slug: ${productToDelete.slug})`,
+      oldValues: productToDelete,
+      request: req,
+      status: 'success'
     });
 
     return NextResponse.json({ message: 'Xóa sản phẩm thành công!' });

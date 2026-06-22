@@ -301,8 +301,8 @@ export const Dialog = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(15,23,42,0.55)', backdropFilter: 'blur(4px)' }}>
-      <div className="w-full max-w-md rounded-2xl overflow-hidden animate-scale-in" style={{ background: '#fff', boxShadow: '0 20px 60px rgba(0,0,0,0.20)' }}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.06)' }}>
+      <div className="w-full max-w-md rounded-2xl overflow-hidden animate-scale-in" style={{ background: '#fff', boxShadow: '0 25px 80px rgba(0,0,0,0.28), 0 0 0 1px rgba(0,0,0,0.05)' }}>
         <div className="px-6 pt-6 pb-4">
           <h3 className="text-base font-bold mb-2" style={{ color: '#1e293b' }}>{title}</h3>
           <p className="text-sm" style={{ color: '#697a8d' }}>{description}</p>

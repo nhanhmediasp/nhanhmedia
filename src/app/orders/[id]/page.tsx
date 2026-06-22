@@ -13,6 +13,8 @@ import {
   History,
   Loader2,
   Undo2,
+  Camera,
+  Copy,
 } from 'lucide-react';
 
 interface Customer {
@@ -64,10 +66,82 @@ interface Order {
   endDate: string;
   note: string | null;
   createdAt: string;
+  createdByUser?: {
+    id: string;
+    name: string;
+    role: string;
+  };
+  createdByUserId: string;
   refundAmount: number | null;
   refundedAt: string | null;
   renewals: Renewal[];
 }
+
+const renderChangeDetails = (log: any) => {
+  if (!log.changedFields) return null;
+  try {
+    const fields = JSON.parse(log.changedFields);
+    const oldVals = log.oldValues ? JSON.parse(log.oldValues) : {};
+    const newVals = log.newValues ? JSON.parse(log.newValues) : {};
+
+    if (!Array.isArray(fields) || fields.length === 0) return null;
+
+    const translateKey = (k: string) => {
+      const mapping: Record<string, string> = {
+        status: 'Trạng thái',
+        price: 'Đơn giá',
+        customPrice: 'Giá tùy chỉnh',
+        importPrice: 'Giá nhập',
+        amountPaid: 'Đã thanh toán',
+        note: 'Ghi chú',
+        internalNote: 'Ghi chú nội bộ',
+        startDate: 'Ngày bắt đầu',
+        endDate: 'Ngày hết hạn',
+        supplierId: 'Nguồn hàng',
+        productId: 'Sản phẩm',
+        variantId: 'Gói dịch vụ',
+      };
+      return mapping[k] || k;
+    };
+
+    const formatValue = (key: string, val: any) => {
+      if (val === null || val === undefined) return 'Trống';
+      if (typeof val === 'boolean') return val ? 'Bật' : 'Tắt';
+      if (key.toLowerCase().includes('price') || key === 'amountPaid') {
+        return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(val);
+      }
+      if (key.toLowerCase().includes('date')) {
+        try {
+          return new Date(val).toLocaleDateString('vi-VN');
+        } catch {
+          return String(val);
+        }
+      }
+      return String(val);
+    };
+
+    return (
+      <div className="mt-1 text-[11px] bg-slate-50 dark:bg-zinc-800/40 p-2 rounded-lg border border-slate-100 dark:border-zinc-800/80 space-y-0.5 max-w-md">
+        <span className="font-bold text-slate-500 uppercase tracking-wider block text-[9px] mb-1">Chi tiết thay đổi:</span>
+        {fields.map((f: string) => {
+          const oldVal = oldVals[f];
+          const newVal = newVals[f];
+          return (
+            <div key={f} className="flex flex-wrap gap-1 items-center">
+              <span className="font-semibold text-foreground">{translateKey(f)}:</span>
+              <span className="text-slate-400 line-through">{formatValue(f, oldVal)}</span>
+              <span className="text-slate-400">→</span>
+              <span className="text-primary font-bold">{formatValue(f, newVal)}</span>
+            </div>
+          );
+        })}
+      </div>
+    );
+  } catch (e) {
+    console.error(e);
+    return null;
+  }
+};
 
 export default function UserOrderDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -76,6 +150,7 @@ export default function UserOrderDetailPage({ params }: { params: Promise<{ id: 
   const [order, setOrder] = useState<Order | null>(null);
   const [auditLogs, setAuditLogs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isCaptureOpen, setIsCaptureOpen] = useState(false);
 
   // Renewal Modal State
   const [isRenewOpen, setIsRenewOpen] = useState(false);
@@ -108,8 +183,9 @@ export default function UserOrderDetailPage({ params }: { params: Promise<{ id: 
     } else {
       remainingDays = Math.max(0, Math.ceil((end - now) / (1000 * 60 * 60 * 24)));
     }
-    
-    const refundAmount = Math.max(0, Math.round(remainingDays * pricePerDay));
+    const usedDays = totalDays - remainingDays;
+    const usedValue = usedDays * pricePerDay;
+    const refundAmount = Math.max(0, Math.round((orderItem.amountPaid ?? 0) - usedValue));
     return {
       totalDays,
       remainingDays,
@@ -246,6 +322,158 @@ export default function UserOrderDetailPage({ params }: { params: Promise<{ id: 
     label: v.name,
   }));
 
+  const drawRoundedRect = (ctx: CanvasRenderingContext2D, x: number, y: number, width: number, height: number, radius: number | number[]) => {
+    if (typeof ctx.roundRect === 'function') {
+      ctx.roundRect(x, y, width, height, radius);
+      return;
+    }
+    let r = typeof radius === 'number' ? radius : (Array.isArray(radius) ? radius[0] : 0);
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + width - r, y);
+    ctx.quadraticCurveTo(x + width, y, x + width, y + r);
+    ctx.lineTo(x + width, y + height - r);
+    ctx.quadraticCurveTo(x + width, y + height, x + width - r, y + height);
+    ctx.lineTo(x + r, y + height);
+    ctx.quadraticCurveTo(x, y + height, x, y + height - r);
+    ctx.lineTo(x, y + r);
+    ctx.quadraticCurveTo(x, y, x + r, y);
+    ctx.closePath();
+  };
+
+  const handleCopyVoucherImage = () => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 400;
+    canvas.height = 540;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    // Draw background
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, 400, 540);
+
+    // Draw rounded border card
+    ctx.strokeStyle = '#e2e8f0';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    drawRoundedRect(ctx, 15, 15, 370, 510, 16);
+    ctx.stroke();
+
+    // Draw Header background
+    const gradient = ctx.createLinearGradient(15, 15, 385, 15);
+    gradient.addColorStop(0, '#a145ab');
+    gradient.addColorStop(1, '#c060c8');
+    ctx.fillStyle = gradient;
+    ctx.beginPath();
+    drawRoundedRect(ctx, 15, 15, 370, 75, [16, 16, 0, 0]);
+    ctx.fill();
+
+    // Header Text
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 15px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('NHANH MEDIA - VÉ DỊCH VỤ', 200, 46);
+
+    ctx.font = '11px Arial';
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
+    ctx.fillText(`Mã đơn hàng: ${order.orderCode}`, 200, 68);
+
+    // Content Text
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#64748b';
+    ctx.font = '12px Arial';
+
+    const startX = 35;
+    const endX = 365;
+    let y = 130;
+    const rowHeight = 28;
+
+    const drawRow = (label: string, value: string, isBold = false, valColor = '#1e293b') => {
+      ctx.fillStyle = '#64748b';
+      ctx.font = '12px Arial';
+      ctx.fillText(label, startX, y);
+
+      ctx.fillStyle = valColor;
+      ctx.font = isBold ? 'bold 12px Arial' : '12px Arial';
+      ctx.textAlign = 'right';
+      ctx.fillText(value, endX, y);
+      ctx.textAlign = 'left';
+      y += rowHeight;
+    };
+
+    drawRow('Tên đơn hàng:', `${order.product.name} - ${order.variant.name}`, true);
+    drawRow('Ngày mua:', formatDate(order.startDate));
+    drawRow('Ngày hết hạn:', formatDate(order.endDate), true, '#ef4444');
+    drawRow('Thời gian còn lại:', `${refundDetails.remainingDays} ngày`);
+
+    // Divider line
+    ctx.strokeStyle = '#f1f5f9';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(startX, y - 10);
+    ctx.lineTo(endX, y - 10);
+    ctx.stroke();
+
+    drawRow('Đơn giá dịch vụ:', formatVND(currentPrice), true, '#a145ab');
+    drawRow('Đã thanh toán:', formatVND(order.amountPaid), true, '#16a34a');
+    drawRow('Người tạo đơn:', order.createdByUser?.name || 'Hệ thống');
+
+    // Divider line
+    ctx.beginPath();
+    ctx.moveTo(startX, y - 10);
+    ctx.lineTo(endX, y - 10);
+    ctx.stroke();
+
+    drawRow('Giá / 1 ngày:', formatVND(refundDetails.pricePerDay));
+    drawRow('Hoàn tiền bảo hành:', formatVND(refundDetails.refundAmount), true, '#ef4444');
+
+    // Bottom Ticket Notch
+    ctx.fillStyle = '#f1f5f9';
+    ctx.beginPath();
+    ctx.arc(15, 450, 8, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(385, 450, 8, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Dashed line above notch
+    ctx.strokeStyle = '#cbd5e1';
+    ctx.setLineDash([4, 4]);
+    ctx.beginPath();
+    ctx.moveTo(35, 450);
+    ctx.lineTo(365, 450);
+    ctx.stroke();
+    ctx.setLineDash([]); // Reset line dash
+
+    // Warranty card
+    ctx.fillStyle = '#fff8e6';
+    ctx.beginPath();
+    drawRoundedRect(ctx, 40, 475, 320, 32, 6);
+    ctx.fill();
+    ctx.strokeStyle = '#ffeeba';
+    ctx.stroke();
+
+    ctx.fillStyle = '#b27b00';
+    ctx.font = 'bold 9px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('BẢO HÀNH 1 ĐỔI 1 TRONG SUỐT CHU KỲ SỬ DỤNG DỊCH VỤ', 200, 495);
+
+    // Copy to clipboard
+    canvas.toBlob((blob) => {
+      if (blob) {
+        navigator.clipboard.write([
+          new ClipboardItem({ 'image/png': blob })
+        ]).then(() => {
+          showToast('Đã sao chép hình ảnh hóa đơn vào clipboard!', 'success');
+          setIsCaptureOpen(false);
+        }).catch((err) => {
+          console.error(err);
+          showToast('Không thể sao chép ảnh tự động. Hãy chụp màn hình.', 'error');
+        });
+      }
+    }, 'image/png');
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -273,11 +501,21 @@ export default function UserOrderDetailPage({ params }: { params: Promise<{ id: 
         <div className="lg:col-span-2 space-y-6">
           {/* Main Info */}
           <Card>
-            <CardHeader className="py-4">
+            <CardHeader className="py-4 flex flex-row items-center justify-between">
               <CardTitle className="flex items-center gap-2">
                 <Package className="w-5 h-5 text-primary" />
                 <span>Chi tiết dịch vụ đăng ký</span>
               </CardTitle>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setIsCaptureOpen(true)}
+                className="flex items-center gap-1.5 cursor-pointer text-xs h-8"
+              >
+                <Camera className="w-3.5 h-3.5" />
+                <span>Chụp gửi khách</span>
+              </Button>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -431,44 +669,7 @@ export default function UserOrderDetailPage({ params }: { params: Promise<{ id: 
             </CardContent>
           </Card>
 
-          {/* Activity Log Timeline */}
-          <Card>
-            <CardHeader className="py-4">
-              <CardTitle className="flex items-center gap-2">
-                <History className="w-5 h-5 text-primary" />
-                <span>Nhật ký hoạt động đơn hàng ({auditLogs.length})</span>
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {auditLogs.length === 0 ? (
-                <p className="text-sm text-muted-foreground italic text-center py-4">Chưa có nhật ký hoạt động nào.</p>
-              ) : (
-                <div className="relative pl-6 border-l border-border space-y-6">
-                  {auditLogs.map((log) => (
-                    <div key={log.id} className="relative">
-                      {/* Timeline dot */}
-                      <span className="absolute -left-[29.5px] top-1 w-2.5 h-2.5 rounded-full bg-primary ring-4 ring-background" />
-                      
-                      <div className="space-y-1">
-                        <div className="flex items-center justify-between gap-4">
-                          <span className="text-xs font-bold text-foreground bg-primary/5 px-2.5 py-0.5 rounded-xl border border-primary/10">
-                            {log.actionLabel}
-                          </span>
-                          <span className="text-[10px] text-muted-foreground font-medium">
-                            {formatDateTime(log.createdAt)}
-                          </span>
-                        </div>
-                        <p className="text-xs text-foreground font-semibold">{log.description}</p>
-                        <div className="text-[10px] text-slate-500 font-medium">
-                          Thực hiện bởi: <span className="font-bold text-slate-700 dark:text-slate-350">{log.actorName}</span>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
+
         </div>
 
         {/* Right col (1/3): Customer Profile and Billing/Status Settings */}
@@ -587,8 +788,8 @@ export default function UserOrderDetailPage({ params }: { params: Promise<{ id: 
 
       {/* Renewal Dialog Modal */}
       {isRenewOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fade-in">
-          <div className="bg-card border border-border w-full max-w-md rounded-2xl shadow-xl overflow-hidden animate-fade-in">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/10 animate-fade-in">
+          <div className="bg-card border border-border w-full max-w-md rounded-2xl shadow-[0_25px_80px_rgba(0,0,0,0.28)] overflow-hidden animate-fade-in">
             <div className="px-6 py-5 border-b border-border">
               <h3 className="text-lg font-bold text-foreground flex items-center gap-2">
                 <History className="w-5 h-5 text-primary" />
@@ -628,7 +829,103 @@ export default function UserOrderDetailPage({ params }: { params: Promise<{ id: 
           </div>
         </div>
       )}
-
+      {/* Capture Voucher Dialog Modal */}
+      {isCaptureOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-transparent animate-fade-in">
+          <div 
+            className="fixed inset-0 bg-slate-900/10 pointer-events-none" 
+            style={{ zIndex: -1 }} 
+          />
+          <div 
+            className="w-full max-w-md rounded-2xl overflow-hidden bg-card border border-border shadow-2xl animate-scale-in"
+            style={{ 
+              boxShadow: '0 25px 80px rgba(0,0,0,0.22), 0 0 0 1px rgba(0,0,0,0.05)',
+              background: 'var(--card, #fff)'
+            }}
+          >
+            <div className="px-6 py-4 border-b border-border flex items-center justify-between bg-slate-50/50">
+              <h3 className="text-sm font-bold text-foreground flex items-center gap-1.5">
+                <Camera className="w-4 h-4 text-primary" />
+                <span>Thông tin gửi khách hàng</span>
+              </h3>
+              <button type="button" onClick={() => setIsCaptureOpen(false)} className="text-muted-foreground hover:text-foreground text-lg cursor-pointer">×</button>
+            </div>
+            
+            <div className="p-6 space-y-4 text-xs">
+              <div className="border border-dashed border-border rounded-xl p-4 space-y-3 bg-slate-50/50 relative">
+                {/* Voucher Header */}
+                <div className="text-center border-b border-dashed border-border pb-3">
+                  <h4 className="font-extrabold text-sm text-primary">NHANH MEDIA - VÉ DỊCH VỤ</h4>
+                  <p className="text-[10px] text-muted-foreground mt-0.5">Mã đơn: {order.orderCode}</p>
+                </div>
+                
+                {/* Voucher Content */}
+                <div className="space-y-2">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Tên đơn hàng:</span>
+                    <span className="font-bold text-foreground">{order.product.name} - {order.variant.name}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Ngày mua:</span>
+                    <span className="font-semibold text-foreground">{formatDate(order.startDate)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Hết hạn:</span>
+                    <span className="font-extrabold text-rose-500">{formatDate(order.endDate)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Thời gian còn lại:</span>
+                    <span className="font-semibold text-foreground">{refundDetails.remainingDays} ngày</span>
+                  </div>
+                  <div className="flex justify-between pt-1.5 border-t border-slate-150">
+                    <span className="text-muted-foreground">Đơn giá dịch vụ:</span>
+                    <span className="font-bold text-primary">{formatVND(currentPrice)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Đã thanh toán:</span>
+                    <span className="font-bold text-green-600">{formatVND(order.amountPaid)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Người tạo đơn:</span>
+                    <span className="font-semibold text-foreground">{order.createdByUser?.name || 'Hệ thống'}</span>
+                  </div>
+                  <div className="flex justify-between pt-1.5 border-t border-slate-150">
+                    <span className="text-muted-foreground">Giá / 1 ngày:</span>
+                    <span className="font-semibold text-foreground">{formatVND(refundDetails.pricePerDay)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Hoàn tiền bảo hành:</span>
+                    <span className="font-bold text-rose-500">{formatVND(refundDetails.refundAmount)}</span>
+                  </div>
+                </div>
+                
+                {/* Warranty Info */}
+                <div className="pt-3 border-t border-dashed border-border text-center">
+                  <span className="inline-block px-2.5 py-1 rounded bg-amber-500/10 text-amber-600 font-extrabold text-[9px] uppercase tracking-wider">
+                    Bảo hành 1 đổi 1 trong suốt chu kỳ
+                  </span>
+                </div>
+              </div>
+            </div>
+            
+            <div className="px-6 py-4 bg-muted/20 border-t border-border flex justify-end gap-3">
+              <Button type="button" variant="outline" size="sm" onClick={() => setIsCaptureOpen(false)}>
+                Đóng
+              </Button>
+              <Button 
+                type="button" 
+                variant="primary" 
+                size="sm" 
+                onClick={handleCopyVoucherImage}
+                className="flex items-center gap-1.5 cursor-pointer font-bold"
+              >
+                <Copy className="w-4 h-4" />
+                <span>Sao chép hình ảnh</span>
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

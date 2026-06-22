@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
+import { createAuditLog } from '@/lib/audit';
 
 export async function GET(req: Request) {
   try {
@@ -79,6 +80,19 @@ export async function POST(req: Request) {
         contactUrl: contactUrl ? contactUrl.trim() : null,
         icon: icon ? icon.trim() : null
       }
+    });
+
+    await createAuditLog({
+      action: 'CREATE_SUPPLIER',
+      actionLabel: 'Tạo nguồn hàng mới',
+      module: 'suppliers',
+      entityType: 'Supplier',
+      entityId: supplier.id,
+      entityName: supplier.name,
+      description: `Đã tạo nguồn hàng mới "${supplier.name}"`,
+      newValues: supplier,
+      request: req,
+      status: 'success'
     });
 
     return NextResponse.json({ message: 'Tạo nguồn hàng thành công!', supplier });

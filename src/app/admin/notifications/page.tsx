@@ -223,8 +223,8 @@ export default function AdminNotificationsPage() {
 
       {/* Create Notification Modal */}
       {isOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fade-in">
-          <div className="bg-card border border-border w-full max-w-lg rounded-2xl shadow-xl overflow-hidden animate-fade-in">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/10 animate-fade-in">
+          <div className="bg-card border border-border w-full max-w-lg rounded-2xl shadow-[0_25px_80px_rgba(0,0,0,0.28)] overflow-hidden animate-fade-in">
             <div className="px-6 py-5 border-b border-border flex items-center gap-2">
               <div
                 className="w-8 h-8 rounded-lg flex items-center justify-center"

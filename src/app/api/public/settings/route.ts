@@ -19,6 +19,14 @@ export async function GET() {
       }
     });
 
+    if (settings && settings.logoUrl && settings.logoUrl.includes('theselfishmeme.co.uk')) {
+      await prisma.websiteSettings.update({
+        where: { id: 'default' },
+        data: { logoUrl: null }
+      });
+      settings.logoUrl = null;
+    }
+
     if (!settings) {
       // Auto-create default settings record if it doesn't exist
       const newSettings = await prisma.websiteSettings.create({

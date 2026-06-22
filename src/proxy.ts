@@ -9,7 +9,10 @@ export async function proxy(req: NextRequest) {
   if (
     pathname.startsWith('/_next') ||
     pathname === '/api/auth/login' ||
-    pathname === '/api/auth/logout' || // Allow login/logout APIs without authentication
+    pathname === '/api/auth/logout' ||
+    pathname === '/api/auth/register' ||
+    pathname === '/api/auth/forgot-password' ||
+    pathname === '/api/auth/reset-password' ||
     pathname.startsWith('/api/cron') || // Cron job has its own token protection
     pathname.startsWith('/api/public/') || // Public settings API
     pathname.includes('.') || // Static files like favicon.ico, logo.png
@@ -24,8 +27,14 @@ export async function proxy(req: NextRequest) {
 
   // 3. User is authenticated
   if (user) {
-    // If trying to access /login, redirect to correct dashboard
-    if (pathname === '/login' || pathname === '/') {
+    // If trying to access login or guest pages, redirect to correct dashboard
+    if (
+      pathname === '/login' ||
+      pathname === '/' ||
+      pathname === '/register' ||
+      pathname === '/forgot-password' ||
+      pathname === '/reset-password'
+    ) {
       const dashboardPath = user.role === 'admin' ? '/admin/dashboard' : '/dashboard';
       return NextResponse.redirect(new NextUrl(dashboardPath, req.url));
     }
@@ -59,8 +68,13 @@ export async function proxy(req: NextRequest) {
   }
 
   // 4. User is NOT authenticated
-  // Allow login page access
-  if (pathname === '/login') {
+  // Allow login and other guest page access
+  if (
+    pathname === '/login' ||
+    pathname === '/register' ||
+    pathname === '/forgot-password' ||
+    pathname === '/reset-password'
+  ) {
     return NextResponse.next();
   }
 

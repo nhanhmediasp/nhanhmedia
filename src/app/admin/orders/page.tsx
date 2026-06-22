@@ -56,6 +56,9 @@ interface Order {
   createdAt: string;
   supplierId?: string | null;
   supplier?: SupplierInfo | null;
+  importPrice?: number | null;
+  note?: string | null;
+  internalNote?: string | null;
 }
 
 type SortField = 'orderCode' | 'customerName' | 'price' | 'startDate' | 'endDate' | 'createdAt';
@@ -117,6 +120,80 @@ export default function AdminOrdersPage() {
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
   const PAGE_SIZE = 20;
+
+  // Quick Edit Modal State
+  const [quickEditOrder, setQuickEditOrder] = useState<Order | null>(null);
+  const [quickStatus, setQuickStatus] = useState('');
+  const [quickAmountPaid, setQuickAmountPaid] = useState('');
+  const [quickCustomPrice, setQuickCustomPrice] = useState('');
+  const [quickImportPrice, setQuickImportPrice] = useState('');
+  const [quickSupplierId, setQuickSupplierId] = useState('');
+  const [quickNote, setQuickNote] = useState('');
+  const [quickInternalNote, setQuickInternalNote] = useState('');
+  const [quickStartDate, setQuickStartDate] = useState('');
+  const [quickEndDate, setQuickEndDate] = useState('');
+  const [savingQuickEdit, setSavingQuickEdit] = useState(false);
+
+  const handleOpenQuickEdit = (order: Order) => {
+    setQuickEditOrder(order);
+    setQuickStatus(order.status);
+    setQuickAmountPaid(String(order.amountPaid ?? 0));
+    setQuickCustomPrice(order.customPrice !== null ? String(order.customPrice) : '');
+    setQuickImportPrice(order.importPrice !== null ? String(order.importPrice) : '');
+    setQuickSupplierId(order.supplierId || '');
+    setQuickNote(order.note || '');
+    setQuickInternalNote(order.internalNote || '');
+    setQuickStartDate(order.startDate ? new Date(order.startDate).toISOString().substring(0, 10) : '');
+    setQuickEndDate(order.endDate ? new Date(order.endDate).toISOString().substring(0, 10) : '');
+  };
+
+  const handleSaveQuickEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!quickEditOrder) return;
+    setSavingQuickEdit(true);
+    try {
+      const res = await fetch(`/api/orders/${quickEditOrder.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          status: quickStatus,
+          amountPaid: quickAmountPaid === '' ? 0 : parseFloat(quickAmountPaid),
+          customPrice: quickCustomPrice === '' ? null : parseFloat(quickCustomPrice),
+          importPrice: quickImportPrice === '' ? null : parseFloat(quickImportPrice),
+          supplierId: quickSupplierId || null,
+          note: quickNote,
+          internalNote: quickInternalNote,
+          startDate: quickStartDate || undefined,
+          endDate: quickEndDate || undefined,
+        }),
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        showToast('Sửa nhanh đơn hàng thành công!', 'success');
+        setOrders(prev => prev.map(o => o.id === quickEditOrder.id ? { 
+          ...o, 
+          status: data.order.status,
+          amountPaid: data.order.amountPaid,
+          customPrice: data.order.customPrice,
+          importPrice: data.order.importPrice,
+          supplierId: data.order.supplierId,
+          supplier: data.order.supplier,
+          note: data.order.note,
+          internalNote: data.order.internalNote,
+          startDate: data.order.startDate,
+          endDate: data.order.endDate,
+        } : o));
+        setQuickEditOrder(null);
+      } else {
+        showToast(data.error || 'Cập nhật thất bại.', 'error');
+      }
+    } catch {
+      showToast('Lỗi kết nối máy chủ.', 'error');
+    } finally {
+      setSavingQuickEdit(false);
+    }
+  };
 
   const fetchData = async () => {
     setLoading(true);
@@ -215,7 +292,7 @@ export default function AdminOrdersPage() {
       setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
     } else {
       setSortField(field);
-      setSortDirection('asc');
+      setSortDirection(field === 'createdAt' ? 'desc' : 'asc');
     }
   };
 
@@ -291,12 +368,21 @@ export default function AdminOrdersPage() {
         const priceB = b.customPrice !== null ? b.customPrice : b.price;
         return (priceA - priceB) * dir;
       }
-      case 'startDate':
-        return (new Date(a.startDate).getTime() - new Date(b.startDate).getTime()) * dir;
-      case 'endDate':
-        return (new Date(a.endDate).getTime() - new Date(b.endDate).getTime()) * dir;
-      case 'createdAt':
-        return (new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()) * dir;
+      case 'startDate': {
+        const dateA = a.startDate ? new Date(a.startDate).getTime() : 0;
+        const dateB = b.startDate ? new Date(b.startDate).getTime() : 0;
+        return (dateA - dateB) * dir;
+      }
+      case 'endDate': {
+        const dateA = a.endDate ? new Date(a.endDate).getTime() : 0;
+        const dateB = b.endDate ? new Date(b.endDate).getTime() : 0;
+        return (dateA - dateB) * dir;
+      }
+      case 'createdAt': {
+        const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return (dateA - dateB) * dir;
+      }
       default:
         return 0;
     }
@@ -345,7 +431,15 @@ export default function AdminOrdersPage() {
         o.createdByUser?.name || '',
         o.createdByUser?.role || '',
         (o.customPrice !== null && o.customPrice !== undefined) ? o.customPrice : (o.price || 0),
-        o.status || '',
+        ({
+          new: 'Mới tạo',
+          processing: 'Đang xử lý',
+          running: 'Đang chạy',
+          expired_soon: 'Sắp hết hạn',
+          expired: 'Đã hết hạn',
+          cancelled: 'Đã hủy',
+          refunded: 'Đã bảo hành'
+        }[o.status?.toLowerCase()] || o.status || ''),
         formatDate(o.startDate),
         formatDate(o.endDate),
         formatDateTime(o.createdAt),
@@ -617,6 +711,13 @@ export default function AdminOrdersPage() {
                             </button>
                           </Link>
                           <button
+                            onClick={() => handleOpenQuickEdit(o)}
+                            className="p-1.5 text-slate-500 hover:text-primary rounded-lg hover:bg-slate-100 dark:hover:bg-zinc-800 cursor-pointer"
+                            title="Sửa nhanh"
+                          >
+                            <Edit2 className="w-3.5 h-3.5" />
+                          </button>
+                          <button
                             onClick={() => setDeleteId(o.id)}
                             className="p-1.5 text-slate-500 hover:text-rose-500 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/20 cursor-pointer"
                             title="Xóa đơn hàng"
@@ -676,6 +777,139 @@ export default function AdminOrdersPage() {
         isDanger={true}
         isLoading={deleting}
       />
+
+      {/* Quick Edit Order Modal */}
+      {quickEditOrder && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-transparent">
+          <div 
+            className="fixed inset-0 bg-slate-900/10 pointer-events-none" 
+            style={{ zIndex: -1 }} 
+          />
+          <div 
+            className="w-full max-w-lg rounded-2xl overflow-hidden bg-card border border-border shadow-2xl animate-scale-in"
+            style={{ 
+              boxShadow: '0 25px 80px rgba(0,0,0,0.22), 0 0 0 1px rgba(0,0,0,0.05)',
+              background: 'var(--card, #fff)'
+            }}
+          >
+            <form onSubmit={handleSaveQuickEdit}>
+              <div className="px-6 py-4 border-b border-border flex items-center justify-between">
+                <h3 className="text-sm font-bold text-foreground">Sửa nhanh đơn hàng: <span className="text-primary">{quickEditOrder.orderCode}</span></h3>
+                <button type="button" onClick={() => setQuickEditOrder(null)} className="text-muted-foreground hover:text-foreground text-lg cursor-pointer">×</button>
+              </div>
+              <div className="px-6 py-4 space-y-4 max-h-[60vh] overflow-y-auto">
+                {/* Status and Supplier */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Trạng thái dịch vụ</label>
+                    <select
+                      value={quickStatus}
+                      onChange={(e) => setQuickStatus(e.target.value)}
+                      className="w-full px-3 py-2.5 text-sm bg-input border border-border rounded-xl text-foreground focus:outline-none focus:border-primary focus:ring-2 focus:ring-ring cursor-pointer"
+                    >
+                      {statuses.map((s) => (
+                        <option key={s.value} value={s.value}>{s.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Nguồn hàng</label>
+                    <select
+                      value={quickSupplierId}
+                      onChange={(e) => setQuickSupplierId(e.target.value)}
+                      className="w-full px-3 py-2.5 text-sm bg-input border border-border rounded-xl text-foreground focus:outline-none focus:border-primary focus:ring-2 focus:ring-ring cursor-pointer"
+                    >
+                      <option value="">Không chọn nguồn hàng</option>
+                      {suppliers.map((s) => (
+                        <option key={s.id} value={s.id}>{s.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                {/* Pricing */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Giá tùy chỉnh (VND)</label>
+                    <input
+                      type="number"
+                      value={quickCustomPrice}
+                      onChange={(e) => setQuickCustomPrice(e.target.value)}
+                      placeholder="Mặc định"
+                      className="w-full px-3 py-2.5 text-sm bg-input border border-border rounded-xl text-foreground focus:outline-none focus:border-primary focus:ring-2 focus:ring-ring"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Giá nhập gốc (VND)</label>
+                    <input
+                      type="number"
+                      value={quickImportPrice}
+                      onChange={(e) => setQuickImportPrice(e.target.value)}
+                      placeholder="0"
+                      className="w-full px-3 py-2.5 text-sm bg-input border border-border rounded-xl text-foreground focus:outline-none focus:border-primary focus:ring-2 focus:ring-ring"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Đã trả (VND)</label>
+                    <input
+                      type="number"
+                      value={quickAmountPaid}
+                      onChange={(e) => setQuickAmountPaid(e.target.value)}
+                      className="w-full px-3 py-2.5 text-sm bg-input border border-border rounded-xl text-foreground focus:outline-none focus:border-primary focus:ring-2 focus:ring-ring"
+                    />
+                  </div>
+                </div>
+
+                {/* Dates */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Ngày bắt đầu</label>
+                    <input
+                      type="date"
+                      value={quickStartDate}
+                      onChange={(e) => setQuickStartDate(e.target.value)}
+                      className="w-full px-3 py-2.5 text-sm bg-input border border-border rounded-xl text-foreground focus:outline-none focus:border-primary focus:ring-2 focus:ring-ring"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Ngày hết hạn</label>
+                    <input
+                      type="date"
+                      value={quickEndDate}
+                      onChange={(e) => setQuickEndDate(e.target.value)}
+                      className="w-full px-3 py-2.5 text-sm bg-input border border-border rounded-xl text-foreground focus:outline-none focus:border-primary focus:ring-2 focus:ring-ring"
+                    />
+                  </div>
+                </div>
+
+                {/* Notes */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Ghi chú khách hàng</label>
+                  <textarea
+                    value={quickNote}
+                    onChange={(e) => setQuickNote(e.target.value)}
+                    rows={2}
+                    className="w-full px-3 py-2 text-sm bg-input border border-border rounded-xl text-foreground focus:outline-none focus:border-primary focus:ring-2 focus:ring-ring resize-y"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Ghi chú nội bộ</label>
+                  <textarea
+                    value={quickInternalNote}
+                    onChange={(e) => setQuickInternalNote(e.target.value)}
+                    rows={2}
+                    className="w-full px-3 py-2 text-sm bg-input border border-border rounded-xl text-foreground focus:outline-none focus:border-primary focus:ring-2 focus:ring-ring resize-y"
+                  />
+                </div>
+              </div>
+              <div className="px-6 py-4 border-t border-border flex justify-end gap-3 bg-muted/20">
+                <Button variant="outline" size="sm" type="button" onClick={() => setQuickEditOrder(null)}>Hủy</Button>
+                <Button variant="primary" size="sm" type="submit" loading={savingQuickEdit}>Lưu thay đổi</Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

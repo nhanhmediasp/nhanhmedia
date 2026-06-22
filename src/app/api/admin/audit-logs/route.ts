@@ -95,3 +95,60 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: 'Lỗi tải nhật ký hoạt động.' }, { status: 500 });
   }
 }
+
+export async function DELETE(req: Request) {
+  try {
+    const userRole = req.headers.get('x-user-role');
+    
+    // Authorization Check: Only Admin allowed
+    if (userRole !== 'admin') {
+      return NextResponse.json({ error: 'Chỉ Admin mới có quyền xóa nhật ký hoạt động.' }, { status: 403 });
+    }
+
+    const { searchParams } = new URL(req.url);
+    const mode = searchParams.get('mode') || 'all'; // 'all' or 'olderThan'
+    const days = parseInt(searchParams.get('days') || '30');
+
+    let deletedCount = 0;
+    let description = '';
+
+    if (mode === 'all') {
+      const result = await prisma.auditLog.deleteMany();
+      deletedCount = result.count;
+      description = `Đã xóa toàn bộ nhật ký hoạt động (${deletedCount} bản ghi) khỏi hệ thống`;
+    } else if (mode === 'olderThan') {
+      const cutoff = new Date();
+      cutoff.setDate(cutoff.getDate() - days);
+      const result = await prisma.auditLog.deleteMany({
+        where: {
+          createdAt: {
+            lt: cutoff,
+          },
+        },
+      });
+      deletedCount = result.count;
+      description = `Đã xóa các bản ghi nhật ký hoạt động cũ hơn ${days} ngày trước (đã xóa ${deletedCount} bản ghi)`;
+    } else {
+      return NextResponse.json({ error: 'Chế độ dọn dẹp không hợp lệ.' }, { status: 400 });
+    }
+
+    // Import and create audit log for security accountability
+    const { createAuditLog } = await import('@/lib/audit');
+    await createAuditLog({
+      action: 'CLEAR_AUDIT_LOGS',
+      actionLabel: 'Dọn dẹp Nhật ký',
+      module: 'settings',
+      description,
+      request: req,
+      status: 'success'
+    });
+
+    return NextResponse.json({
+      message: `Đã dọn dẹp thành công ${deletedCount} bản ghi nhật ký hoạt động.`,
+      deletedCount,
+    });
+  } catch (error) {
+    console.error('Delete audit logs error:', error);
+    return NextResponse.json({ error: 'Lỗi khi dọn dẹp nhật ký hoạt động.' }, { status: 500 });
+  }
+}

@@ -97,7 +97,7 @@ export default function ProductStatsDetailPage({ params }: { params: Promise<{ i
 
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
-  const PAGE_SIZE = 10;
+  const PAGE_SIZE = 20;
 
   const fetchProductStats = async () => {
     setLoading(true);

@@ -280,7 +280,7 @@ export default function AdminUsersPage() {
       {/* Header */}
       <PageHeader
         title="Quản lý Tài khoản"
-        description="Quản lý thông tin CTV, Đại lý, và Thành viên. Thêm mới tài khoản và phân quyền vai trò."
+        description="Quản lý thông tin CTV và Đại lý. Thêm mới tài khoản và phân quyền vai trò."
       >
         <Button onClick={openAddModal} className="flex items-center gap-2 cursor-pointer">
           <Plus className="w-4 h-4" />
@@ -313,7 +313,6 @@ export default function AdminUsersPage() {
               >
                 <option value="">Tất cả vai trò</option>
                 <option value="admin">Quản trị viên (Admin)</option>
-                <option value="member">Thành viên (Member)</option>
                 <option value="collaborator">Cộng tác viên (CTV)</option>
                 <option value="agency">Đại lý (Agency)</option>
               </select>
@@ -442,8 +441,8 @@ export default function AdminUsersPage() {
 
       {/* Add/Edit User Modal */}
       {isOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fade-in">
-          <div className="bg-card border border-border w-full max-w-md rounded-2xl shadow-xl overflow-hidden animate-fade-in">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/10 animate-fade-in">
+          <div className="bg-card border border-border w-full max-w-md rounded-2xl shadow-[0_25px_80px_rgba(0,0,0,0.28)] overflow-hidden animate-fade-in">
             <div className="px-6 py-5 border-b border-border">
               <h3 className="text-lg font-bold text-foreground">
                 {editId ? 'Chỉnh sửa tài khoản Người dùng' : 'Thêm mới Tài khoản'}
@@ -546,8 +545,8 @@ export default function AdminUsersPage() {
 
       {/* Send Email Modal */}
       {isEmailModalOpen && emailTargetUser && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fade-in">
-          <div className="bg-card border border-border w-full max-w-lg rounded-2xl shadow-xl overflow-hidden animate-fade-in">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/10 animate-fade-in">
+          <div className="bg-card border border-border w-full max-w-lg rounded-2xl shadow-[0_25px_80px_rgba(0,0,0,0.28)] overflow-hidden animate-fade-in">
             <div className="px-6 py-5 border-b border-border flex justify-between items-center">
               <h3 className="text-base font-bold text-foreground">
                 Gửi Email tới: {emailTargetUser.name}

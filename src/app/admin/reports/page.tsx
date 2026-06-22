@@ -225,7 +225,15 @@ export default function AdminReportsPage() {
       item.cost,
       item.importPrice,
       item.profit,
-      item.status,
+      ({
+        new: 'Mới tạo',
+        processing: 'Đang xử lý',
+        running: 'Đang chạy',
+        expired_soon: 'Sắp hết hạn',
+        expired: 'Đã hết hạn',
+        cancelled: 'Đã hủy',
+        refunded: 'Đã bảo hành'
+      }[item.status?.toLowerCase()] || item.status),
       formatDate(item.startDate),
       formatDate(item.endDate),
     ]);

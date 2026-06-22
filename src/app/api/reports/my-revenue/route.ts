@@ -59,6 +59,7 @@ export async function GET(req: Request) {
     const revenueToday = sumOrderRev(ordersToday) + sumRenewalRev(renewalsToday);
     const revenueMonth = sumOrderRev(ordersMonth) + sumRenewalRev(renewalsMonth);
     const totalOrdersCount = allMyOrders.length;
+    const expiringSoonCount = allMyOrders.filter(o => o.status.toLowerCase() === 'expired_soon').length;
 
     // Total lifetime revenue
     const lifetimeRevenue = sumOrderRev(allMyOrders) + sumRenewalRev(allMyRenewals);
@@ -135,6 +136,7 @@ export async function GET(req: Request) {
         lifetimeRevenue,
         totalOrdersCount,
         myCustomerCount,
+        expiringSoonCount,
       },
       charts: {
         dailyRevenue,

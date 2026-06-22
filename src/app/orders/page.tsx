@@ -153,7 +153,7 @@ export default function UserOrdersPage() {
       setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
     } else {
       setSortField(field);
-      setSortDirection('asc');
+      setSortDirection(field === 'createdAt' ? 'desc' : 'asc');
     }
   };
 
@@ -201,12 +201,21 @@ export default function UserOrdersPage() {
         const priceB = b.customPrice !== null ? b.customPrice : b.price;
         return (priceA - priceB) * dir;
       }
-      case 'startDate':
-        return (new Date(a.startDate).getTime() - new Date(b.startDate).getTime()) * dir;
-      case 'endDate':
-        return (new Date(a.endDate).getTime() - new Date(b.endDate).getTime()) * dir;
-      case 'createdAt':
-        return (new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()) * dir;
+      case 'startDate': {
+        const dateA = a.startDate ? new Date(a.startDate).getTime() : 0;
+        const dateB = b.startDate ? new Date(b.startDate).getTime() : 0;
+        return (dateA - dateB) * dir;
+      }
+      case 'endDate': {
+        const dateA = a.endDate ? new Date(a.endDate).getTime() : 0;
+        const dateB = b.endDate ? new Date(b.endDate).getTime() : 0;
+        return (dateA - dateB) * dir;
+      }
+      case 'createdAt': {
+        const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return (dateA - dateB) * dir;
+      }
       default:
         return 0;
     }

@@ -12,6 +12,7 @@ import {
   TrendingUp,
   Package,
   Activity,
+  Clock,
 } from 'lucide-react';
 import { useAuth } from '@/components/AuthContext';
 
@@ -21,6 +22,7 @@ interface OverviewStats {
   lifetimeRevenue: number;
   totalOrdersCount: number;
   myCustomerCount: number;
+  expiringSoonCount: number;
 }
 
 interface RecentOrder {
@@ -117,10 +119,11 @@ export default function UserDashboardPage() {
             className="border-emerald-100 dark:border-emerald-950/20"
           />
           <StatCard
-            title="Khách hàng phụ trách"
-            value={`${stats.myCustomerCount} khách`}
-            icon={<Users className="w-5.5 h-5.5 text-indigo-500" />}
-            className="border-indigo-100 dark:border-indigo-950/20"
+            title="Đơn sắp hết hạn"
+            value={`${stats.expiringSoonCount || 0} đơn`}
+            icon={<Clock className="w-5.5 h-5.5 text-rose-500" />}
+            className="border-rose-100 dark:border-rose-950/20"
+            iconColor="danger"
           />
         </div>
       )}

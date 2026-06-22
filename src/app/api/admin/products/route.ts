@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
+import { createAuditLog } from '@/lib/audit';
 
 export async function GET() {
   try {
@@ -125,6 +126,19 @@ export async function POST(req: Request) {
       }
 
       return product;
+    });
+
+    await createAuditLog({
+      action: 'CREATE_PRODUCT',
+      actionLabel: 'Tạo sản phẩm mới',
+      module: 'products',
+      entityType: 'Product',
+      entityId: newProduct.id,
+      entityName: newProduct.name,
+      description: `Đã tạo sản phẩm mới "${newProduct.name}" (Slug: ${newProduct.slug})`,
+      newValues: newProduct,
+      request: req,
+      status: 'success'
     });
 
     return NextResponse.json({ message: 'Tạo sản phẩm thành công!', product: newProduct });
