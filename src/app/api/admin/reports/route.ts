@@ -107,6 +107,8 @@ export async function GET(req: Request) {
       topCustomersGroup,
       // Status distribution (groupBy thay vì findMany toàn bảng)
       statusGroupBy,
+      // Total customers count
+      totalCustomersCount,
     ] = await Promise.all([
 
       // ① Tổng revenue dùng COALESCE (chính xác khi mix price/customPrice)
@@ -207,6 +209,9 @@ export async function GET(req: Request) {
         by: ['status'],
         _count: { id: true },
       }),
+      
+      // ⑬ Total customers count
+      prisma.customer.count(),
     ]);
 
     console.timeEnd('[reports] phase1 parallel');
@@ -356,6 +361,7 @@ export async function GET(req: Request) {
         totalImport,
         ordersWithImportPrice: ordersWithImportCount,
         orderCount:            detailOrdersTotal,
+        totalCustomers:        totalCustomersCount,
         totalPages:            Math.ceil(detailOrdersTotal / pageSize),
         currentPage:           page,
         pageSize,

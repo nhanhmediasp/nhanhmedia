@@ -147,6 +147,7 @@ export default function AdminReportsPage() {
         setTotalImport(data.filteredReport.totalImport || 0);
         setTotalPages(data.filteredReport.totalPages || 1);
         setTotalOrderCount(data.filteredReport.orderCount || 0);
+        setTotalCustomers(data.filteredReport.totalCustomers || 0);
         setDailyChartData(data.charts.dailyRevenue || []);
         setTopCreators(data.charts?.topCreators || []);
         setTopCustomers(data.charts?.topCustomers || []);
@@ -377,42 +378,53 @@ export default function AdminReportsPage() {
         </CardContent>
       </Card>
 
-      {/* Stats Cards overview in reporting */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-6">
-        <StatCard
-          title="Doanh thu bộ lọc"
-          value={formatVND(totalRevenue)}
-          description="Doanh thu tính theo bộ lọc"
-        />
-        <StatCard
-          title="Chi phí bộ lọc (Giá nhập)"
-          value={formatVND(totalImport)}
-          description="Tổng vốn nhập theo bộ lọc"
-        />
-        <StatCard
-          title="Lợi nhuận bộ lọc"
-          value={formatVND(totalProfit)}
-          description="Lợi nhuận (Doanh thu - Giá nhập)"
-        />
-        <StatCard
-          title="Doanh thu 7 ngày qua"
-          value={formatVND(revenueLast7Days)}
-          trend={revenueLast7DaysGrowth !== undefined ? {
-            value: `${revenueLast7DaysGrowth >= 0 ? '+' : '-'}${Math.abs(revenueLast7DaysGrowth).toFixed(1)}% - 7 ngày trước`,
-            isPositive: revenueLast7DaysGrowth >= 0
-          } : undefined}
-          description="Hệ thống 7 ngày qua"
-        />
-        <StatCard
-          title="Số lượng Đơn hàng"
-          value={`${reportData.length} đơn`}
-          description="Đơn hàng theo bộ lọc"
-        />
-        <StatCard
-          title="Tổng số khách hàng"
-          value={`${totalCustomers} khách`}
-          description="Khách hàng trên hệ thống"
-        />
+      {/* Consolidated Financial Stats Overview */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Consolidated Financial Card */}
+        <Card className="lg:col-span-2 bg-gradient-to-br from-[#a145ab]/5 to-transparent border border-[#a145ab]/15 relative overflow-hidden animate-fade-in">
+          <div className="absolute right-0 top-0 translate-x-10 -translate-y-10 w-40 h-40 bg-[#a145ab]/5 rounded-full blur-2xl pointer-events-none" />
+          <CardHeader className="py-5 border-b border-border/40">
+            <CardTitle className="text-xs font-extrabold text-[#a145ab] uppercase tracking-widest flex items-center gap-2">
+              <DollarSign className="w-4 h-4" />
+              <span>Tổng quan Tài chính (Theo bộ lọc)</span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="py-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 divide-y md:divide-y-0 md:divide-x divide-border/60">
+              <div className="space-y-1.5 pb-4 md:pb-0">
+                <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest">Tổng Doanh thu</span>
+                <div className="text-2xl font-black text-slate-800 dark:text-slate-100 leading-none">{formatVND(totalRevenue)}</div>
+                <p className="text-[10px] font-medium text-slate-400">Bao gồm doanh thu đơn mới & gia hạn</p>
+              </div>
+              <div className="space-y-1.5 pt-4 md:pt-0 md:pl-6 pb-4 md:pb-0">
+                <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest">Chi phí (Giá nhập)</span>
+                <div className="text-2xl font-black text-rose-500 leading-none">{formatVND(totalImport)}</div>
+                <p className="text-[10px] font-medium text-slate-400">Tổng chi phí nhập từ nguồn hàng</p>
+              </div>
+              <div className="space-y-1.5 pt-4 md:pt-0 md:pl-6">
+                <span className="text-[10px] font-extrabold text-emerald-600 dark:text-emerald-400 uppercase tracking-widest">Lợi nhuận ròng</span>
+                <div className="text-2xl font-black text-emerald-600 dark:text-emerald-400 leading-none">{formatVND(totalProfit)}</div>
+                <p className="text-[10px] font-medium text-emerald-500">Lợi nhuận thực tế (Doanh thu - Vốn)</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Counts Card */}
+        <Card className="flex flex-col justify-center bg-card animate-fade-in">
+          <CardContent className="py-6 space-y-6">
+            <div className="space-y-1.5 border-b border-border/60 pb-4">
+              <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest block">Số lượng Đơn hàng</span>
+              <div className="text-2xl font-black text-slate-800 dark:text-slate-100 leading-none">{totalOrderCount} đơn</div>
+              <p className="text-[10px] font-medium text-slate-400">Đơn hàng ghi nhận theo bộ lọc</p>
+            </div>
+            <div className="space-y-1.5">
+              <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest block">Tổng số khách hàng</span>
+              <div className="text-2xl font-black text-slate-800 dark:text-slate-100 leading-none">{totalCustomers} khách</div>
+              <p className="text-[10px] font-medium text-slate-400">Tổng khách hàng đăng ký trên hệ thống</p>
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       {/* SVG Column charts for daily trends (side-by-side) */}

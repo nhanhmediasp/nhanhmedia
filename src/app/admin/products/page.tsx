@@ -246,24 +246,24 @@ export default function AdminProductsPage() {
                   </div>
 
                   {/* Right: Actions */}
-                  <div className="flex lg:flex-col items-center justify-end gap-2.5 shrink-0 self-end lg:self-start">
-                    <Link href={`/admin/products/${product.id}`} className="w-full sm:w-auto">
-                      <Button variant="outline" size="sm" className="w-full flex items-center justify-center gap-2 cursor-pointer border-emerald-200 text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/20">
+                  <div className="flex flex-wrap items-center gap-2 shrink-0 self-end lg:self-start">
+                    <Link href={`/admin/products/${product.id}`}>
+                      <Button variant="outline" size="sm" className="flex items-center gap-1.5 border-emerald-200 text-emerald-600 hover:bg-emerald-50 cursor-pointer">
                         <Eye className="w-3.5 h-3.5" />
                         <span>Xem số liệu</span>
                       </Button>
                     </Link>
-                    <Link href={`/admin/products/${product.id}/edit`} className="w-full sm:w-auto">
-                      <Button variant="outline" size="sm" className="w-full flex items-center justify-center gap-2 cursor-pointer">
+                    <Link href={`/admin/products/${product.id}/edit`}>
+                      <Button variant="outline" size="sm" className="flex items-center gap-1.5 border-[#a145ab]/30 text-[#a145ab] hover:bg-[#a145ab]/5 cursor-pointer">
                         <Edit2 className="w-3.5 h-3.5" />
                         <span>Sửa</span>
                       </Button>
                     </Link>
                     <Button
-                      variant="ghost"
+                      variant="outline"
                       size="sm"
                       onClick={() => setDeleteId(product.id)}
-                      className="w-full sm:w-auto text-rose-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/20 cursor-pointer"
+                      className="border-rose-200 text-rose-500 hover:bg-rose-50 hover:text-rose-600 cursor-pointer flex items-center gap-1.5"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                       <span>Xóa</span>

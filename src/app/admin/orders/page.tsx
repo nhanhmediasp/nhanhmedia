@@ -92,6 +92,44 @@ function SortableHeader({ label, field, currentField, currentDirection, onSort, 
   );
 }
 
+function getStatusTagStyles(status: string, isSelected: boolean) {
+  if (!isSelected) {
+    return 'bg-slate-50 border-border text-slate-500 hover:bg-slate-100 dark:bg-zinc-900/30 dark:border-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-800/50';
+  }
+  switch (status) {
+    case 'new':
+      return 'bg-blue-50 border-blue-500 text-blue-600 dark:bg-blue-950/20 dark:text-blue-400 font-bold shadow-[0_2px_8px_rgba(59,130,246,0.15)]';
+    case 'processing':
+      return 'bg-amber-50 border-amber-500 text-amber-600 dark:bg-amber-950/20 dark:text-amber-400 font-bold shadow-[0_2px_8px_rgba(245,158,11,0.15)]';
+    case 'running':
+      return 'bg-emerald-50 border-emerald-500 text-emerald-600 dark:bg-emerald-950/20 dark:text-emerald-400 font-bold shadow-[0_2px_8px_rgba(16,185,129,0.15)]';
+    case 'expired_soon':
+      return 'bg-yellow-50 border-yellow-500 text-yellow-600 dark:bg-yellow-950/20 dark:text-yellow-400 font-bold shadow-[0_2px_8px_rgba(202,138,4,0.15)]';
+    case 'expired':
+      return 'bg-slate-100 border-slate-500 text-slate-700 dark:bg-zinc-800 dark:border-zinc-500 dark:text-zinc-300 font-bold shadow-[0_2px_8px_rgba(100,116,139,0.15)]';
+    case 'cancelled':
+      return 'bg-rose-50 border-rose-500 text-rose-600 dark:bg-rose-950/20 dark:text-rose-400 font-bold shadow-[0_2px_8px_rgba(244,63,94,0.15)]';
+    case 'refunded':
+      return 'bg-[#a145ab]/10 border-[#a145ab] text-[#a145ab] dark:bg-[#a145ab]/20 dark:text-[#f3d0f7] font-bold shadow-[0_2px_8px_rgba(161,69,171,0.15)]';
+    default:
+      return 'bg-[#a145ab]/10 border-[#a145ab] text-[#a145ab] font-bold';
+  }
+}
+
+function getSupplierTagStyles(isSelected: boolean, index: number) {
+  if (!isSelected) {
+    return 'bg-slate-50 border-border text-slate-500 hover:bg-slate-100 dark:bg-zinc-900/30 dark:border-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-800/50';
+  }
+  const colors = [
+    'bg-indigo-50 border-indigo-500 text-indigo-600 dark:bg-indigo-950/20 dark:text-indigo-400 font-bold shadow-[0_2px_8px_rgba(99,102,241,0.15)]',
+    'bg-pink-50 border-pink-500 text-pink-600 dark:bg-pink-950/20 dark:text-pink-400 font-bold shadow-[0_2px_8px_rgba(236,72,153,0.15)]',
+    'bg-cyan-50 border-cyan-500 text-cyan-600 dark:bg-cyan-950/20 dark:text-cyan-400 font-bold shadow-[0_2px_8px_rgba(6,182,212,0.15)]',
+    'bg-teal-50 border-teal-500 text-teal-600 dark:bg-teal-950/20 dark:text-teal-400 font-bold shadow-[0_2px_8px_rgba(20,184,166,0.15)]',
+    'bg-violet-50 border-violet-500 text-violet-600 dark:bg-violet-950/20 dark:text-violet-400 font-bold shadow-[0_2px_8px_rgba(139,92,246,0.15)]',
+  ];
+  return colors[index % colors.length];
+}
+
 export default function AdminOrdersPage() {
   const router = useRouter();
   const [orders, setOrders] = useState<Order[]>([]);
@@ -133,6 +171,19 @@ export default function AdminOrdersPage() {
   const [quickStartDate, setQuickStartDate] = useState('');
   const [quickEndDate, setQuickEndDate] = useState('');
   const [savingQuickEdit, setSavingQuickEdit] = useState(false);
+
+  const topSuppliers = React.useMemo(() => {
+    const counts: Record<string, number> = {};
+    orders.forEach(o => {
+      if (o.supplierId) {
+        counts[o.supplierId] = (counts[o.supplierId] || 0) + 1;
+      }
+    });
+    return [...suppliers]
+      .map(s => ({ ...s, count: counts[s.id] || 0 }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 5);
+  }, [orders, suppliers]);
 
   const handleOpenQuickEdit = (order: Order) => {
     setQuickEditOrder(order);
@@ -799,38 +850,66 @@ export default function AdminOrdersPage() {
               </div>
               <div className="px-6 py-4 space-y-4 max-h-[60vh] overflow-y-auto">
                 {/* Status and Supplier */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 gap-4">
                   <div>
-                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Trạng thái dịch vụ</label>
-                    <select
-                      value={quickStatus}
-                      onChange={(e) => setQuickStatus(e.target.value)}
-                      className="w-full px-3 py-2.5 text-sm bg-input border border-border rounded-xl text-foreground focus:outline-none focus:border-primary focus:ring-2 focus:ring-ring cursor-pointer"
-                    >
-                      {statuses.map((s) => (
-                        <option key={s.value} value={s.value}>{s.label}</option>
-                      ))}
-                    </select>
+                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Trạng thái dịch vụ</label>
+                    <div className="flex flex-wrap gap-1.5">
+                      {statuses.map((s) => {
+                        const isSelected = quickStatus === s.value;
+                        return (
+                          <button
+                            key={s.value}
+                            type="button"
+                            onClick={() => setQuickStatus(s.value)}
+                            className={`px-2.5 py-1 text-[10px] font-bold rounded-lg border transition-all duration-200 cursor-pointer ${getStatusTagStyles(s.value, isSelected)}`}
+                          >
+                            {s.label}
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
-                  <div>
-                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Nguồn hàng</label>
-                    <select
-                      value={quickSupplierId}
-                      onChange={(e) => setQuickSupplierId(e.target.value)}
-                      className="w-full px-3 py-2.5 text-sm bg-input border border-border rounded-xl text-foreground focus:outline-none focus:border-primary focus:ring-2 focus:ring-ring cursor-pointer"
-                    >
-                      <option value="">Không chọn nguồn hàng</option>
-                      {suppliers.map((s) => (
-                        <option key={s.id} value={s.id}>{s.name}</option>
-                      ))}
-                    </select>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Nguồn hàng</label>
+                      <select
+                        value={quickSupplierId}
+                        onChange={(e) => setQuickSupplierId(e.target.value)}
+                        className="w-full px-3 py-2.5 text-sm bg-input border border-border rounded-xl text-foreground focus:outline-none focus:border-primary focus:ring-2 focus:ring-ring cursor-pointer"
+                      >
+                        <option value="">Không chọn nguồn hàng</option>
+                        {suppliers.map((s) => (
+                          <option key={s.id} value={s.id}>{s.name}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      {topSuppliers.length > 0 && (
+                        <div className="h-full flex flex-col justify-end pb-0.5">
+                          <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest block mb-1">Gợi ý nhanh:</span>
+                          <div className="flex flex-wrap gap-1">
+                            {topSuppliers.map((s, index) => (
+                              <button
+                                key={s.id}
+                                type="button"
+                                onClick={() => setQuickSupplierId(s.id)}
+                                className={`px-2 py-0.5 text-[10px] font-semibold rounded-md border transition-all duration-200 cursor-pointer ${getSupplierTagStyles(quickSupplierId === s.id, index)}`}
+                              >
+                                {s.name}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
 
                 {/* Pricing */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div>
-                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Giá tùy chỉnh (VND)</label>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Giá tùy chỉnh (VND)</label>
                     <input
                       type="number"
                       value={quickCustomPrice}
@@ -840,7 +919,7 @@ export default function AdminOrdersPage() {
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Giá nhập gốc (VND)</label>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Giá nhập gốc (VND)</label>
                     <input
                       type="number"
                       value={quickImportPrice}
@@ -850,7 +929,7 @@ export default function AdminOrdersPage() {
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Đã trả (VND)</label>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Đã trả (VND)</label>
                     <input
                       type="number"
                       value={quickAmountPaid}
