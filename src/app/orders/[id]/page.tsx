@@ -74,6 +74,7 @@ export default function UserOrderDetailPage({ params }: { params: Promise<{ id: 
   const router = useRouter();
 
   const [order, setOrder] = useState<Order | null>(null);
+  const [auditLogs, setAuditLogs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Renewal Modal State
@@ -123,6 +124,7 @@ export default function UserOrderDetailPage({ params }: { params: Promise<{ id: 
       if (res.ok) {
         const data = await res.json();
         setOrder(data.order);
+        setAuditLogs(data.auditLogs || []);
         // Set default renewal variant to current variant
         const variants = data.order.product?.variants;
         if (variants?.length > 0) {
@@ -424,6 +426,45 @@ export default function UserOrderDetailPage({ params }: { params: Promise<{ id: 
                       ))}
                     </tbody>
                   </table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Activity Log Timeline */}
+          <Card>
+            <CardHeader className="py-4">
+              <CardTitle className="flex items-center gap-2">
+                <History className="w-5 h-5 text-primary" />
+                <span>Nhật ký hoạt động đơn hàng ({auditLogs.length})</span>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {auditLogs.length === 0 ? (
+                <p className="text-sm text-muted-foreground italic text-center py-4">Chưa có nhật ký hoạt động nào.</p>
+              ) : (
+                <div className="relative pl-6 border-l border-border space-y-6">
+                  {auditLogs.map((log) => (
+                    <div key={log.id} className="relative">
+                      {/* Timeline dot */}
+                      <span className="absolute -left-[29.5px] top-1 w-2.5 h-2.5 rounded-full bg-primary ring-4 ring-background" />
+                      
+                      <div className="space-y-1">
+                        <div className="flex items-center justify-between gap-4">
+                          <span className="text-xs font-bold text-foreground bg-primary/5 px-2.5 py-0.5 rounded-xl border border-primary/10">
+                            {log.actionLabel}
+                          </span>
+                          <span className="text-[10px] text-muted-foreground font-medium">
+                            {formatDateTime(log.createdAt)}
+                          </span>
+                        </div>
+                        <p className="text-xs text-foreground font-semibold">{log.description}</p>
+                        <div className="text-[10px] text-slate-500 font-medium">
+                          Thực hiện bởi: <span className="font-bold text-slate-700 dark:text-slate-350">{log.actorName}</span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               )}
             </CardContent>

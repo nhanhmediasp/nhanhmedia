@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Button, Input, Select, Card, CardContent, Badge, showToast, Dialog, PageHeader, RoleBadge, EmptyState, LoadingSkeleton } from '@/components/ui';
-import { Search, Plus, Edit2, Trash2, UserCheck, ShieldAlert, DollarSign, Loader2, ArrowUpDown, ArrowUp, ArrowDown, Eye } from 'lucide-react';
+import { Search, Plus, Edit2, Trash2, UserCheck, ShieldAlert, DollarSign, Loader2, ArrowUpDown, ArrowUp, ArrowDown, Eye, Mail } from 'lucide-react';
 import { useAuth } from '@/components/AuthContext';
 
 interface UserItem {
@@ -70,7 +70,7 @@ export default function AdminUsersPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [phone, setPhone] = useState('');
-  const [userRole, setUserRole] = useState('member');
+  const [userRole, setUserRole] = useState('collaborator');
   const [status, setStatus] = useState('active');
   const [note, setNote] = useState('');
   const [saving, setSaving] = useState(false);
@@ -78,6 +78,55 @@ export default function AdminUsersPage() {
   // Delete states
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
+
+  // Email states
+  const [isEmailModalOpen, setIsEmailModalOpen] = useState(false);
+  const [emailTargetUser, setEmailTargetUser] = useState<UserItem | null>(null);
+  const [emailSubject, setEmailSubject] = useState('');
+  const [emailMessage, setEmailMessage] = useState('');
+  const [isResetPasswordMail, setIsResetPasswordMail] = useState(false);
+  const [sendingEmail, setSendingEmail] = useState(false);
+
+  const handleOpenEmailModal = (u: UserItem) => {
+    setEmailTargetUser(u);
+    setEmailSubject('Thông báo từ Ban quản trị Nhanh Media');
+    setEmailMessage('');
+    setIsResetPasswordMail(false);
+    setIsEmailModalOpen(true);
+  };
+
+  const handleSendEmail = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!emailTargetUser) return;
+    if (!isResetPasswordMail && !emailMessage.trim()) {
+      showToast('Vui lòng nhập nội dung email.', 'error');
+      return;
+    }
+
+    setSendingEmail(true);
+    try {
+      const res = await fetch(`/api/admin/users/${emailTargetUser.id}/send-email`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          subject: emailSubject,
+          message: emailMessage,
+          isResetPassword: isResetPasswordMail
+        })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        showToast(data.message || 'Gửi email thành công!', 'success');
+        setIsEmailModalOpen(false);
+      } else {
+        showToast(data.error || 'Gửi email thất bại.', 'error');
+      }
+    } catch {
+      showToast('Lỗi kết nối máy chủ.', 'error');
+    } finally {
+      setSendingEmail(false);
+    }
+  };
 
   const fetchUsers = async () => {
     setLoading(true);
@@ -107,7 +156,7 @@ export default function AdminUsersPage() {
     setEmail('');
     setPassword('');
     setPhone('');
-    setUserRole('member');
+    setUserRole('collaborator');
     setStatus('active');
     setNote('');
     setIsOpen(true);
@@ -359,6 +408,13 @@ export default function AdminUsersPage() {
                           </button>
                         </Link>
                         <button
+                          onClick={() => handleOpenEmailModal(u)}
+                          className="p-1.5 text-slate-500 hover:text-primary rounded-lg hover:bg-slate-100 dark:hover:bg-zinc-800 cursor-pointer"
+                          title="Gửi Email cho CTV"
+                        >
+                          <Mail className="w-3.5 h-3.5" />
+                        </button>
+                        <button
                           onClick={() => openEditModal(u)}
                           className="p-1.5 text-slate-500 hover:text-primary rounded-lg hover:bg-slate-100 dark:hover:bg-zinc-800 cursor-pointer"
                           title="Sửa tài khoản"
@@ -434,7 +490,6 @@ export default function AdminUsersPage() {
                     label="Phân quyền vai trò *"
                     options={[
                       { value: 'admin', label: 'Quản trị viên (Admin)' },
-                      { value: 'member', label: 'Thành viên (Member)' },
                       { value: 'collaborator', label: 'Cộng tác viên (CTV)' },
                       { value: 'agency', label: 'Đại lý (Agency)' },
                     ]}
@@ -488,6 +543,76 @@ export default function AdminUsersPage() {
         isDanger={true}
         isLoading={deleting}
       />
+
+      {/* Send Email Modal */}
+      {isEmailModalOpen && emailTargetUser && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fade-in">
+          <div className="bg-card border border-border w-full max-w-lg rounded-2xl shadow-xl overflow-hidden animate-fade-in">
+            <div className="px-6 py-5 border-b border-border flex justify-between items-center">
+              <h3 className="text-base font-bold text-foreground">
+                Gửi Email tới: {emailTargetUser.name}
+              </h3>
+            </div>
+            
+            <form onSubmit={handleSendEmail}>
+              <div className="p-6 space-y-4">
+                <div className="flex items-center gap-2 mb-2 bg-slate-50 dark:bg-zinc-800/40 p-3 rounded-xl border border-border">
+                  <input
+                    type="checkbox"
+                    id="isResetPasswordMail"
+                    checked={isResetPasswordMail}
+                    onChange={(e) => setIsResetPasswordMail(e.target.checked)}
+                    className="w-4 h-4 rounded text-primary border-border focus:ring-primary cursor-pointer"
+                  />
+                  <label htmlFor="isResetPasswordMail" className="text-xs font-bold text-slate-700 dark:text-slate-350 cursor-pointer">
+                    Gửi liên kết đặt lại mật khẩu nhanh
+                  </label>
+                </div>
+
+                {!isResetPasswordMail && (
+                  <>
+                    <Input
+                      label="Tiêu đề Email *"
+                      placeholder="Nhập tiêu đề email..."
+                      value={emailSubject}
+                      onChange={(e) => setEmailSubject(e.target.value)}
+                      required
+                    />
+                    <div className="space-y-1">
+                      <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">
+                        Nội dung Email *
+                      </label>
+                      <textarea
+                        rows={6}
+                        placeholder="Nhập nội dung thư gửi..."
+                        value={emailMessage}
+                        onChange={(e) => setEmailMessage(e.target.value)}
+                        required
+                        className="w-full px-3.5 py-2.5 text-sm bg-input border border-border rounded-xl text-foreground focus:outline-none focus:border-primary focus:ring-2 focus:ring-ring"
+                      />
+                    </div>
+                  </>
+                )}
+
+                {isResetPasswordMail && (
+                  <p className="text-xs text-amber-500 leading-normal bg-amber-500/5 p-3 rounded-lg border border-amber-500/10">
+                    Hệ thống sẽ tự động sinh mã Token đặt lại mật khẩu bảo mật (hết hạn trong 15 phút) và gửi email trực tiếp cho CTV {emailTargetUser.email}.
+                  </p>
+                )}
+              </div>
+
+              <div className="px-6 py-4 bg-muted/50 border-t border-border flex justify-end gap-3">
+                <Button type="button" variant="outline" size="sm" onClick={() => setIsEmailModalOpen(false)} disabled={sendingEmail}>
+                  Hủy
+                </Button>
+                <Button type="submit" variant="primary" size="sm" loading={sendingEmail}>
+                  Gửi Email ngay
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

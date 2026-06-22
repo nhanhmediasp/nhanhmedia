@@ -11,7 +11,7 @@ export async function PUT(req: Request) {
     }
 
     const body = await req.json();
-    const { name, phone, oldPassword, newPassword, avatarUrl } = body;
+    const { name, email, phone, oldPassword, newPassword, avatarUrl } = body;
 
     if (!name) {
       return NextResponse.json({ error: 'Tên hiển thị là bắt buộc.' }, { status: 400 });
@@ -25,13 +25,24 @@ export async function PUT(req: Request) {
       return NextResponse.json({ error: 'Tài khoản không tồn tại.' }, { status: 404 });
     }
 
-    const oldValues = { name: user.name, phone: user.phone };
+    const oldValues = { name: user.name, email: user.email, phone: user.phone };
 
     const updateData: any = {
       name: name.trim(),
       phone: phone ? phone.trim() : null,
       avatarUrl: avatarUrl ? avatarUrl.trim() : null,
     };
+
+    if (email && email.toLowerCase().trim() !== user.email.toLowerCase()) {
+      const emailLower = email.toLowerCase().trim();
+      const existingEmail = await prisma.user.findFirst({
+        where: { email: emailLower },
+      });
+      if (existingEmail) {
+        return NextResponse.json({ error: 'Địa chỉ Email này đã được sử dụng.' }, { status: 400 });
+      }
+      updateData.email = emailLower;
+    }
 
     // If trying to change password
     const changedPassword = newPassword && newPassword.trim() !== '';
@@ -53,7 +64,7 @@ export async function PUT(req: Request) {
       data: updateData,
     });
 
-    const newValues = { name: updated.name, phone: updated.phone };
+    const newValues = { name: updated.name, email: updated.email, phone: updated.phone };
 
     await createAuditLog({
       actor: {

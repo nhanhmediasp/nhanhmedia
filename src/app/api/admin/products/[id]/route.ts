@@ -159,3 +159,69 @@ export async function DELETE(
     return NextResponse.json({ error: 'Lỗi xóa sản phẩm.' }, { status: 500 });
   }
 }
+
+export async function GET(
+  req: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params;
+
+    const product = await prisma.product.findUnique({
+      where: { id },
+      include: {
+        variants: {
+          include: {
+            prices: true,
+          },
+        },
+        orders: {
+          include: {
+            customer: {
+              select: { id: true, name: true, phone: true }
+            },
+            createdByUser: {
+              select: { id: true, name: true, role: true }
+            },
+            variant: {
+              select: { id: true, name: true }
+            }
+          },
+          orderBy: { createdAt: 'desc' }
+        }
+      }
+    });
+
+    if (!product) {
+      return NextResponse.json({ error: 'Sản phẩm không tồn tại.' }, { status: 404 });
+    }
+
+    // Compute stats
+    let totalRevenue = 0;
+    let totalCost = 0;
+    
+    // Non-cancelled orders contribute to stats
+    const activeOrders = product.orders.filter(o => o.status !== 'cancelled');
+    activeOrders.forEach(o => {
+      const price = o.customPrice !== null ? o.customPrice : o.price;
+      const cost = o.importPrice !== null ? o.importPrice : 0;
+      totalRevenue += price;
+      totalCost += cost;
+    });
+
+    const totalProfit = totalRevenue - totalCost;
+
+    return NextResponse.json({
+      product: {
+        ...product,
+        totalRevenue,
+        totalCost,
+        totalProfit,
+        orderCount: activeOrders.length
+      }
+    });
+  } catch (error) {
+    console.error('Get product detail stats error:', error);
+    return NextResponse.json({ error: 'Lỗi tải thống kê sản phẩm.' }, { status: 500 });
+  }
+}

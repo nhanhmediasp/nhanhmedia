@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 
-// GET all products (including variants and prices) for Admin
 export async function GET() {
   try {
     const products = await prisma.product.findMany({
@@ -11,10 +10,46 @@ export async function GET() {
             prices: true,
           },
         },
+        orders: {
+          where: {
+            status: { not: 'cancelled' }
+          },
+          select: {
+            price: true,
+            customPrice: true,
+            importPrice: true
+          }
+        }
       },
       orderBy: { createdAt: 'desc' },
     });
-    return NextResponse.json({ products });
+
+    const productsWithStats = products.map((product) => {
+      let totalRevenue = 0;
+      let totalCost = 0;
+
+      product.orders.forEach((o) => {
+        const price = o.customPrice !== null ? o.customPrice : o.price;
+        const cost = o.importPrice !== null ? o.importPrice : 0;
+        totalRevenue += price;
+        totalCost += cost;
+      });
+
+      const totalProfit = totalRevenue - totalCost;
+
+      // Extract orders from response to avoid sending huge arrays
+      const { orders, ...rest } = product;
+
+      return {
+        ...rest,
+        totalRevenue,
+        totalCost,
+        totalProfit,
+        orderCount: orders.length,
+      };
+    });
+
+    return NextResponse.json({ products: productsWithStats });
   } catch (error) {
     console.error('Get products admin error:', error);
     return NextResponse.json({ error: 'Lỗi tải danh sách sản phẩm.' }, { status: 500 });

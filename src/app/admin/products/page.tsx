@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Button, Badge, Card, CardContent, showToast, Dialog, PageHeader, EmptyState, LoadingSkeleton } from '@/components/ui';
-import { Edit2, Plus, Trash2, Search, Package, Layers } from 'lucide-react';
+import { Edit2, Plus, Trash2, Search, Package, Layers, Eye } from 'lucide-react';
 
 interface Price {
   role: string;
@@ -27,6 +27,10 @@ interface Product {
   imageUrl: string | null;
   status: string;
   variants: Variant[];
+  totalRevenue?: number;
+  totalCost?: number;
+  totalProfit?: number;
+  orderCount?: number;
 }
 
 export default function AdminProductsPage() {
@@ -175,6 +179,26 @@ export default function AdminProductsPage() {
                       <p className="text-sm text-muted-foreground line-clamp-2 max-w-2xl">{product.description}</p>
                     )}
 
+                    {/* Financial Stats Summary */}
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-slate-50 dark:bg-zinc-900/60 p-3.5 rounded-xl border border-border/60 max-w-3xl">
+                      <div className="space-y-0.5">
+                        <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wide">Số đơn đã chạy</span>
+                        <div className="text-xs font-black text-slate-800 dark:text-slate-200">{product.orderCount ?? 0} đơn</div>
+                      </div>
+                      <div className="space-y-0.5">
+                        <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wide">Tổng Doanh thu</span>
+                        <div className="text-xs font-black text-primary">{formatVND(product.totalRevenue ?? 0)}</div>
+                      </div>
+                      <div className="space-y-0.5">
+                        <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wide">Tổng Vốn nhập</span>
+                        <div className="text-xs font-black text-rose-500">{formatVND(product.totalCost ?? 0)}</div>
+                      </div>
+                      <div className="space-y-0.5">
+                        <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wide">Lợi nhuận ròng</span>
+                        <div className="text-xs font-black text-emerald-600 dark:text-emerald-400">{formatVND(product.totalProfit ?? 0)}</div>
+                      </div>
+                    </div>
+
                     {/* Variants list inside product */}
                     <div className="pt-2">
                       <div className="flex items-center gap-1.5 text-xs font-bold text-foreground uppercase tracking-wider mb-2">
@@ -223,6 +247,12 @@ export default function AdminProductsPage() {
 
                   {/* Right: Actions */}
                   <div className="flex lg:flex-col items-center justify-end gap-2.5 shrink-0 self-end lg:self-start">
+                    <Link href={`/admin/products/${product.id}`} className="w-full sm:w-auto">
+                      <Button variant="outline" size="sm" className="w-full flex items-center justify-center gap-2 cursor-pointer border-emerald-200 text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/20">
+                        <Eye className="w-3.5 h-3.5" />
+                        <span>Xem số liệu</span>
+                      </Button>
+                    </Link>
                     <Link href={`/admin/products/${product.id}/edit`} className="w-full sm:w-auto">
                       <Button variant="outline" size="sm" className="w-full flex items-center justify-center gap-2 cursor-pointer">
                         <Edit2 className="w-3.5 h-3.5" />

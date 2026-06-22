@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { calculateEndDate } from '../route';
+import { createAuditLog } from '@/lib/audit';
 
 export async function GET(
   req: Request,
@@ -56,13 +57,23 @@ export async function GET(
       return NextResponse.json({ error: 'Bạn không có quyền xem đơn hàng này.' }, { status: 403 });
     }
 
+    const auditLogs = await prisma.auditLog.findMany({
+      where: {
+        entityId: id,
+        module: 'orders',
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+    });
+
     // Hide importPrice from non-admin
     if (!isAdmin) {
       const { importPrice, ...rest } = order as any;
-      return NextResponse.json({ order: rest });
+      return NextResponse.json({ order: rest, auditLogs });
     }
 
-    return NextResponse.json({ order });
+    return NextResponse.json({ order, auditLogs });
   } catch (error) {
     console.error('Get order detail error:', error);
     return NextResponse.json({ error: 'Lỗi tải chi tiết đơn hàng.' }, { status: 500 });
@@ -178,6 +189,40 @@ export async function PUT(
           orderBy: { sentAt: 'desc' },
         },
       },
+    });
+
+    await createAuditLog({
+      action: 'UPDATE_ORDER',
+      actionLabel: 'Cập nhật đơn hàng',
+      module: 'orders',
+      entityType: 'Order',
+      entityId: id,
+      entityName: updatedOrder.orderCode,
+      description: `Đã cập nhật thông tin đơn hàng ${updatedOrder.orderCode}`,
+      oldValues: {
+        status: order.status,
+        startDate: order.startDate,
+        endDate: order.endDate,
+        note: order.note,
+        internalNote: order.internalNote,
+        customPrice: order.customPrice,
+        importPrice: order.importPrice,
+        amountPaid: order.amountPaid,
+        supplierId: order.supplierId
+      },
+      newValues: {
+        status: updatedOrder.status,
+        startDate: updatedOrder.startDate,
+        endDate: updatedOrder.endDate,
+        note: updatedOrder.note,
+        internalNote: updatedOrder.internalNote,
+        customPrice: updatedOrder.customPrice,
+        importPrice: updatedOrder.importPrice,
+        amountPaid: updatedOrder.amountPaid,
+        supplierId: updatedOrder.supplierId
+      },
+      request: req,
+      status: 'success'
     });
 
     // Hide importPrice from non-admin

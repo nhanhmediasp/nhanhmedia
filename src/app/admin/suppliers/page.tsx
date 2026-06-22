@@ -4,8 +4,39 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Card, CardContent, Button, Badge, showToast, Dialog, PageHeader, EmptyState, LoadingSkeleton, Input } from '@/components/ui';
-import { Search, Plus, Eye, Edit2, Trash2, Calendar, ExternalLink, Tag } from 'lucide-react';
+import { Search, Plus, Eye, Edit2, Trash2, Calendar, ExternalLink, Tag, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import { SupplierAvatar, SUPPLIER_ICONS, SUPPLIER_ICON_STYLES } from '@/components/SupplierAvatar';
+
+type SortField = 'name' | 'totalCost' | 'totalProfit' | 'orders' | 'createdAt';
+type SortDirection = 'asc' | 'desc';
+
+function SortableHeader({ label, field, currentField, currentDirection, onSort, className }: {
+  label: string;
+  field: SortField;
+  currentField: SortField | null;
+  currentDirection: SortDirection;
+  onSort: (field: SortField) => void;
+  className?: string;
+}) {
+  const isActive = currentField === field;
+  return (
+    <th
+      className={`px-6 py-5 cursor-pointer select-none hover:text-primary transition-colors group ${className || ''}`}
+      onClick={() => onSort(field)}
+    >
+      <div className="flex items-center gap-1.5">
+        <span>{label}</span>
+        <span className={`transition-opacity ${isActive ? 'opacity-100' : 'opacity-0 group-hover:opacity-40'}`}>
+          {isActive ? (
+            currentDirection === 'asc' ? <ArrowUp className="w-3.5 h-3.5" /> : <ArrowDown className="w-3.5 h-3.5" />
+          ) : (
+            <ArrowUpDown className="w-3.5 h-3.5" />
+          )}
+        </span>
+      </div>
+    </th>
+  );
+}
 
 interface Supplier {
   id: string;
@@ -79,6 +110,19 @@ export default function AdminSuppliersPage() {
   // Delete State
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
+
+  // Sort state
+  const [sortField, setSortField] = useState<SortField | null>(null);
+  const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
+
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDirection('asc');
+    }
+  };
 
   const fetchSuppliers = async () => {
     setLoading(true);
@@ -211,6 +255,27 @@ export default function AdminSuppliersPage() {
     (s.contactUrl && s.contactUrl.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
+  // Sort suppliers
+  const sortedSuppliers = [...filteredSuppliers].sort((a, b) => {
+    if (!sortField) return 0;
+    const dir = sortDirection === 'asc' ? 1 : -1;
+
+    switch (sortField) {
+      case 'name':
+        return a.name.localeCompare(b.name) * dir;
+      case 'totalCost':
+        return ((a.totalCost || 0) - (b.totalCost || 0)) * dir;
+      case 'totalProfit':
+        return ((a.totalProfit || 0) - (b.totalProfit || 0)) * dir;
+      case 'orders':
+        return (a._count.orders - b._count.orders) * dir;
+      case 'createdAt':
+        return (new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()) * dir;
+      default:
+        return 0;
+    }
+  });
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -258,18 +323,20 @@ export default function AdminSuppliersPage() {
             <table className="w-full border-collapse text-left text-sm">
               <thead>
                 <tr className="border-b border-border bg-muted/40 text-muted-foreground font-semibold">
-                  <th className="px-6 py-5">Nguồn hàng (Tag)</th>
+                  <th className="px-4 py-5 w-[48px] text-center text-xs">STT</th>
+                  <SortableHeader label="Nguồn hàng (Tag)" field="name" currentField={sortField} currentDirection={sortDirection} onSort={handleSort} />
                   <th className="px-6 py-5">Liên kết liên hệ</th>
-                  <th className="px-6 py-5 text-right">Vốn nhập gốc</th>
-                  <th className="px-6 py-5 text-right">Lợi nhuận ròng</th>
-                  <th className="px-6 py-5 text-center">Đơn hàng đang dùng</th>
-                  <th className="px-6 py-5 text-center">Ngày tạo</th>
+                  <SortableHeader label="Vốn nhập gốc" field="totalCost" currentField={sortField} currentDirection={sortDirection} onSort={handleSort} className="text-right" />
+                  <SortableHeader label="Lợi nhuận ròng" field="totalProfit" currentField={sortField} currentDirection={sortDirection} onSort={handleSort} className="text-right" />
+                  <SortableHeader label="Đơn hàng đang dùng" field="orders" currentField={sortField} currentDirection={sortDirection} onSort={handleSort} className="text-center" />
+                  <SortableHeader label="Ngày tạo" field="createdAt" currentField={sortField} currentDirection={sortDirection} onSort={handleSort} className="text-center" />
                   <th className="px-6 py-5 text-center">Hành động</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border bg-card">
-                {filteredSuppliers.map((s) => (
+                {sortedSuppliers.map((s, idx) => (
                   <tr key={s.id} className="hover:bg-muted/20 transition-colors">
+                    <td className="px-4 py-5 text-center text-xs font-bold text-slate-400">{idx + 1}</td>
                     <td className="px-6 py-5">
                       <div className="flex items-center gap-2">
                         <SupplierAvatar iconName={s.icon} />

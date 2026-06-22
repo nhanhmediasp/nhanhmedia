@@ -9,6 +9,7 @@ export default function UserProfilePage() {
   const { user, checkSession } = useAuth();
   
   const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [oldPassword, setOldPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -59,6 +60,7 @@ export default function UserProfilePage() {
   useEffect(() => {
     if (user) {
       setName(user.name || '');
+      setEmail(user.email || '');
       setAvatarUrl(user.avatarUrl || '');
       setUrlInput(user.avatarUrl || '');
       // Fetch phone number by calling reports or check details
@@ -115,6 +117,7 @@ export default function UserProfilePage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name,
+          email,
           phone,
           oldPassword: oldPassword || undefined,
           newPassword: newPassword || undefined,
@@ -169,17 +172,14 @@ export default function UserProfilePage() {
                   required
                 />
                 
-                <div className="w-full">
-                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
-                    Địa chỉ email (Read-only)
-                  </label>
-                  <input
-                    type="email"
-                    value={user.email}
-                    disabled
-                    className="w-full px-3 py-2 text-sm bg-[#f5f5f9] border border-border rounded-lg text-slate-400 cursor-not-allowed focus:outline-none"
-                  />
-                </div>
+                 <Input
+                  label="Địa chỉ email *"
+                  type="email"
+                  placeholder="name@example.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                />
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
+import { createAuditLog } from '@/lib/audit';
 
 // Helper to calculate end date based on start date, value and unit
 export function calculateEndDate(startDate: Date, durationValue: number, durationUnit: string): Date {
@@ -199,6 +200,28 @@ export async function POST(req: Request) {
         product: true,
         variant: true,
       },
+    });
+
+    await createAuditLog({
+      action: 'CREATE_ORDER',
+      actionLabel: 'Tạo đơn hàng mới',
+      module: 'orders',
+      entityType: 'Order',
+      entityId: newOrder.id,
+      entityName: newOrder.orderCode,
+      description: `Đã tạo đơn hàng mới ${newOrder.orderCode} cho khách hàng ${newOrder.customer.name}`,
+      newValues: {
+        id: newOrder.id,
+        orderCode: newOrder.orderCode,
+        customerId: newOrder.customerId,
+        price: newOrder.price,
+        customPrice: newOrder.customPrice,
+        status: newOrder.status,
+        startDate: newOrder.startDate,
+        endDate: newOrder.endDate
+      },
+      request: req,
+      status: 'success'
     });
 
     return NextResponse.json({

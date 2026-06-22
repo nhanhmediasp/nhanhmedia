@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { useAuth } from '@/components/AuthContext';
 import { Button, Input, showToast } from '@/components/ui';
 import { KeyRound, Mail, Zap, BarChart3, Users, Shield } from 'lucide-react';
@@ -203,6 +204,14 @@ export default function LoginPage() {
               >
                 Đăng nhập
               </Button>
+              <div className="flex items-center justify-between text-xs font-semibold text-primary pt-1">
+                <Link href="/forgot-password" className="hover:underline">
+                  Quên mật khẩu?
+                </Link>
+                <Link href="/register" className="hover:underline">
+                  Đăng ký CTV mới
+                </Link>
+              </div>
             </form>
 
             {/* Demo accounts */}

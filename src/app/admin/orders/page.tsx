@@ -107,7 +107,7 @@ export default function AdminOrdersPage() {
   const [paymentFilter, setPaymentFilter] = useState('');
 
   // Sort state
-  const [sortField, setSortField] = useState<SortField | null>(null);
+  const [sortField, setSortField] = useState<SortField | null>('createdAt');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
 
   // Delete state
