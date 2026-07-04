@@ -186,6 +186,23 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: errorMsg }, { status: 400 });
     }
 
+    // 2.5 Check role (only admin allowed)
+    if (user.role !== 'admin') {
+      await createAuditLog({
+        action: 'LOGIN_FAILED',
+        actionLabel: 'Đăng nhập thất bại - Không đủ quyền',
+        module: 'auth',
+        description: `Tài khoản ${user.email} (vai trò: ${user.role}) thử đăng nhập nhưng không có quyền admin`,
+        request: req,
+        status: 'failed',
+        errorMessage: 'Không có quyền truy cập hệ thống.',
+      });
+      return NextResponse.json(
+        { error: 'Tài khoản của bạn không có quyền truy cập hệ thống. Chỉ quản trị viên mới được phép đăng nhập.' },
+        { status: 403 }
+      );
+    }
+
     // 3. Check account status
     if (user.status === 'inactive') {
       await createAuditLog({

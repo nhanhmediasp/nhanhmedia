@@ -401,32 +401,18 @@ export default function AdminProductCreatePage() {
                           <HelpCircle className="w-3.5 h-3.5 text-slate-400" />
                         </span>
                       </h4>
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+                      <div className="grid grid-cols-1 gap-5">
                         <Input
-                          label="Giá Thành viên"
+                          label="Giá bán (VNĐ)"
                           type="number"
                           min="0"
                           placeholder="Ví dụ: 500000"
                           value={variant.prices.member}
-                          onChange={(e) => handlePriceChange(idx, 'member', e.target.value)}
-                          required
-                        />
-                        <Input
-                          label="Giá Cộng tác viên (CTV)"
-                          type="number"
-                          min="0"
-                          placeholder="Ví dụ: 450000"
-                          value={variant.prices.collaborator}
-                          onChange={(e) => handlePriceChange(idx, 'collaborator', e.target.value)}
-                          required
-                        />
-                        <Input
-                          label="Giá Đại lý"
-                          type="number"
-                          min="0"
-                          placeholder="Ví dụ: 400000"
-                          value={variant.prices.agency}
-                          onChange={(e) => handlePriceChange(idx, 'agency', e.target.value)}
+                          onChange={(e) => {
+                            handlePriceChange(idx, 'member', e.target.value);
+                            handlePriceChange(idx, 'collaborator', e.target.value);
+                            handlePriceChange(idx, 'agency', e.target.value);
+                          }}
                           required
                         />
                       </div>

@@ -24,39 +24,74 @@ import {
   History,
   Globe,
   Mail,
+  FolderGit2,
 } from 'lucide-react';
 import { Badge } from './ui';
 
-interface NavItem {
+interface NavLink {
   label: string;
   href: string;
   icon: React.ComponentType<{ className?: string }>;
-  badge?: string;
 }
 
-const adminMainLinks: NavItem[] = [
-  { label: 'Tổng quan',          href: '/admin/dashboard',          icon: LayoutDashboard },
-  { label: 'Báo cáo doanh thu',  href: '/admin/reports',            icon: BarChart3 },
-  { label: 'Quản lý CTV',        href: '/admin/users',              icon: UserCheck },
-  { label: 'Khách hàng',         href: '/admin/customers',          icon: Users },
-  { label: 'Sản phẩm & Giá',    href: '/admin/products',           icon: Package },
-  { label: 'Đơn hàng dịch vụ',  href: '/admin/orders',             icon: FileText },
-  { label: 'Nguồn hàng',         href: '/admin/suppliers',          icon: Tag },
-  { label: 'Nhật ký hoạt động',  href: '/admin/audit-logs',         icon: History },
+const menuItems = [
+  {
+    type: 'link' as const,
+    label: 'Tổng quan',
+    href: '/admin/dashboard',
+    icon: LayoutDashboard,
+  },
+  {
+    type: 'link' as const,
+    label: 'Báo cáo doanh thu',
+    href: '/admin/reports',
+    icon: BarChart3,
+  },
+  {
+    type: 'group' as const,
+    key: 'projects',
+    label: 'Quản lý Dự Án',
+    icon: FolderGit2,
+    subLinks: [
+      { label: 'Quản lý Dự Án', href: '/admin/projects', icon: FolderGit2 },
+      { label: 'Khách hàng dự án', href: '/admin/projects/customers', icon: Users },
+      { label: 'Phân loại', href: '/admin/projects/categories', icon: Tag },
+      { label: 'Báo cáo chi tiết', href: '/admin/projects/dashboard', icon: FileText },
+    ],
+  },
+  {
+    type: 'group' as const,
+    key: 'usersAndCustomers',
+    label: 'Tài khoản & Khách hàng',
+    icon: Users,
+    subLinks: [
+      { label: 'Quản lý Tài khoản', href: '/admin/users', icon: UserCheck },
+      { label: 'Khách hàng', href: '/admin/customers', icon: Users },
+    ],
+  },
+  {
+    type: 'group' as const,
+    key: 'productsAndSuppliers',
+    label: 'Sản phẩm & Nguồn hàng',
+    icon: Package,
+    subLinks: [
+      { label: 'Sản phẩm & Giá', href: '/admin/products', icon: Package },
+      { label: 'Nguồn hàng', href: '/admin/suppliers', icon: Tag },
+    ],
+  },
+  {
+    type: 'link' as const,
+    label: 'Đơn hàng dịch vụ',
+    href: '/admin/orders',
+    icon: FileText,
+  },
 ];
 
-const adminSettingsLinks: NavItem[] = [
+const adminSettingsLinks = [
   { label: 'Tùy chỉnh Website',  href: '/admin/settings/website',  icon: Globe },
   { label: 'Quản lý Thông báo',  href: '/admin/notifications',      icon: Megaphone },
   { label: 'Cấu hình Email',     href: '/admin/settings/email',     icon: Mail },
-];
-
-const userLinks: NavItem[] = [
-  { label: 'Tổng quan',        href: '/dashboard',           icon: LayoutDashboard },
-  { label: 'Xem sản phẩm',    href: '/products',            icon: Package },
-  { label: 'Đơn hàng của tôi', href: '/orders',              icon: FileText },
-  { label: 'Khách hàng',      href: '/customers',           icon: Users },
-  { label: 'Doanh thu cá nhân',href: '/reports/my-revenue', icon: BarChart3 },
+  { label: 'Nhật ký hoạt động',  href: '/admin/audit-logs',         icon: History },
 ];
 
 export default function Navigation({ children }: { children: React.ReactNode }) {
@@ -66,7 +101,19 @@ export default function Navigation({ children }: { children: React.ReactNode }) 
   const [notifications, setNotifications] = useState<any[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [showNotifications, setShowNotifications] = useState(false);
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({
+    projects: false,
+    usersAndCustomers: false,
+    productsAndSuppliers: false,
+    settings: false,
+  });
+
+  const toggleGroup = (key: string) => {
+    setOpenGroups(prev => ({
+      ...prev,
+      [key]: !prev[key],
+    }));
+  };
   const [showUserDropdown, setShowUserDropdown] = useState(false);
 
   // Dynamic branding & public website settings
@@ -116,12 +163,20 @@ export default function Navigation({ children }: { children: React.ReactNode }) 
   }, [user]);
 
   useEffect(() => {
-    const isSubPathActive = adminSettingsLinks.some(
-      link => pathname === link.href || pathname.startsWith(link.href + '/')
-    );
-    if (isSubPathActive) {
-      setIsSettingsOpen(true);
-    }
+    const isProjectsActive = pathname.startsWith('/admin/projects');
+    const isUsersCustomersActive = pathname.startsWith('/admin/users') || pathname.startsWith('/admin/customers');
+    const isProductsSuppliersActive = pathname.startsWith('/admin/products') || pathname.startsWith('/admin/suppliers');
+    const isSettingsActive = 
+      pathname.startsWith('/admin/settings') || 
+      pathname.startsWith('/admin/notifications') || 
+      pathname.startsWith('/admin/audit-logs');
+
+    setOpenGroups((prev) => ({
+      projects: isProjectsActive ? true : prev.projects,
+      usersAndCustomers: isUsersCustomersActive ? true : prev.usersAndCustomers,
+      productsAndSuppliers: isProductsSuppliersActive ? true : prev.productsAndSuppliers,
+      settings: isSettingsActive ? true : prev.settings,
+    }));
   }, [pathname]);
 
   const markAsRead = async (id: string) => {
@@ -186,9 +241,7 @@ export default function Navigation({ children }: { children: React.ReactNode }) 
     }
   };
 
-  const links = isAdmin
-    ? adminMainLinks
-    : userLinks.filter(link => !(link.href === '/customers' && user.role === 'collaborator'));
+  const links = menuItems;
 
   const NavContent = () => (
     <div className="flex flex-col h-full" style={{ background: '#fff' }}>
@@ -234,83 +287,172 @@ export default function Navigation({ children }: { children: React.ReactNode }) 
       </div>
 
       <nav className="flex-1 px-3 pb-4 space-y-0.5 overflow-y-auto">
-        {links.map((link) => {
-          const isActive = pathname === link.href || pathname.startsWith(link.href + '/');
-          const Icon = link.icon;
+        {links.map((item) => {
+          if (item.type === 'link') {
+            const isActive = pathname === item.href || pathname.startsWith(item.href + '/');
+            const Icon = item.icon;
 
-          return (
-            <Link
-              key={link.href}
-              href={link.href}
-              onClick={() => setIsMobileOpen(false)}
-              className="group flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 relative"
-              style={
-                isActive
-                  ? {
-                      background: 'linear-gradient(90deg,#f3d0f7 0%,#ede1f7 100%)',
-                      color: '#a145ab',
-                    }
-                  : {
-                      color: '#697a8d',
-                      background: 'transparent',
-                    }
-              }
-            >
-              {/* Active indicator bar */}
-              {isActive && (
-                <span
-                  className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 rounded-r-full"
-                  style={{ background: '#a145ab' }}
-                />
-              )}
-
-              {/* Icon wrapper */}
-              <span
-                className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 transition-all duration-200"
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                onClick={() => setIsMobileOpen(false)}
+                className="group flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 relative"
                 style={
                   isActive
-                    ? { background: '#a145ab', color: '#fff', boxShadow: '0 3px 8px rgba(161,69,171,0.35)' }
-                    : { background: 'rgba(108,117,147,0.06)', color: '#a1acb8' }
+                    ? {
+                        background: 'linear-gradient(90deg,#f3d0f7 0%,#ede1f7 100%)',
+                        color: '#a145ab',
+                      }
+                    : {
+                        color: '#697a8d',
+                        background: 'transparent',
+                      }
                 }
               >
-                <Icon className="w-4 h-4" />
-              </span>
+                {isActive && (
+                  <span
+                    className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 rounded-r-full"
+                    style={{ background: '#a145ab' }}
+                  />
+                )}
 
-              <span className="flex-1 leading-none">{link.label}</span>
+                <span
+                  className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 transition-all duration-200"
+                  style={
+                    isActive
+                      ? { background: '#a145ab', color: '#fff', boxShadow: '0 3px 8px rgba(161,69,171,0.35)' }
+                      : { background: 'rgba(108,117,147,0.06)', color: '#a1acb8' }
+                  }
+                >
+                  <Icon className="w-4 h-4" />
+                </span>
 
-              {isActive && (
-                <ChevronRight className="w-3.5 h-3.5 opacity-60 shrink-0" />
-              )}
-            </Link>
-          );
+                <span className="flex-1 leading-none">{item.label}</span>
+
+                {isActive && (
+                  <ChevronRight className="w-3.5 h-3.5 opacity-60 shrink-0" />
+                )}
+              </Link>
+            );
+          } else {
+            // Group Item
+            const isOpen = openGroups[item.key] || false;
+            const Icon = item.icon;
+            
+            // Check if any sublink is active to highlight the group icon/label slightly
+            const isGroupActive = item.subLinks.some(
+              sub => pathname === sub.href || pathname.startsWith(sub.href + '/')
+            );
+
+            return (
+              <div key={item.key} className="space-y-0.5">
+                <button
+                  type="button"
+                  onClick={() => toggleGroup(item.key)}
+                  className="group flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 relative w-full text-left cursor-pointer focus:outline-none"
+                  style={{
+                    color: isGroupActive ? '#a145ab' : '#697a8d',
+                    background: 'transparent',
+                  }}
+                >
+                  <span
+                    className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 transition-all duration-200"
+                    style={{
+                      background: isGroupActive ? 'rgba(161,69,171,0.08)' : 'rgba(108,117,147,0.06)',
+                      color: isGroupActive ? '#a145ab' : '#a1acb8',
+                    }}
+                  >
+                    <Icon className="w-4 h-4" />
+                  </span>
+                  <span className="flex-1 leading-none">{item.label}</span>
+                  <ChevronRight
+                    className={`w-3.5 h-3.5 opacity-60 shrink-0 transition-transform duration-200 ${
+                      isOpen ? 'rotate-90' : ''
+                    }`}
+                  />
+                </button>
+
+                {isOpen && (
+                  <div className="pl-6 space-y-0.5 mt-0.5 transition-all duration-300">
+                    {item.subLinks.map((subLink) => {
+                      const isSubActive = pathname === subLink.href || pathname.startsWith(subLink.href + '/');
+                      const SubIcon = subLink.icon;
+
+                      return (
+                        <Link
+                          key={subLink.href}
+                          href={subLink.href}
+                          onClick={() => setIsMobileOpen(false)}
+                          className="group flex items-center gap-3 px-3.5 py-2 rounded-xl text-xs font-bold transition-all duration-200 relative"
+                          style={
+                            isSubActive
+                              ? {
+                                  background: '#fcf6fd',
+                                  color: '#a145ab',
+                                }
+                              : {
+                                  color: '#697a8d',
+                                  background: 'transparent',
+                                }
+                          }
+                        >
+                          {isSubActive && (
+                            <span
+                              className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-4 rounded-r-full"
+                              style={{ background: '#a145ab' }}
+                            />
+                          )}
+                          <span
+                            className="w-6 h-6 rounded-md flex items-center justify-center shrink-0 transition-all duration-200"
+                            style={
+                              isSubActive
+                                ? { background: 'rgba(161,69,171,0.08)', color: '#a145ab' }
+                                : { background: 'rgba(108,117,147,0.04)', color: '#a1acb8' }
+                            }
+                          >
+                            <SubIcon className="w-3.5 h-3.5" />
+                          </span>
+                          <span className="flex-1 leading-none">{subLink.label}</span>
+                        </Link>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          }
         })}
 
         {isAdmin && (
           <div className="space-y-0.5">
             <button
               type="button"
-              onClick={() => setIsSettingsOpen(!isSettingsOpen)}
+              onClick={() => toggleGroup('settings')}
               className="group flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 relative w-full text-left cursor-pointer focus:outline-none"
               style={{
-                color: '#697a8d',
+                color: openGroups.settings ? '#a145ab' : '#697a8d',
                 background: 'transparent',
               }}
             >
               <span
                 className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 transition-all duration-200"
-                style={{ background: 'rgba(108,117,147,0.06)', color: '#a1acb8' }}
+                style={{
+                  background: openGroups.settings ? 'rgba(161,69,171,0.08)' : 'rgba(108,117,147,0.06)',
+                  color: openGroups.settings ? '#a145ab' : '#a1acb8',
+                }}
               >
                 <Settings className="w-4 h-4" />
               </span>
               <span className="flex-1 leading-none">Cài đặt website</span>
               <ChevronRight
                 className={`w-3.5 h-3.5 opacity-60 shrink-0 transition-transform duration-200 ${
-                  isSettingsOpen ? 'rotate-90' : ''
+                  openGroups.settings ? 'rotate-90' : ''
                 }`}
               />
             </button>
 
-            {isSettingsOpen && (
+            {openGroups.settings && (
               <div className="pl-6 space-y-0.5 mt-0.5 transition-all duration-300">
                 {adminSettingsLinks.map((link) => {
                   const isActive = pathname === link.href || pathname.startsWith(link.href + '/');

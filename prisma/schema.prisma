@@ -339,3 +339,139 @@ model LoginAttempt {
   @@index([lastAttempt])
   @@map("login_attempts")
 }
+
+model Project {
+  id           String        @id @default(uuid())
+  name         String
+  description  String?
+  startDate    DateTime      @map("start_date")
+  endDate      DateTime?     @map("end_date")
+  status       String        @default("running") // running, completed, paused
+  progress     Float         @default(0)
+  budget       Float         @default(0)
+  categoryId   String?       @map("category_id")
+  customerId   String?       @map("customer_id")
+  createdAt    DateTime      @default(now()) @map("created_at")
+  updatedAt    DateTime      @updatedAt @map("updated_at")
+
+  category     ProjectCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  customer     ProjectCustomer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  columns      TaskColumn[]
+  tasks        Task[]
+  websiteCosts WebsiteCost[]
+  toolCosts    ToolCost[]
+  requirementNotes ProjectRequirementNote[]
+
+  @@map("projects")
+}
+
+model TaskColumn {
+  id        String   @id @default(uuid())
+  projectId String   @map("project_id")
+  name      String
+  position  Int      @default(0)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  tasks     Task[]
+
+  @@map("task_columns")
+}
+
+model Task {
+  id          String     @id @default(uuid())
+  projectId   String     @map("project_id")
+  columnId    String     @map("column_id")
+  title       String
+  description String?
+  assignee    String?
+  deadline    DateTime?
+  priority    String     @default("medium") // low, medium, high
+  tags        String?
+  position    Int        @default(0)
+  createdAt   DateTime   @default(now()) @map("created_at")
+  updatedAt   DateTime   @updatedAt @map("updated_at")
+
+  project     Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  column      TaskColumn @relation(fields: [columnId], references: [id], onDelete: Cascade)
+
+  @@map("tasks")
+}
+
+model WebsiteCost {
+  id        String   @id @default(uuid())
+  projectId String   @map("project_id")
+  name      String
+  type      String
+  amount    Float
+  date      DateTime @default(now()) @map("date")
+  note      String?
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@map("website_costs")
+}
+
+model ToolCost {
+  id           String    @id @default(uuid())
+  projectId    String    @map("project_id")
+  name         String
+  purpose      String?
+  plan         String    @default("free")
+  cost         Float
+  billingCycle String    @default("month") // month, year, one-time
+  nextRenewal  DateTime? @map("next_renewal")
+  note         String?
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  project      Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@map("tool_costs")
+}
+
+model ProjectCategory {
+  id        String    @id @default(uuid())
+  name      String    @unique
+  icon      String?   @default("Folder")
+  color     String?   @default("purple")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+
+  projects  Project[]
+
+  @@map("project_categories")
+}
+
+model ProjectCustomer {
+  id        String    @id @default(uuid())
+  name      String
+  phone     String?
+  zalo      String?
+  facebook  String?
+  email     String?
+  note      String?
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  projects  Project[]
+
+  @@map("project_customers")
+}
+
+model ProjectRequirementNote {
+  id          String   @id @default(uuid())
+  projectId   String   @map("project_id")
+  title       String
+  content     String
+  link        String?
+  date        DateTime @default(now())
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@map("project_requirement_notes")
+}

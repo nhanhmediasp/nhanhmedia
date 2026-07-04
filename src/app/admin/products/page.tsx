@@ -225,16 +225,8 @@ export default function AdminProductsPage() {
                                 </div>
                                 <div className="space-y-1 text-xs">
                                   <div className="flex justify-between">
-                                    <span className="text-muted-foreground font-medium">Thành viên:</span>
-                                    <span className="font-bold text-foreground">{formatVND(memberPrice)}</span>
-                                  </div>
-                                  <div className="flex justify-between">
-                                    <span className="text-muted-foreground font-medium">Cộng tác viên:</span>
-                                    <span className="font-bold text-amber-600 dark:text-amber-400">{formatVND(colPrice)}</span>
-                                  </div>
-                                  <div className="flex justify-between">
-                                    <span className="text-muted-foreground font-medium">Đại lý:</span>
-                                    <span className="font-bold text-primary">{formatVND(agencyPrice)}</span>
+                                    <span className="text-muted-foreground font-medium">Giá bán:</span>
+                                    <span className="font-bold text-primary">{formatVND(memberPrice)}</span>
                                   </div>
                                 </div>
                               </div>

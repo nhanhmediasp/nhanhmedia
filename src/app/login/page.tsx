@@ -48,16 +48,33 @@ export default function LoginPage() {
     }
   };
 
-  const handleQuickLogin = (demoEmail: string) => {
+  const handleQuickLogin = async (demoEmail: string) => {
     setEmail(demoEmail);
     setPassword('123456');
+    setLoading(true);
+    try {
+      const res  = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: demoEmail, password: '123456' }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        showToast(data.message || 'Đăng nhập thành công!', 'success');
+        login(data.user);
+        router.push(data.user.role === 'admin' ? '/admin/dashboard' : '/dashboard');
+      } else {
+        showToast(data.error || 'Đăng nhập thất bại.', 'error');
+      }
+    } catch {
+      showToast('Lỗi kết nối máy chủ.', 'error');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const demoAccounts = [
     { label: 'Admin', email: 'admin@example.com', color: '#a145ab', bg: 'rgba(161,69,171,0.07)', border: 'rgba(161,69,171,0.18)' },
-    { label: 'Thành viên', email: 'member@example.com', color: '#0891b2', bg: 'rgba(6,182,212,0.07)', border: 'rgba(6,182,212,0.18)' },
-    { label: 'CTV', email: 'ctv@example.com', color: '#d97706', bg: 'rgba(245,158,11,0.07)', border: 'rgba(245,158,11,0.18)' },
-    { label: 'Đại lý', email: 'agency@example.com', color: '#16a34a', bg: 'rgba(34,197,94,0.07)', border: 'rgba(34,197,94,0.18)' },
   ];
 
   const featureList = [
@@ -204,14 +221,7 @@ export default function LoginPage() {
               >
                 Đăng nhập
               </Button>
-              <div className="flex items-center justify-between text-xs font-semibold text-primary pt-1">
-                <Link href="/forgot-password" className="hover:underline">
-                  Quên mật khẩu?
-                </Link>
-                <Link href="/register" className="hover:underline">
-                  Đăng ký CTV mới
-                </Link>
-              </div>
+
             </form>
 
             {/* Demo accounts */}
@@ -219,17 +229,17 @@ export default function LoginPage() {
               <p className="text-center text-[10px] font-bold uppercase tracking-widest mb-3" style={{ color: '#a1acb8' }}>
                 Tài khoản dùng thử — mật khẩu: 123456
               </p>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="flex justify-center">
                 {demoAccounts.map((acc) => (
                   <button
                     key={acc.email}
                     type="button"
                     onClick={() => handleQuickLogin(acc.email)}
-                    className="text-left px-3 py-2.5 rounded-xl text-[11px] font-semibold transition-all duration-150 hover:brightness-95 active:scale-[.98] cursor-pointer"
+                    className="w-full text-center px-4 py-3 rounded-xl text-[11px] font-semibold transition-all duration-150 hover:brightness-95 active:scale-[.98] cursor-pointer"
                     style={{ background: acc.bg, border: `1.5px solid ${acc.border}`, color: acc.color }}
                   >
-                    <div className="font-bold">{acc.label}</div>
-                    <div className="opacity-70 text-[10px] truncate mt-0.5">{acc.email}</div>
+                    <div className="font-bold text-xs">{acc.label} (Dùng thử)</div>
+                    <div className="opacity-70 text-[10px] mt-0.5">{acc.email}</div>
                   </button>
                 ))}
               </div>

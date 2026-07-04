@@ -29,7 +29,11 @@ export async function verifyTokenEdge(token: string): Promise<UserSessionPayload
     );
 
     // Decode base64url signature to binary array
-    const sigStr = atob(signatureB64.replace(/-/g, '+').replace(/_/g, '/'));
+    let base64Sig = signatureB64.replace(/-/g, '+').replace(/_/g, '/');
+    while (base64Sig.length % 4) {
+      base64Sig += '=';
+    }
+    const sigStr = atob(base64Sig);
     const sigBuf = new Uint8Array(sigStr.length);
     for (let i = 0; i < sigStr.length; i++) {
       sigBuf[i] = sigStr.charCodeAt(i);
@@ -39,7 +43,11 @@ export async function verifyTokenEdge(token: string): Promise<UserSessionPayload
     if (!isValid) return null;
 
     // Decode payload JSON
-    const payloadJson = atob(payloadB64.replace(/-/g, '+').replace(/_/g, '/'));
+    let base64Payload = payloadB64.replace(/-/g, '+').replace(/_/g, '/');
+    while (base64Payload.length % 4) {
+      base64Payload += '=';
+    }
+    const payloadJson = atob(base64Payload);
     const payload = JSON.parse(payloadJson);
 
     // Check expiration

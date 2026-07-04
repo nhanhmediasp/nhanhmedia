@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { verifyTokenEdge, getAuthToken } from './lib/auth-edge';
+import { TOKEN_COOKIE_NAME } from './lib/auth';
 
 export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
@@ -27,7 +28,14 @@ export async function proxy(req: NextRequest) {
 
   // 3. User is authenticated
   if (user) {
-    // If trying to access login or guest pages, redirect to correct dashboard
+    // Force only Admin role
+    if (user.role !== 'admin') {
+      const response = NextResponse.redirect(new NextUrl('/login', req.url));
+      response.cookies.delete(TOKEN_COOKIE_NAME);
+      return response;
+    }
+
+    // If trying to access login or guest pages, redirect to admin dashboard
     if (
       pathname === '/login' ||
       pathname === '/' ||
@@ -35,21 +43,21 @@ export async function proxy(req: NextRequest) {
       pathname === '/forgot-password' ||
       pathname === '/reset-password'
     ) {
-      const dashboardPath = user.role === 'admin' ? '/admin/dashboard' : '/dashboard';
-      return NextResponse.redirect(new NextUrl(dashboardPath, req.url));
+      return NextResponse.redirect(new NextUrl('/admin/dashboard', req.url));
     }
 
     // Protect Admin routes
     if (pathname.startsWith('/admin') || pathname.startsWith('/api/admin')) {
       if (user.role !== 'admin') {
-        // Not admin, redirect to user dashboard or return 403
         if (pathname.startsWith('/api/')) {
           return new NextResponse(
             JSON.stringify({ error: 'Không có quyền truy cập.' }),
             { status: 403, headers: { 'Content-Type': 'application/json' } }
           );
         }
-        return NextResponse.redirect(new NextUrl('/dashboard', req.url));
+        const response = NextResponse.redirect(new NextUrl('/login', req.url));
+        response.cookies.delete(TOKEN_COOKIE_NAME);
+        return response;
       }
     }
 
@@ -68,13 +76,17 @@ export async function proxy(req: NextRequest) {
   }
 
   // 4. User is NOT authenticated
-  // Allow login and other guest page access
+  // Redirect register, forgot-password, and reset-password to login (disabled)
   if (
-    pathname === '/login' ||
     pathname === '/register' ||
     pathname === '/forgot-password' ||
     pathname === '/reset-password'
   ) {
+    return NextResponse.redirect(new NextUrl('/login', req.url));
+  }
+
+  // Allow login page access
+  if (pathname === '/login') {
     return NextResponse.next();
   }
 
