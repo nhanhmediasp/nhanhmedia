@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
-import { Button, Card, CardHeader, CardTitle, CardContent, Input, showToast, PageHeader } from '@/components/ui';
+import { Button, Card, CardHeader, CardTitle, CardContent, Input, showToast, PageHeader, MediaPicker } from '@/components/ui';
 import { Globe, Image, Shield, Save, Mail, Settings, Share2, Upload } from 'lucide-react';
 
 interface WebsiteSettings {
@@ -47,13 +47,9 @@ export default function WebsiteSettingsPage() {
   const [logoError, setLogoError] = useState(false);
   const [faviconError, setFaviconError] = useState(false);
 
-  // Upload states
-  const [uploadingLogo, setUploadingLogo] = useState(false);
-  const [uploadingFavicon, setUploadingFavicon] = useState(false);
-
-  // Input refs
-  const logoInputRef = useRef<HTMLInputElement>(null);
-  const faviconInputRef = useRef<HTMLInputElement>(null);
+  // Picker states
+  const [logoPickerOpen, setLogoPickerOpen] = useState(false);
+  const [faviconPickerOpen, setFaviconPickerOpen] = useState(false);
 
   // Security
   const [loginLockEnabled, setLoginLockEnabled] = useState(true);
@@ -94,48 +90,7 @@ export default function WebsiteSettingsPage() {
     fetchSettings();
   }, []);
 
-  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>, type: 'logo' | 'favicon') => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    if (file.size > 2 * 1024 * 1024) {
-      showToast('Kích thước ảnh không được vượt quá 2MB.', 'error');
-      return;
-    }
-
-    if (type === 'logo') setUploadingLogo(true);
-    else setUploadingFavicon(true);
-
-    try {
-      const formData = new FormData();
-      formData.append('file', file);
-
-      const res = await fetch('/api/admin/upload', {
-        method: 'POST',
-        body: formData,
-      });
-
-      const data = await res.json();
-      if (res.ok && data.url) {
-        if (type === 'logo') {
-          setLogoUrl(data.url);
-          setLogoError(false);
-          showToast('Tải logo lên thành công!', 'success');
-        } else {
-          setFaviconUrl(data.url);
-          setFaviconError(false);
-          showToast('Tải favicon lên thành công!', 'success');
-        }
-      } else {
-        showToast(data.error || 'Lỗi khi tải ảnh lên.', 'error');
-      }
-    } catch (err) {
-      showToast('Lỗi kết nối máy chủ khi upload.', 'error');
-    } finally {
-      if (type === 'logo') setUploadingLogo(false);
-      else setUploadingFavicon(false);
-    }
-  };
+  // handleUpload removed as MediaPicker handles uploads directly
 
   const handleSave = async () => {
     setSaving(true);
@@ -342,22 +297,14 @@ export default function WebsiteSettingsPage() {
                         }}
                       />
                     </div>
-                    <input
-                      type="file"
-                      ref={logoInputRef}
-                      accept="image/*"
-                      onChange={(e) => handleUpload(e, 'logo')}
-                      className="hidden"
-                    />
                     <Button
                       type="button"
                       variant="outline"
-                      loading={uploadingLogo}
-                      onClick={() => logoInputRef.current?.click()}
+                      onClick={() => setLogoPickerOpen(true)}
                       className="cursor-pointer shrink-0 h-[42px] flex items-center gap-1.5"
                     >
                       <Upload className="w-4 h-4" />
-                      <span>Tải ảnh lên</span>
+                      <span>Tải / Chọn ảnh</span>
                     </Button>
                   </div>
                   <div className="text-xs text-muted-foreground">
@@ -403,22 +350,14 @@ export default function WebsiteSettingsPage() {
                         }}
                       />
                     </div>
-                    <input
-                      type="file"
-                      ref={faviconInputRef}
-                      accept="image/x-icon,image/png,image/svg+xml"
-                      onChange={(e) => handleUpload(e, 'favicon')}
-                      className="hidden"
-                    />
                     <Button
                       type="button"
                       variant="outline"
-                      loading={uploadingFavicon}
-                      onClick={() => faviconInputRef.current?.click()}
+                      onClick={() => setFaviconPickerOpen(true)}
                       className="cursor-pointer shrink-0 h-[42px] flex items-center gap-1.5"
                     >
                       <Upload className="w-4 h-4" />
-                      <span>Tải ảnh lên</span>
+                      <span>Tải / Chọn ảnh</span>
                     </Button>
                   </div>
                   <div className="text-xs text-muted-foreground">
@@ -579,6 +518,27 @@ export default function WebsiteSettingsPage() {
           <span>Lưu tất cả thay đổi</span>
         </Button>
       </div>
+
+      {/* Media Pickers */}
+      <MediaPicker
+        isOpen={logoPickerOpen}
+        onClose={() => setLogoPickerOpen(false)}
+        onSelect={(url) => {
+          setLogoUrl(url);
+          setLogoError(false);
+        }}
+        title="Thư viện ảnh - Chọn Logo"
+      />
+
+      <MediaPicker
+        isOpen={faviconPickerOpen}
+        onClose={() => setFaviconPickerOpen(false)}
+        onSelect={(url) => {
+          setFaviconUrl(url);
+          setFaviconError(false);
+        }}
+        title="Thư viện ảnh - Chọn Favicon"
+      />
     </div>
   );
 }

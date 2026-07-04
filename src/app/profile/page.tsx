@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Card, CardHeader, CardTitle, CardContent, Button, Input, showToast, PageHeader, RoleBadge } from '@/components/ui';
+import { Card, CardHeader, CardTitle, CardContent, Button, Input, showToast, PageHeader, RoleBadge, MediaPicker } from '@/components/ui';
 import { useAuth } from '@/components/AuthContext';
 import { User, KeyRound, Lock, Upload } from 'lucide-react';
 
@@ -19,43 +19,9 @@ export default function UserProfilePage() {
   const [avatarUrl, setAvatarUrl] = useState('');
   const [urlInput, setUrlInput] = useState('');
   const [imageLoadError, setImageLoadError] = useState(false);
-  const [uploading, setUploading] = useState(false);
-  const fileInputRef = React.useRef<HTMLInputElement>(null);
+  const [mediaPickerOpen, setMediaPickerOpen] = useState(false);
 
-  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    if (file.size > 2 * 1024 * 1024) {
-      showToast('Kích thước ảnh không được vượt quá 2MB.', 'error');
-      return;
-    }
-
-    setUploading(true);
-    try {
-      const formData = new FormData();
-      formData.append('file', file);
-
-      const res = await fetch('/api/admin/upload', {
-        method: 'POST',
-        body: formData,
-      });
-
-      const data = await res.json();
-      if (res.ok && data.url) {
-        setUrlInput(data.url);
-        setAvatarUrl(data.url);
-        setImageLoadError(false);
-        showToast('Tải ảnh đại diện lên thành công!', 'success');
-      } else {
-        showToast(data.error || 'Lỗi khi tải ảnh lên.', 'error');
-      }
-    } catch (err) {
-      showToast('Lỗi kết nối máy chủ khi upload.', 'error');
-    } finally {
-      setUploading(false);
-    }
-  };
+  // handleUpload removed as MediaPicker handles uploads directly
 
   useEffect(() => {
     if (user) {
@@ -291,22 +257,14 @@ export default function UserProfilePage() {
                       }}
                     />
                   </div>
-                  <input
-                    type="file"
-                    ref={fileInputRef}
-                    accept="image/*"
-                    onChange={handleUpload}
-                    className="hidden"
-                  />
                   <Button
                     type="button"
                     variant="outline"
-                    loading={uploading}
-                    onClick={() => fileInputRef.current?.click()}
+                    onClick={() => setMediaPickerOpen(true)}
                     className="cursor-pointer shrink-0 h-[42px] flex items-center gap-1.5"
                   >
                     <Upload className="w-4 h-4" />
-                    <span>Tải lên</span>
+                    <span>Tải / Chọn ảnh</span>
                   </Button>
                 </div>
                 {imageLoadError && urlInput && (
@@ -344,6 +302,17 @@ export default function UserProfilePage() {
           </Card>
         </div>
       </form>
+      {/* Media Picker */}
+      <MediaPicker
+        isOpen={mediaPickerOpen}
+        onClose={() => setMediaPickerOpen(false)}
+        onSelect={(url) => {
+          setUrlInput(url);
+          setAvatarUrl(url);
+          setImageLoadError(false);
+        }}
+        title="Thư viện ảnh - Chọn ảnh đại diện"
+      />
     </div>
   );
 }

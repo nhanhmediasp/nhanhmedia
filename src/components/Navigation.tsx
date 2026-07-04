@@ -62,7 +62,7 @@ const menuItems = [
   {
     type: 'group' as const,
     key: 'usersAndCustomers',
-    label: 'Tài khoản & Khách hàng',
+    label: 'Tài khoản',
     icon: Users,
     subLinks: [
       { label: 'Quản lý Tài khoản', href: '/admin/users', icon: UserCheck },
@@ -72,18 +72,13 @@ const menuItems = [
   {
     type: 'group' as const,
     key: 'productsAndSuppliers',
-    label: 'Sản phẩm & Nguồn hàng',
+    label: 'Sản phẩm',
     icon: Package,
     subLinks: [
       { label: 'Sản phẩm & Giá', href: '/admin/products', icon: Package },
       { label: 'Nguồn hàng', href: '/admin/suppliers', icon: Tag },
+      { label: 'Đơn hàng dịch vụ', href: '/admin/orders', icon: FileText },
     ],
-  },
-  {
-    type: 'link' as const,
-    label: 'Đơn hàng dịch vụ',
-    href: '/admin/orders',
-    icon: FileText,
   },
 ];
 

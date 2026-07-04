@@ -3,7 +3,7 @@
 import React, { use, useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Button, Input, Select, Textarea, Card, CardHeader, CardTitle, CardContent, showToast } from '@/components/ui';
+import { Button, Input, Select, Textarea, Card, CardHeader, CardTitle, CardContent, showToast, MediaPicker } from '@/components/ui';
 import { Plus, Trash2, ArrowLeft, Layers, HelpCircle, Loader2, ImagePlus, X, Upload } from 'lucide-react';
 
 interface Price {
@@ -35,42 +35,9 @@ export default function AdminProductEditPage({ params }: { params: Promise<{ id:
   const [imageUrl, setImageUrl] = useState('');
   const [imageLoadError, setImageLoadError] = useState(false);
   const [variants, setVariants] = useState<Variant[]>([]);
-  const [uploadingImage, setUploadingImage] = useState(false);
-  const imageInputRef = React.useRef<HTMLInputElement>(null);
+  const [mediaPickerOpen, setMediaPickerOpen] = useState(false);
 
-  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    if (file.size > 2 * 1024 * 1024) {
-      showToast('Kích thước ảnh không được vượt quá 2MB.', 'error');
-      return;
-    }
-
-    setUploadingImage(true);
-    try {
-      const formData = new FormData();
-      formData.append('file', file);
-
-      const res = await fetch('/api/admin/upload', {
-        method: 'POST',
-        body: formData,
-      });
-
-      const data = await res.json();
-      if (res.ok && data.url) {
-        setImageUrl(data.url);
-        setImageLoadError(false);
-        showToast('Tải ảnh sản phẩm lên thành công!', 'success');
-      } else {
-        showToast(data.error || 'Lỗi khi tải ảnh lên.', 'error');
-      }
-    } catch (err) {
-      showToast('Lỗi kết nối máy chủ khi upload.', 'error');
-    } finally {
-      setUploadingImage(false);
-    }
-  };
+  // handleUpload removed as MediaPicker handles uploads directly
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
@@ -342,22 +309,14 @@ export default function AdminProductEditPage({ params }: { params: Promise<{ id:
                         }}
                       />
                     </div>
-                    <input
-                      type="file"
-                      ref={imageInputRef}
-                      accept="image/*"
-                      onChange={handleUpload}
-                      className="hidden"
-                    />
                     <Button
                       type="button"
                       variant="outline"
-                      loading={uploadingImage}
-                      onClick={() => imageInputRef.current?.click()}
+                      onClick={() => setMediaPickerOpen(true)}
                       className="cursor-pointer shrink-0 h-[42px] flex items-center gap-1.5"
                     >
                       <Upload className="w-4 h-4" />
-                      <span>Tải lên</span>
+                      <span>Tải / Chọn ảnh</span>
                     </Button>
                   </div>
                   {imageUrl && (
@@ -511,6 +470,16 @@ export default function AdminProductEditPage({ params }: { params: Promise<{ id:
           </div>
         </div>
       </form>
+      {/* Media Picker */}
+      <MediaPicker
+        isOpen={mediaPickerOpen}
+        onClose={() => setMediaPickerOpen(false)}
+        onSelect={(url) => {
+          setImageUrl(url);
+          setImageLoadError(false);
+        }}
+        title="Thư viện ảnh - Chọn ảnh sản phẩm"
+      />
     </div>
   );
 }
