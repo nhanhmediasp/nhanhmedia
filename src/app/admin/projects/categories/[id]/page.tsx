@@ -156,8 +156,7 @@ export default function ProjectCategoryDetailPage() {
           </Link>
           <div className="flex items-center gap-3">
             <ProjectCategoryAvatar
-              icon={category.icon}
-              color={category.color}
+              iconName={category.icon}
               className="w-10 h-10 rounded-xl"
             />
             <PageHeader

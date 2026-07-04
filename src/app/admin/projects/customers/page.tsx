@@ -15,6 +15,7 @@ interface ProjectCustomer {
   note: string | null;
   createdAt: string;
   projects?: any[];
+  totalSpent?: number;
   _count: {
     projects: number;
   };

@@ -7,7 +7,7 @@ import React, { ForwardedRef, forwardRef } from 'react';
 // ============================================================
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: 'primary' | 'secondary' | 'outline' | 'danger' | 'ghost' | 'success';
-  size?: 'sm' | 'md' | 'lg';
+  size?: 'xs' | 'sm' | 'md' | 'lg';
   loading?: boolean;
 }
 
@@ -29,6 +29,7 @@ export const Button = forwardRef(
     };
 
     const sizes: Record<string, string> = {
+      xs: 'px-2.5 py-1 text-[11px]',
       sm: 'px-3.5 py-1.5 text-xs',
       md: 'px-4.5 py-2.5 text-sm',
       lg: 'px-6 py-3 text-base',
@@ -284,19 +285,20 @@ export const CardContent = ({ children, className = '' }: { children: React.Reac
 interface DialogProps {
   isOpen: boolean;
   onClose: () => void;
-  onConfirm: () => void;
+  onConfirm?: () => void;
   title: string;
-  description: string;
+  description?: string;
   confirmText?: string;
   cancelText?: string;
   isDanger?: boolean;
   isLoading?: boolean;
+  children?: React.ReactNode;
 }
 
 export const Dialog = ({
   isOpen, onClose, onConfirm, title, description,
   confirmText = 'Xác nhận', cancelText = 'Hủy',
-  isDanger = false, isLoading = false,
+  isDanger = false, isLoading = false, children,
 }: DialogProps) => {
   if (!isOpen) return null;
 
@@ -305,12 +307,15 @@ export const Dialog = ({
       <div className="w-full max-w-md rounded-2xl overflow-hidden animate-scale-in" style={{ background: '#fff', boxShadow: '0 25px 80px rgba(0,0,0,0.28), 0 0 0 1px rgba(0,0,0,0.05)' }}>
         <div className="px-6 pt-6 pb-4">
           <h3 className="text-base font-bold mb-2" style={{ color: '#1e293b' }}>{title}</h3>
-          <p className="text-sm" style={{ color: '#697a8d' }}>{description}</p>
+          {description && <p className="text-sm" style={{ color: '#697a8d' }}>{description}</p>}
+          {children}
         </div>
-        <div className="px-6 py-4 flex justify-end gap-3" style={{ borderTop: '1px solid rgba(108,117,147,0.10)', background: 'rgba(108,117,147,0.025)' }}>
-          <Button variant="outline" size="sm" onClick={onClose} disabled={isLoading}>{cancelText}</Button>
-          <Button variant={isDanger ? 'danger' : 'primary'} size="sm" onClick={onConfirm} loading={isLoading}>{confirmText}</Button>
-        </div>
+        {onConfirm && (
+          <div className="px-6 py-4 flex justify-end gap-3" style={{ borderTop: '1px solid rgba(108,117,147,0.10)', background: 'rgba(108,117,147,0.025)' }}>
+            <Button variant="outline" size="sm" onClick={onClose} disabled={isLoading}>{cancelText}</Button>
+            <Button variant={isDanger ? 'danger' : 'primary'} size="sm" onClick={onConfirm} loading={isLoading}>{confirmText}</Button>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -511,9 +516,11 @@ interface EmptyStateProps {
   description: string;
   actionLabel?: string;
   onAction?: () => void;
+  icon?: React.ComponentType<any>;
+  action?: React.ReactNode;
 }
 
-export const EmptyState = ({ title, description, actionLabel, onAction }: EmptyStateProps) => (
+export const EmptyState = ({ title, description, actionLabel, onAction, icon: Icon, action }: EmptyStateProps) => (
   <div
     className="flex flex-col items-center justify-center py-16 px-6 text-center rounded-2xl animate-fade-in"
     style={{ border: '2px dashed rgba(108,117,147,0.16)', background: 'rgba(244,245,251,0.60)' }}
@@ -522,14 +529,19 @@ export const EmptyState = ({ title, description, actionLabel, onAction }: EmptyS
       className="w-14 h-14 rounded-2xl flex items-center justify-center mb-4"
       style={{ background: '#f4f5fb' }}
     >
-      <svg className="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5" style={{ color: '#a1acb8' }}>
-        <path strokeLinecap="round" strokeLinejoin="round"
-          d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5m6 4.125l2.25 2.25m0 0l2.25 2.25m-2.25-2.25l-2.25 2.25m2.25-2.25l2.25-2.25M3.75 7.5L5.621 3.75A2.25 2.25 0 017.647 2.5h8.706a2.25 2.25 0 012.026 1.25L18.25 7.5m-14.5 0h14.5"
-        />
-      </svg>
+      {Icon ? (
+        <Icon className="w-7 h-7" style={{ color: '#a1acb8' }} />
+      ) : (
+        <svg className="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5" style={{ color: '#a1acb8' }}>
+          <path strokeLinecap="round" strokeLinejoin="round"
+            d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5m6 4.125l2.25 2.25m0 0l2.25 2.25m-2.25-2.25l-2.25 2.25m2.25-2.25l2.25-2.25M3.75 7.5L5.621 3.75A2.25 2.25 0 017.647 2.5h8.706a2.25 2.25 0 012.026 1.25L18.25 7.5m-14.5 0h14.5"
+          />
+        </svg>
+      )}
     </div>
     <h3 className="text-sm font-bold mb-1.5" style={{ color: '#1e293b' }}>{title}</h3>
     <p className="text-sm max-w-sm mb-6" style={{ color: '#a1acb8' }}>{description}</p>
+    {action}
     {actionLabel && onAction && (
       <Button variant="primary" size="sm" onClick={onAction}>{actionLabel}</Button>
     )}
@@ -539,7 +551,12 @@ export const EmptyState = ({ title, description, actionLabel, onAction }: EmptyS
 // ============================================================
 // LoadingSkeleton
 // ============================================================
-export const LoadingSkeleton = ({ variant = 'card' }: { variant?: 'card' | 'table' | 'form' }) => {
+export const LoadingSkeleton = ({ variant = 'card', className }: { variant?: 'card' | 'table' | 'form'; className?: string }) => {
+  if (className) {
+    return (
+      <div className={`animate-pulse rounded-xl ${className}`} style={{ background: '#f1f5f9' }} />
+    );
+  }
   if (variant === 'table') {
     return (
       <div className="animate-pulse space-y-3">
