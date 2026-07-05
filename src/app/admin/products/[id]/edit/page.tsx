@@ -17,11 +17,8 @@ interface Variant {
   durationValue: number;
   durationUnit: string;
   status: string;
-  prices: {
-    member: string;
-    collaborator: string;
-    agency: string;
-  };
+  // price in VND for the variant
+  price: string;
 }
 
 export default function AdminProductEditPage({ params }: { params: Promise<{ id: string }> }) {
@@ -60,20 +57,13 @@ export default function AdminProductEditPage({ params }: { params: Promise<{ id:
             // Format variants for the form
             const formattedVariants = product.variants.map((v: any) => {
               const memberPrice = v.prices.find((p: any) => p.role === 'member')?.price || '';
-              const colPrice = v.prices.find((p: any) => p.role === 'collaborator')?.price || '';
-              const agencyPrice = v.prices.find((p: any) => p.role === 'agency')?.price || '';
-
               return {
                 id: v.id,
                 name: v.name,
                 durationValue: v.durationValue,
                 durationUnit: v.durationUnit,
                 status: v.status,
-                prices: {
-                  member: String(memberPrice),
-                  collaborator: String(colPrice),
-                  agency: String(agencyPrice),
-                },
+                price: String(memberPrice),
               };
             });
             setVariants(formattedVariants);
@@ -138,17 +128,7 @@ export default function AdminProductEditPage({ params }: { params: Promise<{ id:
     setVariants(updated);
   };
 
-  const handlePriceChange = (idx: number, role: 'member' | 'collaborator' | 'agency', value: string) => {
-    const updated = [...variants];
-    updated[idx] = {
-      ...updated[idx],
-      prices: {
-        ...updated[idx].prices,
-        [role]: value,
-      },
-    };
-    setVariants(updated);
-  };
+  // Removed multi-role price handling; single price per variant is used.
 
   const validateImageUrl = (url: string): boolean => {
     if (!url) return true;
@@ -185,8 +165,8 @@ export default function AdminProductEditPage({ params }: { params: Promise<{ id:
         showToast(`Gói thứ ${i + 1} chưa có tên gọi.`, 'error');
         return;
       }
-      if (v.prices.member === '' || v.prices.collaborator === '' || v.prices.agency === '') {
-        showToast(`Vui lòng nhập đầy đủ giá bán cho gói "${v.name}".`, 'error');
+      if (v.price === '' || v.price === undefined) {
+        showToast(`Vui lòng nhập giá cho gói "${v.name}".`, 'error');
         return;
       }
     }
@@ -407,15 +387,15 @@ export default function AdminProductEditPage({ params }: { params: Promise<{ id:
                       </h4>
                       <div className="grid grid-cols-1 gap-5">
                         <Input
-                          label="Giá bán (VNĐ)"
+                          label="Giá (VNĐ)"
                           type="number"
                           min="0"
                           placeholder="Ví dụ: 500000"
-                          value={variant.prices.member}
+                          value={variant.price}
                           onChange={(e) => {
-                            handlePriceChange(idx, 'member', e.target.value);
-                            handlePriceChange(idx, 'collaborator', e.target.value);
-                            handlePriceChange(idx, 'agency', e.target.value);
+                            const updated = [...variants];
+                            updated[idx] = { ...updated[idx], price: e.target.value };
+                            setVariants(updated);
                           }}
                           required
                         />

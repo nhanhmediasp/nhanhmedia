@@ -11,11 +11,7 @@ interface VariantForm {
   durationValue: number;
   durationUnit: string;
   status: string;
-  prices: {
-    member: string;
-    collaborator: string;
-    agency: string;
-  };
+  price: string;
 }
 
 export default function AdminProductCreatePage() {
@@ -37,7 +33,7 @@ export default function AdminProductCreatePage() {
       durationValue: 1,
       durationUnit: 'month',
       status: 'active',
-      prices: { member: '', collaborator: '', agency: '' },
+      price: '',
     },
   ]);
 
@@ -67,7 +63,7 @@ export default function AdminProductCreatePage() {
         durationValue: 1,
         durationUnit: 'month',
         status: 'active',
-        prices: { member: '', collaborator: '', agency: '' },
+        price: '',
       },
     ]);
   };
@@ -85,17 +81,7 @@ export default function AdminProductCreatePage() {
     setVariants(updated);
   };
 
-  const handlePriceChange = (idx: number, role: 'member' | 'collaborator' | 'agency', value: string) => {
-    const updated = [...variants];
-    updated[idx] = {
-      ...updated[idx],
-      prices: {
-        ...updated[idx].prices,
-        [role]: value,
-      },
-    };
-    setVariants(updated);
-  };
+  // Removed multi-role price handling; single price per variant is used.
 
   const validateImageUrl = (url: string): boolean => {
     if (!url) return true;
@@ -133,10 +119,10 @@ export default function AdminProductCreatePage() {
         showToast(`Gói thứ ${i + 1} chưa có tên gọi.`, 'error');
         return;
       }
-      if (v.prices.member === '' || v.prices.collaborator === '' || v.prices.agency === '') {
-        showToast(`Vui lòng nhập đầy đủ giá bán cho gói "${v.name}".`, 'error');
-        return;
-      }
+       if (v.price === '' || v.price === undefined) {
+         showToast(`Vui lòng nhập giá cho gói "${v.name}".`, 'error');
+         return;
+       }
     }
 
     setSubmitting(true);
@@ -338,28 +324,28 @@ export default function AdminProductCreatePage() {
                       />
                     </div>
 
-                    {/* Price settings per role */}
+                    {/* Price settings */}
                     <div className="pt-2">
                       <h4 className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-3 flex items-center gap-1">
-                        <span>Giá bán phân quyền (VND)</span>
-                        <span title="Nhập giá tương ứng cho từng cấp bậc tài khoản">
+                        <span>Giá bán (VND)</span>
+                        <span title="Nhập giá tương ứng cho gói">
                           <HelpCircle className="w-3.5 h-3.5 text-slate-400" />
                         </span>
                       </h4>
                       <div className="grid grid-cols-1 gap-5">
                         <Input
-                          label="Giá bán (VNĐ)"
-                          type="number"
-                          min="0"
-                          placeholder="Ví dụ: 500000"
-                          value={variant.prices.member}
-                          onChange={(e) => {
-                            handlePriceChange(idx, 'member', e.target.value);
-                            handlePriceChange(idx, 'collaborator', e.target.value);
-                            handlePriceChange(idx, 'agency', e.target.value);
-                          }}
-                          required
-                        />
+                         label="Giá (VNĐ)"
+                         type="number"
+                         min="0"
+                         placeholder="Ví dụ: 500000"
+                         value={variant.price}
+                         onChange={(e) => {
+                           const updated = [...variants];
+                           updated[idx] = { ...updated[idx], price: e.target.value };
+                           setVariants(updated);
+                         }}
+                         required
+                       />
                       </div>
                     </div>
                   </CardContent>
