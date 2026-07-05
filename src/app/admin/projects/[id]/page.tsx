@@ -71,6 +71,7 @@ interface Project {
   websiteCosts: WebsiteCost[];
   toolCosts: ToolCost[];
   requirementNotes: any[];
+  websiteUrl: string | null;
 }
 
 interface TaskColumn {
@@ -974,6 +975,17 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                     )}
                     {project.customer.name}
                   </span>
+                )}
+                {project.websiteUrl && (
+                  <a
+                    href={project.websiteUrl.startsWith('http') ? project.websiteUrl : `https://${project.websiteUrl}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded bg-teal-50 text-teal-700 border border-teal-100 text-xs font-bold hover:bg-teal-100 transition-colors"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5 text-teal-650" />
+                    <span>Website trực tiếp</span>
+                  </a>
                 )}
               </div>
               <p className="text-sm text-slate-500 max-w-3xl leading-relaxed">{project.description || 'Chưa có mô tả chi tiết cho dự án này.'}</p>

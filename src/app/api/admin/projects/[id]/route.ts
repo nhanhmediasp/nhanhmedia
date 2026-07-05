@@ -56,7 +56,7 @@ export async function PUT(
   try {
     const { id } = await params;
     const body = await req.json();
-    const { name, description, startDate, endDate, status, categoryId, customerId, budget, amountReceived } = body;
+    const { name, description, startDate, endDate, status, categoryId, customerId, budget, amountReceived, websiteUrl } = body;
 
     if (!name || !startDate) {
       return NextResponse.json({ error: 'Tên dự án và Ngày bắt đầu là bắt buộc.' }, { status: 400 });
@@ -79,6 +79,7 @@ export async function PUT(
         customerId: customerId || null,
         budget: budget !== undefined ? parseFloat(budget) : undefined,
         amountReceived: amountReceived !== undefined ? parseFloat(amountReceived) : undefined,
+        websiteUrl: websiteUrl !== undefined ? (websiteUrl ? websiteUrl.trim() : null) : undefined,
       },
     });
 
@@ -101,6 +102,9 @@ export async function PUT(
     }
     if (existingProject.description !== updatedProject.description) {
       changes.push(`mô tả`);
+    }
+    if (existingProject.websiteUrl !== updatedProject.websiteUrl) {
+      changes.push(`website từ "${existingProject.websiteUrl || ''}" thành "${updatedProject.websiteUrl || ''}"`);
     }
     if (existingProject.startDate?.toISOString() !== updatedProject.startDate?.toISOString()) {
       changes.push(`ngày bắt đầu`);

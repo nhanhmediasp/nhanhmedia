@@ -50,6 +50,7 @@ interface ProjectItem {
   category: { id: string; name: string; icon: string | null; color: string | null } | null;
   customerId: string | null;
   customer: { id: string; name: string; phone: string; email: string | null; avatarUrl?: string | null } | null;
+  websiteUrl: string | null;
 }
 
 export default function ProjectsListPage() {
@@ -71,6 +72,7 @@ export default function ProjectsListPage() {
   const [status, setStatus] = useState('running');
   const [categoryId, setCategoryId] = useState('');
   const [customerId, setCustomerId] = useState('');
+  const [websiteUrl, setWebsiteUrl] = useState('');
   const [saving, setSaving] = useState(false);
 
   // Categories & Customers state
@@ -138,6 +140,7 @@ export default function ProjectsListPage() {
     setStatus('running');
     setCategoryId('');
     setCustomerId('');
+    setWebsiteUrl('');
     setIsModalOpen(true);
   };
 
@@ -150,6 +153,7 @@ export default function ProjectsListPage() {
     setStatus(p.status);
     setCategoryId(p.categoryId || '');
     setCustomerId(p.customerId || '');
+    setWebsiteUrl(p.websiteUrl || '');
     setIsModalOpen(true);
   };
 
@@ -176,6 +180,7 @@ export default function ProjectsListPage() {
           status,
           categoryId: categoryId || null,
           customerId: customerId || null,
+          websiteUrl: websiteUrl ? websiteUrl.trim() : null,
         }),
       });
 
@@ -443,6 +448,18 @@ export default function ProjectsListPage() {
                           <span>{p.customer.name}</span>
                         </div>
                       )}
+                      {p.websiteUrl && (
+                        <a
+                          href={p.websiteUrl.startsWith('http') ? p.websiteUrl : `https://${p.websiteUrl}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-1 bg-teal-50 text-teal-700 text-[10px] font-extrabold px-2 py-0.5 rounded-md border border-teal-100 hover:bg-teal-100 transition-colors"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <ExternalLink className="w-3 h-3 text-teal-650" />
+                          <span>Website</span>
+                        </a>
+                      )}
                       <span className="text-[10px] text-slate-400 font-medium">
                         Bắt đầu: {formatDate(p.startDate)}
                       </span>
@@ -556,6 +573,17 @@ export default function ProjectsListPage() {
                           )}
                           {p.customer.name}
                         </span>
+                      )}
+                      {p.websiteUrl && (
+                        <a
+                          href={p.websiteUrl.startsWith('http') ? p.websiteUrl : `https://${p.websiteUrl}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-teal-50 text-teal-700 border border-teal-100 text-[10px] font-bold hover:bg-teal-100 transition-colors"
+                        >
+                          <ExternalLink className="w-3.5 h-3.5 text-teal-650" />
+                          Website
+                        </a>
                       )}
                     </div>
                     <div className="text-xs text-slate-400 truncate max-w-xs">{p.description || 'Không có mô tả'}</div>
@@ -686,7 +714,7 @@ export default function ProjectsListPage() {
                     </select>
                   </div>
                 </div>
-                <div className="grid grid-cols-1 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-1.5">
                     <label className="block text-xs font-bold uppercase tracking-wider text-slate-500">
                       Khách hàng liên kết
@@ -694,7 +722,7 @@ export default function ProjectsListPage() {
                     <select
                       value={customerId}
                       onChange={(e) => setCustomerId(e.target.value)}
-                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all bg-white"
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all bg-white h-[42px]"
                     >
                       <option value="">-- Chọn khách hàng --</option>
                       {customers.map((cust) => (
@@ -704,6 +732,12 @@ export default function ProjectsListPage() {
                       ))}
                     </select>
                   </div>
+                  <Input
+                    label="Website dự án"
+                    placeholder="Ví dụ: https://myproject.com"
+                    value={websiteUrl}
+                    onChange={(e) => setWebsiteUrl(e.target.value)}
+                  />
                 </div>
               </div>
               <div className="px-6 py-4 bg-slate-50 border-t border-slate-150 flex justify-end gap-3 rounded-b-2xl">

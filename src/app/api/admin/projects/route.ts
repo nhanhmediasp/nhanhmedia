@@ -56,6 +56,7 @@ export async function GET(req: Request) {
         customer: p.customer,
         createdAt: p.createdAt,
         updatedAt: p.updatedAt,
+        websiteUrl: p.websiteUrl,
       };
     });
 
@@ -75,7 +76,7 @@ export async function POST(req: Request) {
 
   try {
     const body = await req.json();
-    const { name, description, startDate, endDate, status, categoryId, customerId } = body;
+    const { name, description, startDate, endDate, status, categoryId, customerId, websiteUrl } = body;
 
     if (!name || !startDate) {
       return NextResponse.json({ error: 'Tên dự án và Ngày bắt đầu là bắt buộc.' }, { status: 400 });
@@ -92,6 +93,7 @@ export async function POST(req: Request) {
           status: status || 'running',
           categoryId: categoryId || null,
           customerId: customerId || null,
+          websiteUrl: websiteUrl ? websiteUrl.trim() : null,
           progress: 0,
           budget: 0,
         },

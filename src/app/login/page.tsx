@@ -48,34 +48,7 @@ export default function LoginPage() {
     }
   };
 
-  const handleQuickLogin = async (demoEmail: string) => {
-    setEmail(demoEmail);
-    setPassword('123456');
-    setLoading(true);
-    try {
-      const res  = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: demoEmail, password: '123456' }),
-      });
-      const data = await res.json();
-      if (res.ok) {
-        showToast(data.message || 'Đăng nhập thành công!', 'success');
-        login(data.user);
-        router.push(data.user.role === 'admin' ? '/admin/dashboard' : '/dashboard');
-      } else {
-        showToast(data.error || 'Đăng nhập thất bại.', 'error');
-      }
-    } catch {
-      showToast('Lỗi kết nối máy chủ.', 'error');
-    } finally {
-      setLoading(false);
-    }
-  };
 
-  const demoAccounts = [
-    { label: 'Admin', email: 'admin@example.com', color: '#a145ab', bg: 'rgba(161,69,171,0.07)', border: 'rgba(161,69,171,0.18)' },
-  ];
 
   const featureList = [
     { icon: <BarChart3 className="w-5 h-5" />, title: 'Báo cáo thời gian thực', desc: 'Theo dõi doanh thu & đơn hàng ngay lập tức' },
@@ -223,27 +196,6 @@ export default function LoginPage() {
               </Button>
 
             </form>
-
-            {/* Demo accounts */}
-            <div className="pt-4" style={{ borderTop: '1px solid rgba(108,117,147,0.10)' }}>
-              <p className="text-center text-[10px] font-bold uppercase tracking-widest mb-3" style={{ color: '#a1acb8' }}>
-                Tài khoản dùng thử — mật khẩu: 123456
-              </p>
-              <div className="flex justify-center">
-                {demoAccounts.map((acc) => (
-                  <button
-                    key={acc.email}
-                    type="button"
-                    onClick={() => handleQuickLogin(acc.email)}
-                    className="w-full text-center px-4 py-3 rounded-xl text-[11px] font-semibold transition-all duration-150 hover:brightness-95 active:scale-[.98] cursor-pointer"
-                    style={{ background: acc.bg, border: `1.5px solid ${acc.border}`, color: acc.color }}
-                  >
-                    <div className="font-bold text-xs">{acc.label} (Dùng thử)</div>
-                    <div className="opacity-70 text-[10px] mt-0.5">{acc.email}</div>
-                  </button>
-                ))}
-              </div>
-            </div>
           </div>
         </div>
       </div>
