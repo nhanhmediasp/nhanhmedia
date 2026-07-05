@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { Card, CardHeader, CardTitle, CardContent, Button, Input, showToast, PageHeader, RoleBadge, MediaPicker } from '@/components/ui';
 import { useAuth } from '@/components/AuthContext';
-import { User, KeyRound, Lock, Upload } from 'lucide-react';
+import { User, KeyRound, Lock, Upload, Trash2 } from 'lucide-react';
 
 export default function UserProfilePage() {
   const { user, checkSession } = useAuth();
@@ -236,45 +236,31 @@ export default function UserProfilePage() {
                 )}
               </div>
               
-              <div className="w-full">
-                <div className="flex gap-3 items-end">
-                  <div className="flex-1">
-                    <Input
-                      label="Link ảnh đại diện"
-                      placeholder="https://example.com/avatar.jpg"
-                      value={urlInput}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        setUrlInput(val);
-                        setImageLoadError(false);
-                        if (!val) {
-                          setAvatarUrl('');
-                        } else if (validateImageUrl(val)) {
-                          setAvatarUrl(val);
-                        } else {
-                          setImageLoadError(true);
-                        }
-                      }}
-                    />
-                  </div>
+              <div className="w-full flex flex-col gap-2.5">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setMediaPickerOpen(true)}
+                  className="w-full cursor-pointer flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-xs font-bold"
+                >
+                  <Upload className="w-4 h-4" />
+                  <span>Tải ảnh lên / Chọn từ thư viện</span>
+                </Button>
+                {avatarUrl && (
                   <Button
                     type="button"
                     variant="outline"
-                    onClick={() => setMediaPickerOpen(true)}
-                    className="cursor-pointer shrink-0 h-[42px] flex items-center gap-1.5"
+                    onClick={() => {
+                      setAvatarUrl('');
+                      setUrlInput('');
+                      setImageLoadError(false);
+                    }}
+                    className="w-full cursor-pointer flex items-center justify-center gap-1.5 py-2 text-rose-500 hover:text-rose-600 border-dashed border-rose-200 hover:bg-rose-50/50 rounded-xl text-xs font-semibold"
                   >
-                    <Upload className="w-4 h-4" />
-                    <span>Tải / Chọn ảnh</span>
+                    <Trash2 className="w-4 h-4" />
+                    <span>Xóa ảnh đại diện</span>
                   </Button>
-                </div>
-                {imageLoadError && urlInput && (
-                  <p className="text-[10px] text-rose-500 font-semibold mt-1.5">
-                    Link ảnh không hợp lệ hoặc không thể tải ảnh
-                  </p>
                 )}
-                <p className="text-[10px] text-slate-400 mt-2 leading-relaxed">
-                  Bắt đầu bằng https://, có đuôi .jpg, .jpeg, .png, .webp, .gif hoặc từ cloudinary.com, i.ibb.co, imgur.com.
-                </p>
               </div>
             </CardContent>
           </Card>

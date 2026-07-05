@@ -1,8 +1,8 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Card, CardContent, Button, Badge, showToast, Dialog, PageHeader, EmptyState, LoadingSkeleton, Input, Textarea, StatusBadge } from '@/components/ui';
-import { ArrowLeft, User, Phone, Mail, Link as LinkIcon, Calendar, DollarSign, Activity, Settings, Edit2, AlertCircle } from 'lucide-react';
+import { Card, CardContent, Button, Badge, showToast, Dialog, PageHeader, EmptyState, LoadingSkeleton, Input, Textarea, StatusBadge, MediaPicker } from '@/components/ui';
+import { ArrowLeft, User, Phone, Mail, Link as LinkIcon, Calendar, DollarSign, Activity, Settings, Edit2, AlertCircle, Upload, X } from 'lucide-react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 
@@ -24,6 +24,7 @@ interface ProjectCustomer {
   zalo: string | null;
   facebook: string | null;
   note: string | null;
+  avatarUrl: string | null;
   createdAt: string;
   projects: Project[];
 }
@@ -44,6 +45,8 @@ export default function ProjectCustomerDetailPage() {
   const [editZalo, setEditZalo] = useState('');
   const [editFacebook, setEditFacebook] = useState('');
   const [editNote, setEditNote] = useState('');
+  const [editAvatarUrl, setEditAvatarUrl] = useState('');
+  const [mediaPickerOpen, setMediaPickerOpen] = useState(false);
   const [updating, setUpdating] = useState(false);
 
   const fetchCustomerDetails = async () => {
@@ -61,6 +64,7 @@ export default function ProjectCustomerDetailPage() {
           setEditZalo(data.customer.zalo || '');
           setEditFacebook(data.customer.facebook || '');
           setEditNote(data.customer.note || '');
+          setEditAvatarUrl(data.customer.avatarUrl || '');
         }
       } else {
         showToast('Không thể tải thông tin khách hàng dự án.', 'error');
@@ -98,6 +102,7 @@ export default function ProjectCustomerDetailPage() {
           zalo: editZalo,
           facebook: editFacebook,
           note: editNote,
+          avatarUrl: editAvatarUrl,
         }),
       });
       const data = await res.json();
@@ -167,10 +172,25 @@ export default function ProjectCustomerDetailPage() {
             <ArrowLeft className="w-3.5 h-3.5" />
             <span>Quay lại Khách hàng dự án</span>
           </Link>
-          <PageHeader
-            title={`${customer.name} 👤`}
-            description="Hồ sơ chi tiết và phân tích thống kê dự án của khách hàng."
-          />
+          <div className="flex items-center gap-4.5 mt-2">
+            {customer.avatarUrl ? (
+              <img
+                src={customer.avatarUrl}
+                alt={customer.name}
+                className="w-14 h-14 rounded-full object-cover border-2 border-primary/20 shadow-sm"
+              />
+            ) : (
+              <div className="w-14 h-14 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center border border-dashed border-slate-350 shadow-sm">
+                <User className="w-6 h-6" />
+              </div>
+            )}
+            <div>
+              <h1 className="text-xl sm:text-2xl font-black text-slate-800 tracking-tight flex items-center gap-1.5 leading-none">
+                {customer.name}
+              </h1>
+              <p className="text-xs font-semibold text-slate-400 mt-1">Hồ sơ chi tiết và phân tích thống kê dự án của khách hàng.</p>
+            </div>
+          </div>
         </div>
         <Button onClick={() => setIsEditOpen(true)} className="flex items-center gap-1.5 self-start md:self-center cursor-pointer">
           <Edit2 className="w-4 h-4" />
@@ -381,6 +401,44 @@ export default function ProjectCustomerDetailPage() {
                   onChange={(e) => setEditName(e.target.value)}
                   required
                 />
+
+                <div className="flex gap-4 items-center py-2">
+                  <div className="relative shrink-0">
+                    {editAvatarUrl ? (
+                      <img
+                        src={editAvatarUrl}
+                        alt="Edit Avatar"
+                        className="w-14 h-14 rounded-full object-cover border border-slate-200"
+                      />
+                    ) : (
+                      <div className="w-14 h-14 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center border border-dashed border-slate-300">
+                        <User className="w-6 h-6" />
+                      </div>
+                    )}
+                    {editAvatarUrl && (
+                      <button
+                        type="button"
+                        onClick={() => setEditAvatarUrl('')}
+                        className="absolute -top-1 -right-1 bg-rose-500 text-white w-4 h-4 rounded-full flex items-center justify-center text-[10px] hover:bg-rose-600 shadow cursor-pointer"
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setMediaPickerOpen(true);
+                    }}
+                    className="flex items-center gap-1.5 text-xs h-9 cursor-pointer"
+                  >
+                    <Upload className="w-3.5 h-3.5" />
+                    <span>Chọn / Tải ảnh đại diện</span>
+                  </Button>
+                </div>
+
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <Input
                     label="Số điện thoại"
@@ -436,6 +494,19 @@ export default function ProjectCustomerDetailPage() {
           </div>
         </div>
       )}
+
+      {/* Media Picker */}
+      <MediaPicker
+        isOpen={mediaPickerOpen}
+        onClose={() => {
+          setMediaPickerOpen(false);
+        }}
+        onSelect={(url) => {
+          setEditAvatarUrl(url);
+          setMediaPickerOpen(false);
+        }}
+        title="Thư viện ảnh - Chọn ảnh đại diện khách hàng"
+      />
     </div>
   );
 }

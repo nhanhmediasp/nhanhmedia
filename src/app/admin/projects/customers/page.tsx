@@ -2,8 +2,8 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { Card, CardContent, Button, Badge, showToast, Dialog, PageHeader, EmptyState, LoadingSkeleton, Input, Textarea, StatusBadge } from '@/components/ui';
-import { Search, Plus, Edit2, Trash2, Calendar, User, Phone, Mail, Link as LinkIcon, MessageSquare, Clipboard, Eye } from 'lucide-react';
+import { Card, CardContent, Button, Badge, showToast, Dialog, PageHeader, EmptyState, LoadingSkeleton, Input, Textarea, StatusBadge, MediaPicker } from '@/components/ui';
+import { Search, Plus, Edit2, Trash2, Calendar, User, Phone, Mail, Link as LinkIcon, MessageSquare, Clipboard, Eye, Upload, X } from 'lucide-react';
 
 interface ProjectCustomer {
   id: string;
@@ -13,6 +13,7 @@ interface ProjectCustomer {
   zalo: string | null;
   facebook: string | null;
   note: string | null;
+  avatarUrl?: string | null;
   createdAt: string;
   projects?: any[];
   totalSpent?: number;
@@ -59,6 +60,12 @@ export default function ProjectCustomersPage() {
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
 
+  // Avatar / MediaPicker State
+  const [newAvatarUrl, setNewAvatarUrl] = useState('');
+  const [editAvatarUrl, setEditAvatarUrl] = useState('');
+  const [mediaPickerOpen, setMediaPickerOpen] = useState(false);
+  const [mediaPickerTarget, setMediaPickerTarget] = useState<'create' | 'edit' | null>(null);
+
   const fetchCustomers = async () => {
     setLoading(true);
     try {
@@ -99,6 +106,7 @@ export default function ProjectCustomersPage() {
           zalo: newZalo,
           facebook: newFacebook,
           note: newNote,
+          avatarUrl: newAvatarUrl,
         }),
       });
       const data = await res.json();
@@ -112,6 +120,7 @@ export default function ProjectCustomersPage() {
         setNewZalo('');
         setNewFacebook('');
         setNewNote('');
+        setNewAvatarUrl('');
         fetchCustomers();
       } else {
         showToast(data.error || 'Lỗi khi thêm khách hàng.', 'error');
@@ -131,6 +140,7 @@ export default function ProjectCustomersPage() {
     setEditZalo(c.zalo || '');
     setEditFacebook(c.facebook || '');
     setEditNote(c.note || '');
+    setEditAvatarUrl(c.avatarUrl || '');
   };
 
   const handleUpdateCustomer = async (e: React.FormEvent) => {
@@ -152,6 +162,7 @@ export default function ProjectCustomersPage() {
           zalo: editZalo,
           facebook: editFacebook,
           note: editNote,
+          avatarUrl: editAvatarUrl,
         }),
       });
       const data = await res.json();
@@ -310,8 +321,18 @@ export default function ProjectCustomersPage() {
                         {stt}
                       </td>
                       <td className="px-6 py-4.5 align-middle">
-                        <div className="font-bold text-sm text-foreground flex items-center gap-2">
-                          <User className="w-4 h-4 text-slate-400" />
+                        <div className="font-bold text-sm text-foreground flex items-center gap-3">
+                          {cust.avatarUrl ? (
+                            <img
+                              src={cust.avatarUrl}
+                              alt={cust.name}
+                              className="w-7 h-7 rounded-full object-cover border border-slate-200 shrink-0"
+                            />
+                          ) : (
+                            <div className="w-7 h-7 rounded-full bg-[#a145ab]/10 text-[#a145ab] flex items-center justify-center font-bold text-xs shrink-0 select-none">
+                              {cust.name.charAt(0).toUpperCase()}
+                            </div>
+                          )}
                           <span>{cust.name}</span>
                         </div>
                         {cust.note && (
@@ -467,6 +488,45 @@ export default function ProjectCustomersPage() {
                   onChange={(e) => setNewName(e.target.value)}
                   required
                 />
+                
+                <div className="flex gap-4 items-center py-2">
+                  <div className="relative shrink-0">
+                    {newAvatarUrl ? (
+                      <img
+                        src={newAvatarUrl}
+                        alt="New Avatar"
+                        className="w-14 h-14 rounded-full object-cover border border-slate-200"
+                      />
+                    ) : (
+                      <div className="w-14 h-14 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center border border-dashed border-slate-300">
+                        <User className="w-6 h-6" />
+                      </div>
+                    )}
+                    {newAvatarUrl && (
+                      <button
+                        type="button"
+                        onClick={() => setNewAvatarUrl('')}
+                        className="absolute -top-1 -right-1 bg-rose-500 text-white w-4 h-4 rounded-full flex items-center justify-center text-[10px] hover:bg-rose-600 shadow cursor-pointer"
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setMediaPickerTarget('create');
+                      setMediaPickerOpen(true);
+                    }}
+                    className="flex items-center gap-1.5 text-xs h-9 cursor-pointer"
+                  >
+                    <Upload className="w-3.5 h-3.5" />
+                    <span>Chọn / Tải ảnh đại diện</span>
+                  </Button>
+                </div>
+
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <Input
                     label="Số điện thoại"
@@ -548,6 +608,45 @@ export default function ProjectCustomersPage() {
                   onChange={(e) => setEditName(e.target.value)}
                   required
                 />
+
+                <div className="flex gap-4 items-center py-2">
+                  <div className="relative shrink-0">
+                    {editAvatarUrl ? (
+                      <img
+                        src={editAvatarUrl}
+                        alt="Edit Avatar"
+                        className="w-14 h-14 rounded-full object-cover border border-slate-200"
+                      />
+                    ) : (
+                      <div className="w-14 h-14 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center border border-dashed border-slate-300">
+                        <User className="w-6 h-6" />
+                      </div>
+                    )}
+                    {editAvatarUrl && (
+                      <button
+                        type="button"
+                        onClick={() => setEditAvatarUrl('')}
+                        className="absolute -top-1 -right-1 bg-rose-500 text-white w-4 h-4 rounded-full flex items-center justify-center text-[10px] hover:bg-rose-600 shadow cursor-pointer"
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setMediaPickerTarget('edit');
+                      setMediaPickerOpen(true);
+                    }}
+                    className="flex items-center gap-1.5 text-xs h-9 cursor-pointer"
+                  >
+                    <Upload className="w-3.5 h-3.5" />
+                    <span>Chọn / Tải ảnh đại diện</span>
+                  </Button>
+                </div>
+
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <Input
                     label="Số điện thoại"
@@ -675,6 +774,24 @@ export default function ProjectCustomersPage() {
           </div>
         </div>
       )}
+      {/* Media Picker */}
+      <MediaPicker
+        isOpen={mediaPickerOpen}
+        onClose={() => {
+          setMediaPickerOpen(false);
+          setMediaPickerTarget(null);
+        }}
+        onSelect={(url) => {
+          if (mediaPickerTarget === 'create') {
+            setNewAvatarUrl(url);
+          } else if (mediaPickerTarget === 'edit') {
+            setEditAvatarUrl(url);
+          }
+          setMediaPickerOpen(false);
+          setMediaPickerTarget(null);
+        }}
+        title="Thư viện ảnh - Chọn ảnh đại diện khách hàng"
+      />
     </div>
   );
 }

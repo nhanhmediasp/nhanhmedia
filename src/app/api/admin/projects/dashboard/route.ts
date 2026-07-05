@@ -86,7 +86,10 @@ export async function GET(req: Request) {
     runningProjects.forEach((p) => {
       const totalTasks = p.tasks.length;
       if (totalTasks > 0) {
-        const completed = p.tasks.filter((t) => t.column.name.toLowerCase() === 'hoàn thành').length;
+        const completed = p.tasks.filter((t) => {
+          const colName = t.column.name.toLowerCase();
+          return colName === 'hoàn thành' || colName === 'đã làm';
+        }).length;
         totalProgress += (completed / totalTasks) * 100;
       }
     });
@@ -101,7 +104,7 @@ export async function GET(req: Request) {
       where: {
         deadline: { not: null },
         column: {
-          name: { not: 'Hoàn thành' },
+          name: { notIn: ['Hoàn thành', 'Đã làm', 'hoàn thành', 'đã làm'] },
         },
       },
       include: {

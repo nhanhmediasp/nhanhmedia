@@ -33,7 +33,8 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       const totalTasks = p.tasks.length;
       let completedTasks = 0;
       p.tasks.forEach((t) => {
-        if (t.column.name.toLowerCase() === 'hoàn thành') {
+        const colName = t.column.name.toLowerCase();
+        if (colName === 'hoàn thành' || colName === 'đã làm') {
           completedTasks++;
         }
       });
@@ -74,7 +75,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
 
   try {
     const body = await req.json();
-    const { name, phone, zalo, facebook, email, note } = body;
+    const { name, phone, zalo, facebook, email, note, avatarUrl } = body;
 
     if (!name || !name.trim()) {
       return NextResponse.json({ error: 'Tên khách hàng là bắt buộc.' }, { status: 400 });
@@ -94,6 +95,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
         facebook: facebook ? facebook.trim() : null,
         email: email ? email.trim() : null,
         note: note ? note.trim() : null,
+        avatarUrl: avatarUrl ? avatarUrl.trim() : null,
       },
     });
 

@@ -47,6 +47,7 @@ export async function GET(req: Request) {
         zalo: c.zalo,
         facebook: c.facebook,
         note: c.note,
+        avatarUrl: c.avatarUrl,
         createdAt: c.createdAt,
         projects: formattedProjects,
         totalSpent,
@@ -69,7 +70,7 @@ export async function POST(req: Request) {
 
   try {
     const body = await req.json();
-    const { name, phone, zalo, facebook, email, note } = body;
+    const { name, phone, zalo, facebook, email, note, avatarUrl } = body;
 
     if (!name || !name.trim()) {
       return NextResponse.json({ error: 'Tên khách hàng là bắt buộc.' }, { status: 400 });
@@ -83,6 +84,7 @@ export async function POST(req: Request) {
         facebook: facebook ? facebook.trim() : null,
         email: email ? email.trim() : null,
         note: note ? note.trim() : null,
+        avatarUrl: avatarUrl ? avatarUrl.trim() : null,
       },
     });
 

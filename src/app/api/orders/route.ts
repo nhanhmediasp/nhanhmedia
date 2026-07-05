@@ -233,3 +233,93 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Lỗi tạo đơn hàng mới.' }, { status: 500 });
   }
 }
+
+export async function DELETE(req: Request) {
+  try {
+    const userId = req.headers.get('x-user-id');
+    const role = req.headers.get('x-user-role');
+
+    if (!userId || role !== 'admin') {
+      return NextResponse.json({ error: 'Chỉ quản trị viên mới có quyền thực hiện thao tác này.' }, { status: 403 });
+    }
+
+    const { ids } = await req.json();
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return NextResponse.json({ error: 'Danh sách ID không hợp lệ hoặc để trống.' }, { status: 400 });
+    }
+
+    // Delete orders bulk
+    const deleteCount = await prisma.order.deleteMany({
+      where: {
+        id: { in: ids },
+      },
+    });
+
+    await createAuditLog({
+      action: 'DELETE_ORDERS_BULK',
+      actionLabel: 'Xóa đơn hàng hàng loạt',
+      module: 'orders',
+      entityType: 'Order',
+      description: `Đã xóa hàng loạt ${deleteCount.count} đơn hàng.`,
+      request: req,
+      status: 'success'
+    });
+
+    return NextResponse.json({
+      message: `Đã xóa thành công ${deleteCount.count} đơn hàng!`,
+      count: deleteCount.count,
+    });
+  } catch (error: any) {
+    console.error('Delete orders bulk error:', error);
+    return NextResponse.json({ error: 'Lỗi khi xóa đơn hàng hàng loạt.' }, { status: 500 });
+  }
+}
+
+export async function PATCH(req: Request) {
+  try {
+    const userId = req.headers.get('x-user-id');
+    const role = req.headers.get('x-user-role');
+
+    if (!userId || role !== 'admin') {
+      return NextResponse.json({ error: 'Chỉ quản trị viên mới có quyền thực hiện thao tác này.' }, { status: 403 });
+    }
+
+    const { ids, status } = await req.json();
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return NextResponse.json({ error: 'Danh sách ID không hợp lệ.' }, { status: 400 });
+    }
+
+    const allowedStatuses = ['new', 'processing', 'running', 'expired_soon', 'expired', 'cancelled', 'refunded'];
+    if (!status || !allowedStatuses.includes(status)) {
+      return NextResponse.json({ error: 'Trạng thái mới không hợp lệ.' }, { status: 400 });
+    }
+
+    // Update orders status bulk
+    const updateCount = await prisma.order.updateMany({
+      where: {
+        id: { in: ids },
+      },
+      data: {
+        status,
+      },
+    });
+
+    await createAuditLog({
+      action: 'UPDATE_ORDERS_STATUS_BULK',
+      actionLabel: 'Cập nhật trạng thái hàng loạt',
+      module: 'orders',
+      entityType: 'Order',
+      description: `Đã cập nhật trạng thái hàng loạt ${updateCount.count} đơn hàng thành "${status}".`,
+      request: req,
+      status: 'success'
+    });
+
+    return NextResponse.json({
+      message: `Đã cập nhật trạng thái thành công cho ${updateCount.count} đơn hàng!`,
+      count: updateCount.count,
+    });
+  } catch (error: any) {
+    console.error('Update orders status bulk error:', error);
+    return NextResponse.json({ error: 'Lỗi khi cập nhật trạng thái đơn hàng hàng loạt.' }, { status: 500 });
+  }
+}

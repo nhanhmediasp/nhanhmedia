@@ -70,6 +70,20 @@ export interface AuditLogOptions {
   errorMessage?: string;
 }
 
+function decodeHeaderValue(val: string | null): string {
+  if (!val) return '';
+  try {
+    // If it was URI encoded (contains % followed by hex)
+    if (/%[0-9a-fA-F]{2}/.test(val)) {
+      return decodeURIComponent(val);
+    }
+    // Otherwise, convert ISO-8859-1 (Latin1) Mojibake back to UTF-8
+    return Buffer.from(val, 'latin1').toString('utf8');
+  } catch {
+    return val;
+  }
+}
+
 export async function createAuditLog(options: AuditLogOptions) {
   // Execute asynchronously in try-catch so it never blocks the main transaction
   try {
@@ -89,7 +103,11 @@ export async function createAuditLog(options: AuditLogOptions) {
       errorMessage
     } = options;
 
-    let currentActor = actor;
+    let currentActor = actor ? { ...actor } : null;
+    
+    if (currentActor && currentActor.name) {
+      currentActor.name = decodeHeaderValue(currentActor.name);
+    }
     
     // If actor is not passed, try to extract from request headers or cookies
     if (!currentActor) {
@@ -101,7 +119,7 @@ export async function createAuditLog(options: AuditLogOptions) {
         if (headerId && headerName) {
           currentActor = {
             id: headerId,
-            name: headerName,
+            name: decodeHeaderValue(headerName),
             email: headerEmail || '',
             role: headerRole || 'member'
           };

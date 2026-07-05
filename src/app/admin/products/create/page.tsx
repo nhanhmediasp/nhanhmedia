@@ -233,62 +233,48 @@ export default function AdminProductCreatePage() {
 
 
 
-                {/* Image Link Input */}
-                <div>
-                  <div className="flex gap-3 items-end">
-                    <div className="flex-1">
-                      <Input
-                        label="Link ảnh đại diện sản phẩm"
-                        placeholder="https://example.com/product-image.jpg"
-                        value={imageUrl}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          setImageUrl(val);
-                          setImageLoadError(false);
-                        }}
-                      />
-                    </div>
+                {/* Image Upload/Select */}
+                <div className="space-y-3">
+                  <label className="block text-xs font-bold text-foreground uppercase tracking-wider">Ảnh đại diện sản phẩm</label>
+                  <div className="flex flex-col gap-3">
                     <Button
                       type="button"
                       variant="outline"
                       onClick={() => setMediaPickerOpen(true)}
-                      className="cursor-pointer shrink-0 h-[42px] flex items-center gap-1.5"
+                      className="cursor-pointer w-full py-2.5 flex items-center justify-center gap-1.5 text-xs font-bold"
                     >
                       <Upload className="w-4 h-4" />
-                      <span>Tải / Chọn ảnh</span>
+                      <span>Tải ảnh sản phẩm / Chọn từ thư viện</span>
                     </Button>
+                    
+                    {imageUrl && (
+                      <div className="relative inline-block self-start mt-2">
+                        {!imageLoadError ? (
+                          <img
+                            src={imageUrl}
+                            alt="Product Preview"
+                            className="w-40 h-40 object-cover rounded-xl border border-border shadow-sm"
+                            onError={() => setImageLoadError(true)}
+                          />
+                        ) : (
+                          <div className="w-40 h-40 flex items-center justify-center border border-dashed border-rose-300 rounded-xl bg-rose-50 text-rose-600 text-xs font-semibold p-4 text-center">
+                            Ảnh không thể tải hoặc đường dẫn lỗi
+                          </div>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setImageUrl('');
+                            setImageLoadError(false);
+                          }}
+                          className="absolute -top-2 -right-2 w-6 h-6 bg-rose-500 text-white rounded-full flex items-center justify-center hover:bg-rose-600 cursor-pointer shadow-md"
+                          title="Xóa ảnh"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    )}
                   </div>
-                  {imageUrl && (
-                    <div className="mt-3 relative inline-block">
-                      {!imageLoadError ? (
-                        <img
-                          src={imageUrl}
-                          alt="Product Preview"
-                          className="w-40 h-40 object-cover rounded-xl border border-border"
-                          onError={() => setImageLoadError(true)}
-                        />
-                      ) : (
-                        <div className="w-40 h-40 flex items-center justify-center border border-dashed border-rose-300 rounded-xl bg-rose-50 text-rose-600 text-xs font-semibold p-4 text-center">
-                          Link ảnh không hợp lệ hoặc không thể tải ảnh
-                        </div>
-                      )}
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setImageUrl('');
-                          setImageLoadError(false);
-                        }}
-                        className="absolute -top-2 -right-2 w-6 h-6 bg-rose-500 text-white rounded-full flex items-center justify-center hover:bg-rose-600 cursor-pointer shadow-md"
-                      >
-                        <X className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  )}
-                  {imageLoadError && imageUrl && (
-                    <p className="text-[10px] text-rose-500 font-semibold mt-1">
-                      Link ảnh không hợp lệ hoặc không thể tải ảnh
-                    </p>
-                  )}
                 </div>
               </CardContent>
             </Card>

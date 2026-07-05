@@ -56,7 +56,7 @@ export async function PUT(
   try {
     const { id } = await params;
     const body = await req.json();
-    const { name, description, startDate, endDate, status, categoryId, customerId } = body;
+    const { name, description, startDate, endDate, status, categoryId, customerId, budget, amountReceived } = body;
 
     if (!name || !startDate) {
       return NextResponse.json({ error: 'Tên dự án và Ngày bắt đầu là bắt buộc.' }, { status: 400 });
@@ -77,8 +77,41 @@ export async function PUT(
         status: status || 'running',
         categoryId: categoryId || null,
         customerId: customerId || null,
+        budget: budget !== undefined ? parseFloat(budget) : undefined,
+        amountReceived: amountReceived !== undefined ? parseFloat(amountReceived) : undefined,
       },
     });
+
+    // Build a detailed description of what changed
+    const changes: string[] = [];
+    if (existingProject.name !== updatedProject.name) {
+      changes.push(`tên từ "${existingProject.name}" thành "${updatedProject.name}"`);
+    }
+    if (existingProject.status !== updatedProject.status) {
+      const statusLabels: Record<string, string> = { running: 'Đang chạy', completed: 'Hoàn thành', paused: 'Tạm dừng' };
+      const oldLbl = statusLabels[existingProject.status] || existingProject.status;
+      const newLbl = statusLabels[updatedProject.status] || updatedProject.status;
+      changes.push(`trạng thái từ "${oldLbl}" thành "${newLbl}"`);
+    }
+    if (existingProject.budget !== updatedProject.budget) {
+      changes.push(`ngân sách từ ${existingProject.budget.toLocaleString('vi-VN')}đ thành ${updatedProject.budget.toLocaleString('vi-VN')}đ`);
+    }
+    if (existingProject.amountReceived !== updatedProject.amountReceived) {
+      changes.push(`đã nhận từ ${existingProject.amountReceived.toLocaleString('vi-VN')}đ thành ${updatedProject.amountReceived.toLocaleString('vi-VN')}đ`);
+    }
+    if (existingProject.description !== updatedProject.description) {
+      changes.push(`mô tả`);
+    }
+    if (existingProject.startDate?.toISOString() !== updatedProject.startDate?.toISOString()) {
+      changes.push(`ngày bắt đầu`);
+    }
+    if (existingProject.endDate?.toISOString() !== updatedProject.endDate?.toISOString()) {
+      changes.push(`ngày kết thúc`);
+    }
+
+    const detailedDescription = changes.length > 0
+      ? `Cập nhật dự án "${updatedProject.name}": Thay đổi ${changes.join(', ')}`
+      : `Cập nhật thông tin dự án: ${updatedProject.name}`;
 
     // Write audit log
     await createAuditLog({
@@ -89,7 +122,7 @@ export async function PUT(
       entityType: 'Project',
       entityId: updatedProject.id,
       entityName: updatedProject.name,
-      description: `Cập nhật dự án: ${updatedProject.name}`,
+      description: detailedDescription,
       request: req,
       status: 'success',
       oldValues: existingProject,

@@ -348,8 +348,9 @@ model Project {
   endDate      DateTime?     @map("end_date")
   status       String        @default("running") // running, completed, paused
   progress     Float         @default(0)
-  budget       Float         @default(0)
-  categoryId   String?       @map("category_id")
+  budget         Float         @default(0)
+  amountReceived Float         @default(0) @map("amount_received")
+  categoryId     String?       @map("category_id")
   customerId   String?       @map("customer_id")
   createdAt    DateTime      @default(now()) @map("created_at")
   updatedAt    DateTime      @updatedAt @map("updated_at")
@@ -454,6 +455,7 @@ model ProjectCustomer {
   facebook  String?
   email     String?
   note      String?
+  avatarUrl String?   @map("avatar_url")
   createdAt DateTime  @default(now()) @map("created_at")
   updatedAt DateTime  @updatedAt @map("updated_at")
   projects  Project[]

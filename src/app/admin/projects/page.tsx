@@ -49,7 +49,7 @@ interface ProjectItem {
   categoryId: string | null;
   category: { id: string; name: string; icon: string | null; color: string | null } | null;
   customerId: string | null;
-  customer: { id: string; name: string; phone: string; email: string | null } | null;
+  customer: { id: string; name: string; phone: string; email: string | null; avatarUrl?: string | null } | null;
 }
 
 export default function ProjectsListPage() {
@@ -424,15 +424,23 @@ export default function ProjectsListPage() {
                     </CardTitle>
                     <div className="flex flex-wrap items-center gap-1.5 mt-1">
                       {p.category && (
-                        <div className="flex items-center gap-1 bg-slate-100 text-slate-655 text-[10px] font-extrabold px-2 py-0.5 rounded-md border border-slate-200">
+                        <div className="flex items-center gap-1 bg-violet-50 text-violet-700 text-[10px] font-extrabold px-2 py-0.5 rounded-md border border-violet-100">
                           <ProjectCategoryAvatar iconName={p.category.icon} size="sm" />
                           <span>{p.category.name}</span>
                         </div>
                       )}
                       {p.customer && (
-                        <div className="flex items-center gap-1 bg-blue-50 text-blue-700 text-[10px] font-extrabold px-2 py-0.5 rounded-md border border-blue-100">
-                          <User className="w-3 h-3 text-blue-500" />
-                          <span>KH: {p.customer.name}</span>
+                        <div className="flex items-center gap-1.5 bg-blue-50 text-blue-700 text-[10px] font-extrabold px-2 py-0.5 rounded-md border border-blue-100">
+                          {p.customer.avatarUrl ? (
+                            <img
+                              src={p.customer.avatarUrl}
+                              alt={p.customer.name}
+                              className="w-3.5 h-3.5 rounded-full object-cover shrink-0"
+                            />
+                          ) : (
+                            <User className="w-3 h-3 text-blue-500" />
+                          )}
+                          <span>{p.customer.name}</span>
                         </div>
                       )}
                       <span className="text-[10px] text-slate-400 font-medium">
@@ -530,15 +538,23 @@ export default function ProjectsListPage() {
                     <div className="font-bold text-slate-800 flex items-center gap-2 flex-wrap">
                       <span>{p.name}</span>
                       {p.category && (
-                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-slate-50 text-slate-500 border border-slate-200 text-[10px] font-bold">
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-violet-50 text-violet-700 border border-violet-100 text-[10px] font-bold">
                           <ProjectCategoryAvatar iconName={p.category.icon} size="sm" />
                           {p.category.name}
                         </span>
                       )}
                       {p.customer && (
                         <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-100 text-[10px] font-bold">
-                          <User className="w-3 h-3 text-blue-500" />
-                          KH: {p.customer.name}
+                          {p.customer.avatarUrl ? (
+                            <img
+                              src={p.customer.avatarUrl}
+                              alt={p.customer.name}
+                              className="w-3.5 h-3.5 rounded-full object-cover shrink-0"
+                            />
+                          ) : (
+                            <User className="w-3.5 h-3.5 text-blue-500" />
+                          )}
+                          {p.customer.name}
                         </span>
                       )}
                     </div>

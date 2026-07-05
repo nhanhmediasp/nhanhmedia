@@ -172,6 +172,81 @@ export default function AdminOrdersPage() {
   const [quickEndDate, setQuickEndDate] = useState('');
   const [savingQuickEdit, setSavingQuickEdit] = useState(false);
 
+  // Bulk Action States
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [bulkActionLoading, setBulkActionLoading] = useState(false);
+  const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
+
+  const handleSelectAll = (checked: boolean) => {
+    if (checked) {
+      const pageIds = paginatedOrders.map(o => o.id);
+      setSelectedIds(prev => {
+        const otherIds = prev.filter(id => !pageIds.includes(id));
+        return [...otherIds, ...pageIds];
+      });
+    } else {
+      const pageIds = paginatedOrders.map(o => o.id);
+      setSelectedIds(prev => prev.filter(id => !pageIds.includes(id)));
+    }
+  };
+
+  const handleSelectRow = (id: string) => {
+    setSelectedIds(prev =>
+      prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]
+    );
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedIds.length === 0) return;
+    setBulkActionLoading(true);
+    try {
+      const res = await fetch('/api/orders', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: selectedIds }),
+      });
+
+      if (res.ok) {
+        showToast(`Đã xóa thành công ${selectedIds.length} đơn hàng!`, 'success');
+        setSelectedIds([]);
+        fetchData();
+      } else {
+        const data = await res.json();
+        showToast(data.error || 'Có lỗi xảy ra khi xóa hàng loạt.', 'error');
+      }
+    } catch {
+      showToast('Lỗi kết nối máy chủ.', 'error');
+    } finally {
+      setBulkActionLoading(false);
+      setShowBulkDeleteConfirm(false);
+    }
+  };
+
+  const handleBulkUpdateStatus = async (status: string) => {
+    if (selectedIds.length === 0 || !status) return;
+    setBulkActionLoading(true);
+    try {
+      const res = await fetch('/api/orders', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: selectedIds, status }),
+      });
+
+      if (res.ok) {
+        showToast(`Đã cập nhật trạng thái cho ${selectedIds.length} đơn hàng thành công!`, 'success');
+        setSelectedIds([]);
+        fetchData();
+      } else {
+        const data = await res.json();
+        showToast(data.error || 'Có lỗi xảy ra khi cập nhật hàng loạt.', 'error');
+      }
+    } catch {
+      showToast('Lỗi kết nối máy chủ.', 'error');
+    } finally {
+      setBulkActionLoading(false);
+    }
+  };
+
   const topSuppliers = React.useMemo(() => {
     const counts: Record<string, number> = {};
     orders.forEach(o => {
@@ -688,7 +763,17 @@ export default function AdminOrdersPage() {
             <table className="w-full border-collapse text-left text-sm">
               <thead>
                 <tr className="border-b border-border bg-muted/40 text-muted-foreground font-semibold">
-                  <th className="px-4 py-5 w-[48px] text-center text-xs">STT</th>
+                  <th className="px-4 py-5 w-[48px] text-center">
+                    <input
+                      type="checkbox"
+                      checked={
+                        paginatedOrders.length > 0 &&
+                        paginatedOrders.every((o) => selectedIds.includes(o.id))
+                      }
+                      onChange={(e) => handleSelectAll(e.target.checked)}
+                      className="w-4 h-4 rounded border-slate-300 text-[#a145ab] focus:ring-[#a145ab] cursor-pointer"
+                    />
+                  </th>
                   <SortableHeader label="Mã đơn" field="orderCode" currentField={sortField} currentDirection={sortDirection} onSort={handleSort} />
                   <SortableHeader label="Khách hàng" field="customerName" currentField={sortField} currentDirection={sortDirection} onSort={handleSort} />
                   <th className="px-6 py-5">Dịch vụ</th>
@@ -703,7 +788,14 @@ export default function AdminOrdersPage() {
                   const finalPrice = o.customPrice !== null ? o.customPrice : o.price;
                   return (
                     <tr key={o.id} className="hover:bg-muted/20 transition-colors">
-                      <td className="px-4 py-5 text-center text-xs font-bold text-slate-400">{(currentPage - 1) * PAGE_SIZE + idx + 1}</td>
+                      <td className="px-4 py-5 text-center">
+                        <input
+                          type="checkbox"
+                          checked={selectedIds.includes(o.id)}
+                          onChange={() => handleSelectRow(o.id)}
+                          className="w-4 h-4 rounded border-slate-300 text-[#a145ab] focus:ring-[#a145ab] cursor-pointer"
+                        />
+                      </td>
                       <td className="px-6 py-5">
                         <div className="text-xs font-bold text-foreground">{o.orderCode}</div>
                         <div className="mt-1.5">
@@ -816,6 +908,74 @@ export default function AdminOrdersPage() {
           )}
         </Card>
       )}
+
+      {/* Thanh hành động hàng loạt */}
+      {selectedIds.length > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[100] bg-slate-900 text-white px-5 py-4 rounded-2xl shadow-2xl flex items-center gap-6 animate-slide-up border border-slate-800">
+          <div className="flex items-center gap-2 select-none">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
+            <span className="text-xs font-bold">Đã chọn {selectedIds.length} đơn hàng</span>
+          </div>
+
+          <div className="h-4 w-px bg-slate-700" />
+
+          <div className="flex items-center gap-3">
+            {/* Status change select */}
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] uppercase font-bold text-slate-400">Trạng thái:</span>
+              <select
+                disabled={bulkActionLoading}
+                onChange={(e) => {
+                  if (e.target.value) {
+                    handleBulkUpdateStatus(e.target.value);
+                    e.target.value = ''; // Reset select
+                  }
+                }}
+                className="bg-slate-800 border border-slate-700 text-white rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:border-primary cursor-pointer disabled:opacity-50"
+              >
+                <option value="">-- Chọn --</option>
+                {statuses.map(s => (
+                  <option key={s.value} value={s.value}>{s.label}</option>
+                ))}
+              </select>
+            </div>
+
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={bulkActionLoading}
+              onClick={() => setShowBulkDeleteConfirm(true)}
+              className="h-8 text-rose-400 border-rose-900/50 hover:bg-rose-950/30 hover:text-rose-300 font-bold text-xs"
+            >
+              <Trash2 className="w-3.5 h-3.5 mr-1" />
+              Xóa hàng loạt
+            </Button>
+
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={bulkActionLoading}
+              onClick={() => setSelectedIds([])}
+              className="h-8 text-slate-300 border-slate-700 hover:bg-slate-800 text-xs"
+            >
+              Hủy chọn
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Hộp thoại xác nhận xóa hàng loạt */}
+      <Dialog
+        isOpen={showBulkDeleteConfirm}
+        onClose={() => setShowBulkDeleteConfirm(false)}
+        onConfirm={handleBulkDelete}
+        title="Xác nhận xóa hàng loạt"
+        description={`Bạn có chắc chắn muốn xóa ${selectedIds.length} đơn hàng đã chọn? Hành động này không thể hoàn tác.`}
+        confirmText="Có, xóa ngay"
+        cancelText="Hủy bỏ"
+        isDanger={true}
+        isLoading={bulkActionLoading}
+      />
 
       {/* Confirm Delete Dialog */}
       <Dialog

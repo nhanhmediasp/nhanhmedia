@@ -165,3 +165,44 @@ export async function POST(req: Request) {
   }
 }
 
+export async function DELETE(req: Request) {
+  try {
+    const userId = req.headers.get('x-user-id');
+    const role = req.headers.get('x-user-role');
+
+    if (!userId || role !== 'admin') {
+      return NextResponse.json({ error: 'Chỉ quản trị viên mới có quyền thực hiện thao tác này.' }, { status: 403 });
+    }
+
+    const { ids } = await req.json();
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return NextResponse.json({ error: 'Danh sách ID không hợp lệ hoặc để trống.' }, { status: 400 });
+    }
+
+    // Delete customers bulk
+    const deleteCount = await prisma.customer.deleteMany({
+      where: {
+        id: { in: ids },
+      },
+    });
+
+    await createAuditLog({
+      action: 'DELETE_CUSTOMERS_BULK',
+      actionLabel: 'Xóa khách hàng hàng loạt',
+      module: 'customers',
+      entityType: 'Customer',
+      description: `Đã xóa hàng loạt ${deleteCount.count} khách hàng.`,
+      request: req,
+      status: 'success'
+    });
+
+    return NextResponse.json({
+      message: `Đã xóa thành công ${deleteCount.count} khách hàng!`,
+      count: deleteCount.count,
+    });
+  } catch (error: any) {
+    console.error('Delete customers bulk error:', error);
+    return NextResponse.json({ error: 'Lỗi khi xóa khách hàng hàng loạt.' }, { status: 500 });
+  }
+}
+

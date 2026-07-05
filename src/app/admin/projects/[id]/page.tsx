@@ -42,6 +42,14 @@ import {
   User,
   Tag as TagIcon,
   ExternalLink,
+  Wallet,
+  TrendingUp,
+  Activity,
+  ChevronDown,
+  Pencil,
+  Save,
+  X as XIcon,
+  BadgeDollarSign,
 } from 'lucide-react';
 import { ProjectCategoryAvatar } from '@/components/ProjectCategoryAvatar';
 
@@ -54,10 +62,11 @@ interface Project {
   status: string;
   progress: number;
   budget: number;
+  amountReceived: number;
   categoryId: string | null;
   category: { id: string; name: string; icon: string | null; color: string | null } | null;
   customerId: string | null;
-  customer: { id: string; name: string; phone: string; email: string | null; zalo: string | null; facebook: string | null; note: string | null } | null;
+  customer: { id: string; name: string; phone: string; email: string | null; zalo: string | null; facebook: string | null; note: string | null; avatarUrl?: string | null } | null;
   columns: TaskColumn[];
   websiteCosts: WebsiteCost[];
   toolCosts: ToolCost[];
@@ -103,13 +112,37 @@ interface ToolCost {
   note: string | null;
 }
 
+function decodeHeaderValue(val: string | null): string {
+  if (!val) return '';
+  try {
+    // If it was URI encoded (contains % followed by hex)
+    if (/%[0-9a-fA-F]{2}/.test(val)) {
+      return decodeURIComponent(val);
+    }
+    // Otherwise, convert ISO-8859-1 (Latin1) Mojibake back to UTF-8
+    return decodeURIComponent(escape(val));
+  } catch {
+    return val;
+  }
+}
+
 export default function ProjectDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const router = useRouter();
   const { id: projectId } = use(params);
 
   const [project, setProject] = useState<Project | null>(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'kanban' | 'website' | 'tools' | 'customer' | 'requirements'>('kanban');
+  const [activeTab, setActiveTab] = useState<'kanban' | 'website' | 'tools' | 'customer' | 'requirements' | 'budget' | 'activity'>('kanban');
+
+  // Budget states
+  const [isEditingBudget, setIsEditingBudget] = useState(false);
+  const [budgetInput, setBudgetInput] = useState('');
+  const [amountReceivedInput, setAmountReceivedInput] = useState('');
+  const [savingBudget, setSavingBudget] = useState(false);
+
+  // Activity Log states
+  const [activityLogs, setActivityLogs] = useState<any[]>([]);
+  const [loadingActivity, setLoadingActivity] = useState(false);
 
   // Requirement Notes states
   const [requirementNotes, setRequirementNotes] = useState<any[]>([]);
@@ -163,6 +196,10 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
   const [toolRenewal, setToolRenewal] = useState('');
   const [toolNote, setToolNote] = useState('');
 
+  // Activity Log Pagination
+  const [logPage, setLogPage] = useState(1);
+  const [logTotalPages, setLogTotalPages] = useState(1);
+
   // General Deletes
   const [deleteType, setDeleteType] = useState<'column' | 'task' | 'webcost' | 'tool' | null>(null);
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
@@ -190,7 +227,80 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
   useEffect(() => {
     fetchProjectDetail();
     fetchRequirementNotes();
+    fetchActivityLog();
   }, [projectId]);
+
+  // ==========================================
+  // BUDGET ACTIONS
+  // ==========================================
+  const handleOpenEditBudget = () => {
+    if (!project) return;
+    setBudgetInput(project.budget > 0 ? String(project.budget) : '');
+    setAmountReceivedInput(project.amountReceived > 0 ? String(project.amountReceived) : '');
+    setIsEditingBudget(true);
+  };
+
+  const handleSaveBudget = async () => {
+    if (!project) return;
+    setSavingBudget(true);
+    try {
+      const res = await fetch(`/api/admin/projects/${projectId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: project.name,
+          description: project.description,
+          startDate: project.startDate,
+          endDate: project.endDate,
+          status: project.status,
+          categoryId: project.categoryId,
+          customerId: project.customerId,
+          budget: parseFloat(budgetInput.replace(/\./g, '').replace(',', '.')) || 0,
+          amountReceived: parseFloat(amountReceivedInput.replace(/\./g, '').replace(',', '.')) || 0,
+        }),
+      });
+      if (res.ok) {
+        showToast('Cập nhật ngân sách thành công!', 'success');
+        setIsEditingBudget(false);
+        fetchProjectDetail();
+      } else {
+        const d = await res.json();
+        showToast(d.error || 'Lỗi cập nhật ngân sách.', 'error');
+      }
+    } catch {
+      showToast('Lỗi kết nối máy chủ.', 'error');
+    } finally {
+      setSavingBudget(false);
+    }
+  };
+
+  const setQuickAmountReceived = (pct: number) => {
+    if (!project) return;
+    const val = Math.round(project.budget * pct / 100);
+    setAmountReceivedInput(String(val));
+  };
+
+  // ==========================================
+  // ACTIVITY LOG ACTIONS
+  // ==========================================
+  const fetchActivityLog = async (page = 1) => {
+    setLoadingActivity(true);
+    try {
+      const res = await fetch(`/api/admin/projects/${projectId}/activity-log?page=${page}&limit=10`);
+      if (res.ok) {
+        const data = await res.json();
+        setActivityLogs(data.logs || []);
+        if (data.pagination) {
+          setLogPage(data.pagination.currentPage);
+          setLogTotalPages(data.pagination.totalPages);
+        }
+      }
+    } catch (err) {
+      console.error('Fetch activity log error:', err);
+    } finally {
+      setLoadingActivity(false);
+    }
+  };
 
   // ==========================================
   // REQUIREMENT TIMELINE NOTES ACTIONS
@@ -789,7 +899,10 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
   // Dynamic calculations for project
   const totalTasks = project.columns.reduce((sum, col) => sum + col.tasks.length, 0);
   const completedTasks = (() => {
-    const doneCol = project.columns.find((col) => col.name.toLowerCase() === 'hoàn thành');
+    const doneCol = project.columns.find((col) => {
+      const name = col.name.toLowerCase();
+      return name === 'hoàn thành' || name === 'đã làm';
+    });
     return doneCol ? doneCol.tasks.length : 0;
   })();
   const computedProgress = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100 * 10) / 10 : 0;
@@ -843,15 +956,23 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
               <div className="flex flex-wrap items-center gap-2">
                 <h1 className="text-xl sm:text-2xl font-black text-slate-800 tracking-tight">{project.name}</h1>
                 {project.category && (
-                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded bg-slate-100 text-slate-655 border border-slate-200 text-xs font-bold">
+                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded bg-violet-50 text-violet-700 border border-violet-100 text-xs font-bold">
                     <ProjectCategoryAvatar iconName={project.category.icon} size="sm" />
                     {project.category.name}
                   </span>
                 )}
                 {project.customer && (
                   <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-100 text-xs font-bold">
-                    <User className="w-3.5 h-3.5 text-blue-500" />
-                    KH: {project.customer.name}
+                    {project.customer.avatarUrl ? (
+                      <img
+                        src={project.customer.avatarUrl}
+                        alt={project.customer.name}
+                        className="w-3.5 h-3.5 rounded-full object-cover shrink-0"
+                      />
+                    ) : (
+                      <User className="w-3.5 h-3.5 text-blue-500" />
+                    )}
+                    {project.customer.name}
                   </span>
                 )}
               </div>
@@ -901,6 +1022,35 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                 }}
               />
             </div>
+
+            {/* Budget quick-summary below progress bar */}
+            {(project.budget > 0 || project.amountReceived > 0) && (
+              <div className="flex flex-wrap gap-4 pt-2 text-xs">
+                <span className="flex items-center gap-1.5 font-bold text-slate-500">
+                  <BadgeDollarSign className="w-3.5 h-3.5 text-violet-500" />
+                  Ngân sách: <span className="text-violet-700 font-extrabold">{formatVND(project.budget)}</span>
+                </span>
+                <span className="text-slate-300">|</span>
+                <span className="flex items-center gap-1.5 font-bold text-slate-500">
+                  <TrendingUp className="w-3.5 h-3.5 text-green-500" />
+                  Đã nhận: <span className="text-green-600 font-extrabold">{formatVND(project.amountReceived)}</span>
+                  {project.budget > 0 && (
+                    <span className="ml-1 px-1.5 py-0.5 rounded-full bg-green-100 text-green-700 font-extrabold text-[10px]">
+                      {Math.round((project.amountReceived / project.budget) * 100)}%
+                    </span>
+                  )}
+                </span>
+                {project.budget > 0 && project.amountReceived < project.budget && (
+                  <>
+                    <span className="text-slate-300">|</span>
+                    <span className="flex items-center gap-1.5 font-bold text-slate-500">
+                      <Wallet className="w-3.5 h-3.5 text-amber-500" />
+                      Còn lại: <span className="text-amber-600 font-extrabold">{formatVND(project.budget - project.amountReceived)}</span>
+                    </span>
+                  </>
+                )}
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -954,20 +1104,118 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
           </button>
         )}
         <button
-          onClick={() => {
-            setActiveTab('requirements');
-            fetchRequirementNotes();
-          }}
+          onClick={() => setActiveTab('budget')}
           className={`px-5 py-3 font-bold text-sm border-b-2 transition-all flex items-center gap-2 whitespace-nowrap cursor-pointer ${
-            activeTab === 'requirements'
+            activeTab === 'budget'
               ? 'border-primary text-primary bg-primary/5 rounded-t-xl'
               : 'border-transparent text-slate-500 hover:text-slate-700'
           }`}
         >
-          <FileText className="w-4.5 h-4.5" />
-          Yêu cầu & Timeline ({requirementNotes.length})
+          <Wallet className="w-4.5 h-4.5" />
+          Ngân sách
         </button>
       </div>
+
+      {/* TAB CONTENT: BUDGET */}
+      {activeTab === 'budget' && (
+        <div className="space-y-5">
+          <Card>
+            <CardHeader className="border-b border-slate-100 pb-4 flex flex-row items-center justify-between">
+              <CardTitle className="text-base font-extrabold text-slate-800 flex items-center gap-2">
+                <Wallet className="w-5 h-5 text-violet-500" />
+                Quản lý Ngân sách Dự án
+              </CardTitle>
+              {!isEditingBudget ? (
+                <Button variant="outline" size="sm" onClick={handleOpenEditBudget} className="flex items-center gap-1.5 cursor-pointer">
+                  <Pencil className="w-3.5 h-3.5 mr-1" />Chỉnh sửa
+                </Button>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <Button variant="outline" size="sm" onClick={() => setIsEditingBudget(false)} disabled={savingBudget} className="cursor-pointer">
+                    Hủy
+                  </Button>
+                  <Button variant="primary" size="sm" onClick={handleSaveBudget} loading={savingBudget} className="cursor-pointer">
+                    Lưu lại
+                  </Button>
+                </div>
+              )}
+            </CardHeader>
+            <CardContent className="p-6 space-y-6">
+              {!isEditingBudget ? (
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+                  <div className="rounded-2xl border border-violet-200 bg-violet-50/60 p-5 flex flex-col gap-2">
+                    <div className="flex items-center gap-2 text-violet-600 font-extrabold text-xs uppercase tracking-wider">
+                      <BadgeDollarSign className="w-4 h-4" />Ngân sách dự án
+                    </div>
+                    <div className="text-2xl font-black text-violet-700">{formatVND(project.budget)}</div>
+                    <p className="text-[11px] text-violet-500">Tổng giá trị hợp đồng / ngân sách được phân bổ</p>
+                  </div>
+                  <div className="rounded-2xl border border-green-200 bg-green-50/60 p-5 flex flex-col gap-2">
+                    <div className="flex items-center gap-2 text-green-600 font-extrabold text-xs uppercase tracking-wider">
+                      <TrendingUp className="w-4 h-4" />Đã nhận thanh toán
+                    </div>
+                    <div className="text-2xl font-black text-green-700">{formatVND(project.amountReceived)}</div>
+                    {project.budget > 0 && (
+                      <div className="flex items-center gap-2">
+                        <div className="flex-1 h-1.5 bg-green-100 rounded-full overflow-hidden">
+                          <div className="h-full bg-green-500 rounded-full" style={{ width: `${Math.min(100, Math.round((project.amountReceived / project.budget) * 100))}%` }} />
+                        </div>
+                        <span className="text-[11px] font-extrabold text-green-600">{Math.round((project.amountReceived / project.budget) * 100)}%</span>
+                      </div>
+                    )}
+                  </div>
+                  <div className={`rounded-2xl border p-5 flex flex-col gap-2 ${project.amountReceived >= project.budget && project.budget > 0 ? 'border-green-200 bg-green-50/40' : 'border-amber-200 bg-amber-50/60'}`}>
+                    <div className={`flex items-center gap-2 font-extrabold text-xs uppercase tracking-wider ${project.amountReceived >= project.budget && project.budget > 0 ? 'text-green-600' : 'text-amber-600'}`}>
+                      <Wallet className="w-4 h-4" />{project.amountReceived >= project.budget && project.budget > 0 ? 'Đã thanh toán đủ ✓' : 'Còn lại chưa nhận'}
+                    </div>
+                    <div className={`text-2xl font-black ${project.amountReceived >= project.budget && project.budget > 0 ? 'text-green-600' : 'text-amber-600'}`}>
+                      {formatVND(Math.max(0, project.budget - project.amountReceived))}
+                    </div>
+                    <p className="text-[11px] text-slate-500">
+                      {project.budget > 0 ? `${Math.max(0, 100 - Math.round((project.amountReceived / project.budget) * 100))}% ngân sách chưa được thanh toán` : 'Chưa thiết lập ngân sách'}
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-5 max-w-xl">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-2">Ngân sách dự án (VNĐ)</label>
+                    <Input placeholder="VD: 5000000" value={budgetInput} onChange={(e) => setBudgetInput(e.target.value)} type="number" min="0" />
+                    <p className="text-[11px] text-slate-400 mt-1.5">Tổng giá trị hợp đồng hoặc ngân sách dự án</p>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-2">Số tiền đã nhận (VNĐ)</label>
+                    <Input placeholder="VD: 2500000" value={amountReceivedInput} onChange={(e) => setAmountReceivedInput(e.target.value)} type="number" min="0" />
+                    <div className="flex flex-wrap gap-2 mt-2.5">
+                      <span className="text-[11px] text-slate-400 font-semibold self-center">Đặt nhanh:</span>
+                      {[0, 25, 50, 70, 100].map((pct) => (
+                        <button
+                          key={pct}
+                          type="button"
+                          onClick={() => setQuickAmountReceived(pct)}
+                          disabled={project.budget <= 0}
+                          className={`px-3 py-1 text-[11px] font-extrabold rounded-full border cursor-pointer transition-all ${
+                            project.budget > 0 && Math.round((parseFloat(amountReceivedInput || '0') / project.budget) * 100) === pct
+                              ? 'bg-primary text-white border-primary'
+                              : 'bg-white border-slate-200 text-slate-600 hover:border-primary hover:text-primary'
+                          }`}
+                        >
+                          {pct}%
+                        </button>
+                      ))}
+                    </div>
+                    {project.budget <= 0 && (
+                      <p className="text-[11px] text-amber-500 mt-1.5">⚠️ Nhập ngân sách trước để dùng nút tỷ lệ %</p>
+                    )}
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      
 
       {/* TAB CONTENT: CUSTOMER INFO */}
       {activeTab === 'customer' && project.customer && (
@@ -1027,150 +1275,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
         </Card>
       )}
 
-      {/* TAB CONTENT: REQUIREMENTS & TIMELINE */}
-      {activeTab === 'requirements' && (
-        <Card>
-          <CardHeader className="border-b border-slate-100 pb-4 flex flex-row items-center justify-between">
-            <CardTitle className="text-base font-extrabold text-slate-800 flex items-center gap-2">
-              <FileText className="w-5 h-5 text-primary" />
-              Timeline Yêu cầu & Ghi chú từ Khách hàng
-            </CardTitle>
-            <Button
-              variant="primary"
-              size="sm"
-              onClick={() => {
-                setEditingNote(null);
-                setNoteTitle('');
-                setNoteContent('');
-                setNoteLinks([{ label: '', url: '' }]);
-                setNoteDate(new Date().toISOString().split('T')[0]);
-                setIsNoteModalOpen(true);
-              }}
-              className="flex items-center gap-1 cursor-pointer"
-            >
-              <Plus className="w-4.5 h-4.5" />
-              <span>Thêm ghi chú</span>
-            </Button>
-          </CardHeader>
-          <CardContent className="p-6">
-            {loadingNotes ? (
-              <LoadingSkeleton className="h-40 w-full" />
-            ) : requirementNotes.length === 0 ? (
-              <EmptyState
-                icon={FileText}
-                title="Chưa có ghi chú yêu cầu nào"
-                description="Lưu lại các mốc thời gian khách hàng gửi yêu cầu, phản hồi hoặc tài liệu để dễ dàng theo dõi."
-                action={
-                  <Button
-                    onClick={() => {
-                      setEditingNote(null);
-                      setNoteTitle('');
-                      setNoteContent('');
-                      setNoteLinks([{ label: '', url: '' }]);
-                      setNoteDate(new Date().toISOString().split('T')[0]);
-                      setIsNoteModalOpen(true);
-                    }}
-                  >
-                    Tạo ghi chú đầu tiên
-                  </Button>
-                }
-              />
-            ) : (
-              <div className="relative border-l-2 border-slate-150 ml-4 pl-6 space-y-6">
-                {requirementNotes.map((note) => (
-                  <div key={note.id} className="relative group">
-                    {/* Timeline Node dot */}
-                    <div className="absolute -left-[31px] top-1 w-4 h-4 rounded-full bg-primary border-4 border-white shadow-sm ring-1 ring-primary/20" />
-
-                    <div className="bg-slate-50/50 hover:bg-slate-50 border border-slate-150/80 rounded-2xl p-5 transition-all">
-                      <div className="flex items-center justify-between gap-3 mb-2 flex-wrap">
-                        <div className="flex items-center gap-2.5">
-                          <span className="text-xs font-extrabold text-slate-400 bg-slate-100 px-2 py-0.5 rounded">
-                            {formatDate(note.date)}
-                          </span>
-                          <h4 className="text-sm font-black text-slate-800">{note.title}</h4>
-                        </div>
-                        <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <button
-                            onClick={() => {
-                              let parsedLinks = [{ label: '', url: '' }];
-                              if (note.link) {
-                                try {
-                                  const parsed = JSON.parse(note.link);
-                                  if (Array.isArray(parsed)) {
-                                    parsedLinks = parsed;
-                                  } else {
-                                    parsedLinks = [{ label: 'Liên kết', url: note.link }];
-                                  }
-                                } catch {
-                                  parsedLinks = [{ label: 'Liên kết', url: note.link }];
-                                }
-                              }
-                              setEditingNote(note);
-                              setNoteTitle(note.title);
-                              setNoteContent(note.content || '');
-                              setNoteLinks(parsedLinks);
-                              setNoteDate(new Date(note.date).toISOString().split('T')[0]);
-                              setIsNoteModalOpen(true);
-                            }}
-                            className="p-1 text-slate-400 hover:text-primary transition-colors cursor-pointer"
-                            title="Sửa ghi chú"
-                          >
-                            <Edit2 className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            onClick={() => setDeleteNoteId(note.id)}
-                            className="p-1 text-slate-400 hover:text-red-500 transition-colors cursor-pointer"
-                            title="Xóa ghi chú"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      </div>
-                      <p className="text-xs text-slate-650 leading-relaxed whitespace-pre-line font-medium">
-                        {note.content || 'Không có mô tả chi tiết.'}
-                      </p>
-                      {(() => {
-                        if (!note.link) return null;
-                        let links: { label: string; url: string }[] = [];
-                        try {
-                          const parsed = JSON.parse(note.link);
-                          if (Array.isArray(parsed)) {
-                            links = parsed;
-                          } else {
-                            links = [{ label: 'Mở liên kết đính kèm', url: note.link }];
-                          }
-                        } catch {
-                          links = [{ label: 'Mở liên kết đính kèm', url: note.link }];
-                        }
-
-                        if (links.length === 0) return null;
-
-                        return (
-                          <div className="mt-3 flex flex-wrap gap-2">
-                            {links.map((lnk, lIdx) => (
-                              <a
-                                key={lIdx}
-                                href={lnk.url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="inline-flex items-center gap-1.5 text-[11px] font-bold text-primary bg-primary/5 hover:bg-primary/10 border border-primary/20 px-2.5 py-1.2 rounded-lg transition-colors"
-                              >
-                                <ExternalLink className="w-3 h-3" />
-                                {lnk.label || 'Mở liên kết'}
-                              </a>
-                            ))}
-                          </div>
-                        );
-                      })()}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      )}
+      
 
       {/* TAB CONTENT: KANBAN PROGRESS */}
       {activeTab === 'kanban' && (
@@ -1543,6 +1648,257 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
         </div>
       )}
 
+      {/* ALWAYS VISIBLE AT THE BOTTOM: REQUIREMENTS & TIMELINE */}
+      <Card className="mt-6">
+        <CardHeader className="border-b border-slate-100 pb-4 flex flex-row items-center justify-between">
+          <CardTitle className="text-base font-extrabold text-slate-800 flex items-center gap-2">
+            <FileText className="w-5 h-5 text-primary" />
+            Timeline Yêu cầu & Ghi chú từ Khách hàng
+          </CardTitle>
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={() => {
+              setEditingNote(null);
+              setNoteTitle('');
+              setNoteContent('');
+              setNoteLinks([{ label: '', url: '' }]);
+              setNoteDate(new Date().toISOString().split('T')[0]);
+              setIsNoteModalOpen(true);
+            }}
+            className="flex items-center gap-1 cursor-pointer"
+          >
+            <Plus className="w-4.5 h-4.5" />
+            <span>Thêm ghi chú</span>
+          </Button>
+        </CardHeader>
+        <CardContent className="p-6">
+          {loadingNotes ? (
+            <LoadingSkeleton className="h-40 w-full" />
+          ) : requirementNotes.length === 0 ? (
+            <EmptyState
+              icon={FileText}
+              title="Chưa có ghi chú yêu cầu nào"
+              description="Lưu lại các mốc thời gian khách hàng gửi yêu cầu, phản hồi hoặc tài liệu để dễ dàng theo dõi."
+              action={
+                <Button
+                  onClick={() => {
+                    setEditingNote(null);
+                    setNoteTitle('');
+                    setNoteContent('');
+                    setNoteLinks([{ label: '', url: '' }]);
+                    setNoteDate(new Date().toISOString().split('T')[0]);
+                    setIsNoteModalOpen(true);
+                  }}
+                >
+                  Tạo ghi chú đầu tiên
+                </Button>
+              }
+            />
+          ) : (
+            <div className="relative border-l-2 border-slate-150 ml-4 pl-6 space-y-6">
+              {requirementNotes.map((note) => (
+                <div key={note.id} className="relative group">
+                  <div className="absolute -left-[31px] top-1 w-4 h-4 rounded-full bg-primary border-4 border-white shadow-sm ring-1 ring-primary/20" />
+                  <div className="bg-slate-50/50 hover:bg-slate-50 border border-slate-150/80 rounded-2xl p-5 transition-all">
+                    <div className="flex items-center justify-between gap-3 mb-2 flex-wrap">
+                      <div className="flex items-center gap-2.5">
+                        <span className="text-xs font-extrabold text-slate-400 bg-slate-100 px-2 py-0.5 rounded">
+                          {formatDate(note.date)}
+                        </span>
+                        <h4 className="text-sm font-black text-slate-800">{note.title}</h4>
+                      </div>
+                      <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button
+                          onClick={() => {
+                            let parsedLinks = [{ label: '', url: '' }];
+                            if (note.link) {
+                              try {
+                                const parsed = JSON.parse(note.link);
+                                if (Array.isArray(parsed)) {
+                                  parsedLinks = parsed;
+                                } else {
+                                  parsedLinks = [{ label: 'Liên kết', url: note.link }];
+                                }
+                              } catch {
+                                parsedLinks = [{ label: 'Liên kết', url: note.link }];
+                              }
+                            }
+                            setEditingNote(note);
+                            setNoteTitle(note.title);
+                            setNoteContent(note.content || '');
+                            setNoteLinks(parsedLinks);
+                            setNoteDate(note.date ? note.date.split('T')[0] : '');
+                            setIsNoteModalOpen(true);
+                          }}
+                          className="p-1 text-slate-400 hover:text-primary transition-colors cursor-pointer"
+                          title="Sửa ghi chú"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => setDeleteNoteId(note.id)}
+                          className="p-1 text-slate-400 hover:text-red-500 transition-colors cursor-pointer"
+                          title="Xóa ghi chú"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                    <p className="text-xs text-slate-650 leading-relaxed whitespace-pre-line font-medium">
+                      {note.content || 'Không có mô tả chi tiết.'}
+                    </p>
+                    {note.link && (() => {
+                      let links = [];
+                      try {
+                        const parsed = JSON.parse(note.link);
+                        if (Array.isArray(parsed)) {
+                          links = parsed;
+                        } else {
+                          links = [{ label: 'Mở liên kết đính kèm', url: note.link }];
+                        }
+                      } catch {
+                        links = [{ label: 'Mở liên kết đính kèm', url: note.link }];
+                      }
+                      if (links.length === 0) return null;
+                      return (
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {links.map((lnk, lIdx) => (
+                            <a
+                              key={lIdx}
+                              href={lnk.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1.5 text-[11px] font-bold text-primary bg-primary/5 hover:bg-primary/10 border border-primary/20 px-2.5 py-1.2 rounded-lg transition-colors"
+                            >
+                              <ExternalLink className="w-3 h-3" />
+                              {lnk.label || 'Mở liên kết'}
+                            </a>
+                          ))}
+                        </div>
+                      );
+                    })()}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* ALWAYS VISIBLE AT THE BOTTOM: ACTIVITY LOG */}
+      <Card className="mt-6">
+        <CardHeader className="border-b border-slate-100 pb-4 flex flex-row items-center justify-between">
+          <CardTitle className="text-base font-extrabold text-slate-800 flex items-center gap-2">
+            <Activity className="w-5 h-5 text-primary" />
+            Nhật ký hoạt động dự án
+          </CardTitle>
+          <Button variant="outline" size="sm" onClick={() => fetchActivityLog(1)} loading={loadingActivity} className="cursor-pointer">
+            Tải lại
+          </Button>
+        </CardHeader>
+        <CardContent className="p-0">
+          {loadingActivity ? (
+            <div className="p-6 space-y-3">
+              {[...Array(5)].map((_, i) => (
+                <div key={i} className="flex gap-3 animate-pulse">
+                  <div className="w-8 h-8 rounded-full bg-slate-100 shrink-0" />
+                  <div className="flex-1 space-y-1.5 py-1">
+                    <div className="h-3 bg-slate-100 rounded w-3/4" />
+                    <div className="h-2.5 bg-slate-100 rounded w-1/2" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : activityLogs.length === 0 ? (
+            <div className="p-12 text-center">
+              <Activity className="w-10 h-10 text-slate-200 mx-auto mb-3" />
+              <p className="text-sm font-semibold text-slate-400">Chưa có hoạt động nào được ghi lại</p>
+              <p className="text-xs text-slate-300 mt-1">Các thao tác tạo, sửa, xóa sẽ tự động xuất hiện ở đây</p>
+            </div>
+          ) : (
+            <div className="divide-y divide-slate-50">
+              {activityLogs.map((log) => {
+                const actionColors: Record<string, string> = {
+                  PROJECT_CREATE: 'bg-violet-100 text-violet-600',
+                  PROJECT_UPDATE: 'bg-blue-100 text-blue-600',
+                  PROJECT_DELETE: 'bg-red-100 text-red-600',
+                  TASK_CREATE: 'bg-green-100 text-green-600',
+                  TASK_UPDATE: 'bg-sky-100 text-sky-600',
+                  TASK_DELETE: 'bg-rose-100 text-rose-600',
+                  TASK_MOVE: 'bg-amber-100 text-amber-600',
+                  COLUMN_CREATE: 'bg-indigo-100 text-indigo-600',
+                  COLUMN_UPDATE: 'bg-indigo-100 text-indigo-600',
+                  COLUMN_DELETE: 'bg-red-100 text-red-600',
+                  WEBSITE_COST_CREATE: 'bg-teal-100 text-teal-600',
+                  WEBSITE_COST_UPDATE: 'bg-teal-100 text-teal-600',
+                  WEBSITE_COST_DELETE: 'bg-rose-100 text-rose-600',
+                  TOOL_COST_CREATE: 'bg-orange-100 text-orange-600',
+                  TOOL_COST_UPDATE: 'bg-orange-100 text-orange-600',
+                  TOOL_COST_DELETE: 'bg-red-100 text-red-600',
+                  REQUIREMENT_NOTE_CREATE: 'bg-cyan-100 text-cyan-600',
+                  REQUIREMENT_NOTE_UPDATE: 'bg-cyan-100 text-cyan-600',
+                  REQUIREMENT_NOTE_DELETE: 'bg-rose-100 text-rose-600',
+                };
+                const colorClass = actionColors[log.action] || 'bg-slate-100 text-slate-600';
+                const decodedActorName = decodeHeaderValue(log.actorName);
+                const initials = decodedActorName
+                  ? decodedActorName.split(' ').slice(-2).map((w: string) => w[0]).join('').toUpperCase()
+                  : '?';
+                return (
+                  <div key={log.id} className="flex items-start gap-3.5 px-5 py-4 hover:bg-slate-50/70 transition-colors">
+                    <div className="shrink-0 w-8 h-8 rounded-full bg-gradient-to-br from-violet-400 to-primary flex items-center justify-center text-white text-[11px] font-extrabold shadow-sm">
+                      {initials}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex flex-wrap items-center gap-2 mb-0.5">
+                        <span className="font-extrabold text-slate-700 text-sm">{decodedActorName}</span>
+                        <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-extrabold ${colorClass}`}>{log.actionLabel}</span>
+                        {log.entityName && (
+                          <span className="text-xs text-slate-500 font-semibold truncate max-w-[200px]">&ldquo;{decodeHeaderValue(log.entityName)}&rdquo;</span>
+                        )}
+                      </div>
+                      <p className="text-xs text-slate-500 leading-relaxed">{decodeHeaderValue(log.description)}</p>
+                      <p className="text-[10px] text-slate-400 mt-1 font-medium">
+                        {new Date(log.createdAt).toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                      </p>
+                    </div>
+                    <div className={`shrink-0 mt-2 w-2 h-2 rounded-full ${log.status === 'success' ? 'bg-green-400' : 'bg-red-400'}`} title={log.status} />
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </CardContent>
+        {logTotalPages > 1 && (
+          <div className="border-t border-slate-100 px-5 py-4 flex items-center justify-between bg-slate-50/50">
+            <span className="text-xs font-bold text-slate-450">
+              Trang {logPage} / {logTotalPages}
+            </span>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="xs"
+                disabled={logPage <= 1 || loadingActivity}
+                onClick={() => fetchActivityLog(logPage - 1)}
+                className="cursor-pointer font-bold text-xs"
+              >
+                Trang trước
+              </Button>
+              <Button
+                variant="outline"
+                size="xs"
+                disabled={logPage >= logTotalPages || loadingActivity}
+                onClick={() => fetchActivityLog(logPage + 1)}
+                className="cursor-pointer font-bold text-xs"
+              >
+                Trang sau
+              </Button>
+            </div>
+          </div>
+        )}
+      </Card>
+
       {/* ==========================================
           MODALS & DIALOGS
       ========================================== */}
@@ -1762,7 +2118,21 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                   <Select
                     label="Chu kỳ thanh toán *"
                     value={toolCycle}
-                    onChange={(e) => setToolCycle(e.target.value)}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setToolCycle(val);
+                      if (val === 'month') {
+                        const nextMonth = new Date();
+                        nextMonth.setMonth(nextMonth.getMonth() + 1);
+                        setToolRenewal(nextMonth.toISOString().split('T')[0]);
+                      } else if (val === 'year') {
+                        const nextYear = new Date();
+                        nextYear.setFullYear(nextYear.getFullYear() + 1);
+                        setToolRenewal(nextYear.toISOString().split('T')[0]);
+                      } else if (val === 'one-time') {
+                        setToolRenewal('');
+                      }
+                    }}
                     options={[
                       { value: 'month', label: 'Hàng tháng' },
                       { value: 'year', label: 'Hàng năm' },
@@ -1779,12 +2149,18 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                     onChange={(e) => setToolCostAmount(e.target.value)}
                     required
                   />
-                  <Input
-                    label="Ngày gia hạn tiếp theo"
-                    type="date"
-                    value={toolRenewal}
-                    onChange={(e) => setToolRenewal(e.target.value)}
-                  />
+                  {toolCycle !== 'one-time' ? (
+                    <Input
+                      label="Ngày gia hạn tiếp theo"
+                      type="date"
+                      value={toolRenewal}
+                      onChange={(e) => setToolRenewal(e.target.value)}
+                    />
+                  ) : (
+                    <div className="flex items-center text-[11px] text-emerald-600 font-bold bg-emerald-50 border border-emerald-100 p-2.5 rounded-xl h-11 self-end">
+                      Thanh toán 1 lần (không cần gia hạn)
+                    </div>
+                  )}
                 </div>
                 <Textarea
                   label="Ghi chú chi tiết (Tài khoản, link đăng ký, lý do chọn...)"

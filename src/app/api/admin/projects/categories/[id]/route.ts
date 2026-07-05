@@ -32,7 +32,8 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       const totalTasks = p.tasks.length;
       let completedTasks = 0;
       p.tasks.forEach((t) => {
-        if (t.column.name.toLowerCase() === 'hoàn thành') {
+        const colName = t.column.name.toLowerCase();
+        if (colName === 'hoàn thành' || colName === 'đã làm') {
           completedTasks++;
         }
       });

@@ -26,7 +26,8 @@ export async function GET(req: Request) {
       const totalTasks = p.tasks.length;
       let completedTasks = 0;
       p.tasks.forEach((t) => {
-        if (t.column.name.toLowerCase() === 'hoàn thành') {
+        const colName = t.column.name.toLowerCase();
+        if (colName === 'hoàn thành' || colName === 'đã làm') {
           completedTasks++;
         }
       });
@@ -97,7 +98,7 @@ export async function POST(req: Request) {
       });
 
       // 2. Create default columns
-      const defaultColumns = ['Cần làm', 'Đang làm', 'Hoàn thành'];
+      const defaultColumns = ['Cần làm', 'Chưa làm', 'Đang làm', 'Đã làm'];
       for (let i = 0; i < defaultColumns.length; i++) {
         await tx.taskColumn.create({
           data: {
