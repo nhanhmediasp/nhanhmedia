@@ -104,23 +104,14 @@ export async function POST(req: Request) {
             },
           });
 
-          if (variant.prices) {
-            const priceData = [];
-            if (variant.prices.member !== undefined) {
-              priceData.push({ variantId: newVariant.id, role: 'member', price: parseFloat(variant.prices.member) || 0 });
-            }
-            if (variant.prices.collaborator !== undefined) {
-              priceData.push({ variantId: newVariant.id, role: 'collaborator', price: parseFloat(variant.prices.collaborator) || 0 });
-            }
-            if (variant.prices.agency !== undefined) {
-              priceData.push({ variantId: newVariant.id, role: 'agency', price: parseFloat(variant.prices.agency) || 0 });
-            }
-
-            if (priceData.length > 0) {
-              await tx.productVariantPrice.createMany({
-                data: priceData,
-              });
-            }
+          if (variant.price !== undefined) {
+            await tx.productVariantPrice.create({
+              data: {
+                variantId: newVariant.id,
+                role: 'member',
+                price: parseFloat(variant.price) || 0,
+              },
+            });
           }
         }
       }

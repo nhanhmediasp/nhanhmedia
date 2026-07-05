@@ -110,7 +110,7 @@ export default function AdminProductEditPage({ params }: { params: Promise<{ id:
         durationValue: 1,
         durationUnit: 'month',
         status: 'active',
-        prices: { member: '', collaborator: '', agency: '' },
+        price: '',
       },
     ]);
   };
@@ -379,12 +379,6 @@ export default function AdminProductEditPage({ params }: { params: Promise<{ id:
                     </div>
 
                     <div className="pt-2">
-                      <h4 className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-3 flex items-center gap-1">
-                        <span>Giá bán phân quyền (VND)</span>
-                        <span title="Nhập giá tương ứng cho từng cấp bậc tài khoản">
-                          <HelpCircle className="w-3.5 h-3.5 text-slate-400" />
-                        </span>
-                      </h4>
                       <div className="grid grid-cols-1 gap-5">
                         <Input
                           label="Giá (VNĐ)"

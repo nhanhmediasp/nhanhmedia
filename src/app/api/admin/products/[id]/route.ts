@@ -88,25 +88,20 @@ export async function PUT(
               },
             });
 
-            if (variant.prices) {
+            if (variant.price !== undefined) {
+              // Remove existing prices for this variant
               await tx.productVariantPrice.deleteMany({
                 where: { variantId: variant.id },
               });
 
-              const priceData = [];
-              if (variant.prices.member !== undefined) {
-                priceData.push({ variantId: updatedVariant.id, role: 'member', price: parseFloat(variant.prices.member) || 0 });
-              }
-              if (variant.prices.collaborator !== undefined) {
-                priceData.push({ variantId: updatedVariant.id, role: 'collaborator', price: parseFloat(variant.prices.collaborator) || 0 });
-              }
-              if (variant.prices.agency !== undefined) {
-                priceData.push({ variantId: updatedVariant.id, role: 'agency', price: parseFloat(variant.prices.agency) || 0 });
-              }
-
-              if (priceData.length > 0) {
-                await tx.productVariantPrice.createMany({ data: priceData });
-              }
+              // Create a single price entry for the member role
+              await tx.productVariantPrice.create({
+                data: {
+                  variantId: updatedVariant.id,
+                  role: 'member',
+                  price: parseFloat(variant.price) || 0,
+                },
+              });
             }
           } else {
             const newVariant = await tx.productVariant.create({
@@ -119,21 +114,14 @@ export async function PUT(
               },
             });
 
-            if (variant.prices) {
-              const priceData = [];
-              if (variant.prices.member !== undefined) {
-                priceData.push({ variantId: newVariant.id, role: 'member', price: parseFloat(variant.prices.member) || 0 });
-              }
-              if (variant.prices.collaborator !== undefined) {
-                priceData.push({ variantId: newVariant.id, role: 'collaborator', price: parseFloat(variant.prices.collaborator) || 0 });
-              }
-              if (variant.prices.agency !== undefined) {
-                priceData.push({ variantId: newVariant.id, role: 'agency', price: parseFloat(variant.prices.agency) || 0 });
-              }
-
-              if (priceData.length > 0) {
-                await tx.productVariantPrice.createMany({ data: priceData });
-              }
+            if (variant.price !== undefined) {
+              await tx.productVariantPrice.create({
+                data: {
+                  variantId: newVariant.id,
+                  role: 'member',
+                  price: parseFloat(variant.price) || 0,
+                },
+              });
             }
           }
         }
