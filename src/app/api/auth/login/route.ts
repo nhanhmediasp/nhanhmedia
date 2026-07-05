@@ -12,20 +12,24 @@ function getClientIP(req: Request): string {
 }
 
 /** Safely load website security settings — never throws */
+// NOTE: Enforce login rate limiting regardless of DB configuration.
 async function getSecuritySettings() {
   try {
     const settings = await prisma.websiteSettings.findUnique({
       where: { id: 'default' },
       select: { loginLockEnabled: true, loginMaxAttempts: true, loginLockDurationMins: true },
     });
+    // If the setting is missing or explicitly false, we still enable the lock.
+    const lockEnabled = settings?.loginLockEnabled ?? true;
+    const effectiveLockEnabled = lockEnabled === false ? true : lockEnabled;
     return {
-      lockEnabled: settings?.loginLockEnabled ?? false,
+      lockEnabled: effectiveLockEnabled,
       maxAttempts: settings?.loginMaxAttempts ?? 5,
       lockDurationMins: settings?.loginLockDurationMins ?? 15,
     };
   } catch {
-    // Table may not exist yet — fall back to disabled
-    return { lockEnabled: false, maxAttempts: 5, lockDurationMins: 15 };
+    // Table may not exist yet — fall back to enabled
+    return { lockEnabled: true, maxAttempts: 5, lockDurationMins: 15 };
   }
 }
 

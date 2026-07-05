@@ -5,9 +5,25 @@ import nodemailer from 'nodemailer';
 import { decrypt } from '@/lib/crypto';
 import { createAuditLog } from '@/lib/audit';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'nhanh_media_fallback_jwt_secret_key_2026';
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+  throw new Error('Crucial security configuration missing: JWT_SECRET must be defined in the environment variables.');
+}
+
+function getClientIP(req: Request): string {
+  const forwarded = req.headers.get('x-forwarded-for');
+  if (forwarded) return forwarded.split(',')[0].trim();
+  const realIp = req.headers.get('x-real-ip');
+  if (realIp) return realIp;
+  return '127.0.0.1';
+}
 
 export async function POST(req: Request) {
+  const ip = getClientIP(req);
+  const rateLimitIp = `forgot_pwd_${ip}`;
+  const maxAttempts = 5;
+  const lockDurationMins = 15;
+
   try {
     const { email } = await req.json();
 
@@ -17,10 +33,60 @@ export async function POST(req: Request) {
 
     const emailLower = email.toLowerCase().trim();
 
+    // Rate limiting check
+    try {
+      const existingAttempt = await prisma.loginAttempt.findFirst({
+        where: { ipAddress: rateLimitIp },
+      });
+
+      if (existingAttempt) {
+        if (existingAttempt.lockedUntil && existingAttempt.lockedUntil > new Date()) {
+          const minutesLeft = Math.ceil(
+            (existingAttempt.lockedUntil.getTime() - Date.now()) / 60000
+          );
+          return NextResponse.json(
+            { error: `Bạn đã yêu cầu khôi phục mật khẩu quá nhiều lần. Vui lòng thử lại sau ${minutesLeft} phút.` },
+            { status: 429 }
+          );
+        }
+
+        // Lock window expired — reset counter
+        const lockWindowStart = new Date(Date.now() - lockDurationMins * 60 * 1000);
+        if (existingAttempt.lastAttempt < lockWindowStart) {
+          await prisma.loginAttempt.update({
+            where: { id: existingAttempt.id },
+            data: { attempts: 0, lockedUntil: null, lastAttempt: new Date() },
+          });
+        }
+      }
+    } catch (dbErr) {
+      console.error('Forgot password rate limit check error:', dbErr);
+    }
+
     // 1. Find user by email
     const user = await prisma.user.findUnique({
       where: { email: emailLower }
     });
+
+    // Record this attempt to rate limit IP
+    try {
+      const existing = await prisma.loginAttempt.findFirst({ where: { ipAddress: rateLimitIp } });
+      if (existing) {
+        const newAttempts = existing.attempts + 1;
+        const isLocked = newAttempts >= maxAttempts;
+        const lockedUntil = isLocked ? new Date(Date.now() + lockDurationMins * 60 * 1000) : null;
+        await prisma.loginAttempt.update({
+          where: { id: existing.id },
+          data: { attempts: newAttempts, lastAttempt: new Date(), lockedUntil },
+        });
+      } else {
+        await prisma.loginAttempt.create({
+          data: { ipAddress: rateLimitIp, email: emailLower, attempts: 1, lastAttempt: new Date() },
+        });
+      }
+    } catch (dbErr) {
+      console.error('Forgot password rate limit record error:', dbErr);
+    }
 
     if (!user) {
       // For security reasons, don't disclose that the email doesn't exist,
@@ -42,10 +108,10 @@ export async function POST(req: Request) {
       );
     }
 
-    // 3. Generate a reset token (expires in 15 minutes)
+    // 3. Generate a reset token (expires in 15 minutes) - signed with dynamic key (secret + password hash)
     const token = jwt.sign(
       { userId: user.id, email: user.email, purpose: 'reset-password' },
-      JWT_SECRET,
+      JWT_SECRET + user.passwordHash,
       { expiresIn: '15m' }
     );
 

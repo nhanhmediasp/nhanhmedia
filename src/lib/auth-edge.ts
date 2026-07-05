@@ -1,5 +1,10 @@
 const TOKEN_COOKIE_NAME = 'nhanh_media_auth_token';
 
+const JWT_SECRET = process.env.JWT_SECRET as string;
+if (!JWT_SECRET) {
+  throw new Error('Crucial security configuration missing: JWT_SECRET must be defined in the environment variables.');
+}
+
 export interface UserSessionPayload {
   id: string;
   name: string;
@@ -13,11 +18,10 @@ export async function verifyTokenEdge(token: string): Promise<UserSessionPayload
     if (parts.length !== 3) return null;
 
     const [headerB64, payloadB64, signatureB64] = parts;
-    const secret = process.env.JWT_SECRET || 'nhanh_media_fallback_jwt_secret_key_2026';
 
     // Verify signature using Web Crypto API (Edge runtime compatible)
     const encoder = new TextEncoder();
-    const keyData = encoder.encode(secret);
+    const keyData = encoder.encode(JWT_SECRET);
     const data = encoder.encode(`${headerB64}.${payloadB64}`);
 
     const key = await crypto.subtle.importKey(

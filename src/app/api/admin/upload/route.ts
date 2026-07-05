@@ -3,6 +3,37 @@ import { writeFile, mkdir, chmod, readdir, stat, unlink } from 'fs/promises';
 import { join, basename } from 'path';
 import { existsSync } from 'fs';
 
+function isValidImageSignature(buffer: Buffer, ext: string): boolean {
+  if (buffer.length < 4) return false;
+  
+  const hex = buffer.toString('hex', 0, 4).toUpperCase();
+  
+  if (ext === 'png') {
+    return hex === '89504E47';
+  }
+  if (ext === 'jpg' || ext === 'jpeg') {
+    return hex.startsWith('FFD8FF');
+  }
+  if (ext === 'gif') {
+    return hex === '47494638'; // "GIF8"
+  }
+  if (ext === 'webp') {
+    const isRiff = hex === '52494646'; // "RIFF"
+    if (buffer.length < 12) return false;
+    const isWebp = buffer.toString('ascii', 8, 12) === 'WEBP';
+    return isRiff && isWebp;
+  }
+  if (ext === 'ico') {
+    return hex === '00000100';
+  }
+  if (ext === 'svg') {
+    // Check if it looks like XML/SVG text
+    const text = buffer.toString('utf8', 0, Math.min(buffer.length, 120)).trim().toLowerCase();
+    return text.startsWith('<svg') || text.startsWith('<?xml') || text.includes('<svg');
+  }
+  return false;
+}
+
 export async function POST(req: Request) {
   try {
     const role = req.headers.get('x-user-role');
@@ -17,8 +48,26 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Không tìm thấy file tải lên.' }, { status: 400 });
     }
 
+    // 1. Validate file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      return NextResponse.json({ error: 'Kích thước file vượt quá giới hạn cho phép (tối đa 5MB).' }, { status: 400 });
+    }
+
+    // 2. Validate file extension
+    const originalName = basename(file.name);
+    const ext = originalName.split('.').pop()?.toLowerCase() || '';
+    const allowedExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'ico', 'svg'];
+    if (!allowedExtensions.includes(ext)) {
+      return NextResponse.json({ error: 'Định dạng file không được hỗ trợ.' }, { status: 400 });
+    }
+
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
+
+    // 3. Validate Magic Bytes (verify actual content matches extension)
+    if (!isValidImageSignature(buffer, ext)) {
+      return NextResponse.json({ error: 'Nội dung file ảnh không hợp lệ hoặc giả dạng ảnh.' }, { status: 400 });
+    }
 
     // Save directory: public/uploads
     const uploadDir = join(process.cwd(), 'public', 'uploads');
@@ -27,9 +76,13 @@ export async function POST(req: Request) {
     }
 
     // Generate unique name
-    const ext = file.name.split('.').pop() || 'png';
     const uniqueName = `${Date.now()}-${Math.random().toString(36).substring(2, 9)}.${ext}`;
     const filePath = join(uploadDir, uniqueName);
+
+    // 4. Path traversal safety check
+    if (!filePath.startsWith(uploadDir)) {
+      return NextResponse.json({ error: 'Đường dẫn lưu file không hợp lệ.' }, { status: 400 });
+    }
 
     await writeFile(filePath, buffer);
     // Phân quyền cho file vừa ghi để Nginx/Webserver có thể đọc được (đọc/ghi cho Owner, chỉ đọc cho Group/Others)
@@ -103,6 +156,11 @@ export async function DELETE(req: Request) {
     const sanitizedName = basename(fileName);
     const uploadDir = join(process.cwd(), 'public', 'uploads');
     const filePath = join(uploadDir, sanitizedName);
+
+    // Path traversal check
+    if (!filePath.startsWith(uploadDir)) {
+      return NextResponse.json({ error: 'Đường dẫn không hợp lệ.' }, { status: 400 });
+    }
 
     if (!existsSync(filePath)) {
       return NextResponse.json({ error: 'File không tồn tại.' }, { status: 404 });

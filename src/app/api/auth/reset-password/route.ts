@@ -4,7 +4,10 @@ import jwt from 'jsonwebtoken';
 import { hashPassword } from '@/lib/auth';
 import { createAuditLog } from '@/lib/audit';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'nhanh_media_fallback_jwt_secret_key_2026';
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+  throw new Error('Crucial security configuration missing: JWT_SECRET must be defined in the environment variables.');
+}
 
 export async function POST(req: Request) {
   try {
@@ -18,18 +21,15 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Mật khẩu phải có độ dài tối thiểu 6 ký tự.' }, { status: 400 });
     }
 
-    // 1. Verify token
+    // Decode token without verification first to get userId
     let decoded: any = null;
     try {
-      decoded = jwt.verify(token, JWT_SECRET);
-    } catch (jwtErr) {
-      return NextResponse.json(
-        { error: 'Mã khôi phục đã hết hạn hoặc không hợp lệ. Vui lòng gửi lại yêu cầu khôi phục mật khẩu.' },
-        { status: 400 }
-      );
+      decoded = jwt.decode(token);
+    } catch (err) {
+      return NextResponse.json({ error: 'Mã khôi phục không hợp lệ.' }, { status: 400 });
     }
 
-    if (!decoded || decoded.purpose !== 'reset-password') {
+    if (!decoded || decoded.purpose !== 'reset-password' || !decoded.userId) {
       return NextResponse.json({ error: 'Mã khôi phục không hợp lệ.' }, { status: 400 });
     }
 
@@ -42,6 +42,16 @@ export async function POST(req: Request) {
 
     if (!user || user.email !== email) {
       return NextResponse.json({ error: 'Tài khoản không tồn tại hoặc thông tin không trùng khớp.' }, { status: 404 });
+    }
+
+    // 3. Verify signature using the dynamic secret containing current passwordHash (single-use)
+    try {
+      jwt.verify(token, JWT_SECRET + user.passwordHash);
+    } catch (jwtErr) {
+      return NextResponse.json(
+        { error: 'Mã khôi phục đã hết hạn hoặc đã được sử dụng. Vui lòng gửi lại yêu cầu khôi phục mật khẩu.' },
+        { status: 400 }
+      );
     }
 
     // 3. Update password

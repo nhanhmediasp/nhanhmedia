@@ -2,7 +2,11 @@ import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import { NextRequest } from 'next/server';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'nhanh_media_fallback_jwt_secret_key_2026';
+const JWT_SECRET = process.env.JWT_SECRET as string;
+if (!JWT_SECRET) {
+  throw new Error('Crucial security configuration missing: JWT_SECRET must be defined in the environment variables.');
+}
+
 const TOKEN_COOKIE_NAME = 'nhanh_media_auth_token';
 
 export interface UserSessionPayload {

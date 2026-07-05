@@ -3,8 +3,29 @@ import type { NextRequest } from 'next/server';
 import { verifyTokenEdge, getAuthToken } from './lib/auth-edge';
 import { TOKEN_COOKIE_NAME } from './lib/auth';
 
-export async function proxy(req: NextRequest) {
+export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
+
+  // Defense-in-depth: Deny direct access to environment/git folders
+  const pathLower = pathname.toLowerCase();
+  if (
+    pathLower.includes('/.env') ||
+    pathLower.includes('/.git') ||
+    pathLower.includes('/web.config') ||
+    pathLower.includes('/htaccess')
+  ) {
+    return new NextResponse(
+      JSON.stringify({ error: 'Truy cập bị từ chối.' }),
+      { status: 403, headers: { 'Content-Type': 'application/json' } }
+    );
+  }
+
+  // Anti-spoofing: Strip all client-sent x-user-* headers
+  const requestHeaders = new Headers(req.headers);
+  requestHeaders.delete('x-user-id');
+  requestHeaders.delete('x-user-email');
+  requestHeaders.delete('x-user-name');
+  requestHeaders.delete('x-user-role');
 
   // 1. Skip static resources, images, icons, and next internals
   if (
@@ -19,7 +40,11 @@ export async function proxy(req: NextRequest) {
     pathname.includes('.') || // Static files like favicon.ico, logo.png
     pathname === '/favicon.ico'
   ) {
-    return NextResponse.next();
+    return NextResponse.next({
+      request: {
+        headers: requestHeaders,
+      },
+    });
   }
 
   // 2. Get auth token
@@ -61,8 +86,7 @@ export async function proxy(req: NextRequest) {
       }
     }
 
-    // Set user headers for easy access in API routes / Server Components
-    const requestHeaders = new Headers(req.headers);
+    // Set user headers for easy access in API routes / Server Components (verified data)
     requestHeaders.set('x-user-id', user.id);
     requestHeaders.set('x-user-email', user.email);
     requestHeaders.set('x-user-name', user.name);
@@ -87,7 +111,11 @@ export async function proxy(req: NextRequest) {
 
   // Allow login page access
   if (pathname === '/login') {
-    return NextResponse.next();
+    return NextResponse.next({
+      request: {
+        headers: requestHeaders,
+      },
+    });
   }
 
   // Redirect to login or return 401 for api routes
