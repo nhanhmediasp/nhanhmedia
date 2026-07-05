@@ -57,6 +57,8 @@ export default function ProjectsListPage() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [customerFilter, setCustomerFilter] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('');
   const [viewMode, setViewMode] = useState<'card' | 'table'>('card');
 
   // Modal States
@@ -225,7 +227,9 @@ export default function ProjectsListPage() {
   const filtered = projects.filter((p) => {
     const matchSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase());
     const matchStatus = statusFilter === '' || p.status === statusFilter;
-    return matchSearch && matchStatus;
+    const matchCustomer = customerFilter === '' || p.customerId === customerFilter;
+    const matchCategory = categoryFilter === '' || p.categoryId === categoryFilter;
+    return matchSearch && matchStatus && matchCustomer && matchCategory;
   });
 
   // Calculate high-level stats
@@ -306,7 +310,7 @@ export default function ProjectsListPage() {
           boxShadow: '0 2px 8px rgba(108,117,147,0.05)',
         }}
       >
-        <div className="flex-1 flex flex-col sm:flex-row gap-3">
+        <div className="flex-1 flex flex-col lg:flex-row gap-3">
           <div className="relative flex-1 max-w-md">
             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4.5 h-4.5 text-slate-400" />
             <input
@@ -330,6 +334,51 @@ export default function ProjectsListPage() {
               ))}
             </select>
           </div>
+          <div className="w-full sm:w-48">
+            <select
+              value={categoryFilter}
+              onChange={(e) => setCategoryFilter(e.target.value)}
+              className="w-full px-3.5 py-2.5 text-sm rounded-xl transition-all duration-200 focus:outline-none bg-slate-50 border border-slate-200 focus:border-primary cursor-pointer"
+            >
+              <option value="">Tất cả phân loại</option>
+              {categories.map((cat) => (
+                <option key={cat.id} value={cat.id}>
+                  {cat.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="w-full sm:w-48">
+            <select
+              value={customerFilter}
+              onChange={(e) => setCustomerFilter(e.target.value)}
+              className="w-full px-3.5 py-2.5 text-sm rounded-xl transition-all duration-200 focus:outline-none bg-slate-50 border border-slate-200 focus:border-primary cursor-pointer"
+            >
+              <option value="">Tất cả khách hàng</option>
+              {customers.map((cust) => (
+                <option key={cust.id} value={cust.id}>
+                  {cust.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          {(searchTerm || statusFilter || categoryFilter || customerFilter) && (
+            <div className="flex items-center">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setSearchTerm('');
+                  setStatusFilter('');
+                  setCategoryFilter('');
+                  setCustomerFilter('');
+                }}
+                className="w-full sm:w-auto h-[42px] border-slate-200 text-slate-500 hover:text-slate-700 hover:bg-slate-50 cursor-pointer"
+              >
+                Xóa bộ lọc
+              </Button>
+            </div>
+          )}
         </div>
 
         {/* View toggle */}

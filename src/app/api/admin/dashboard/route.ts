@@ -39,6 +39,27 @@ export async function GET(req: Request) {
                    FROM orders WHERE created_at >= ${gte} AND created_at <= ${lte}`
       );
 
+    // ── Helper: Project budget & costs ──
+    const projectStatsQuery = async (gte: Date, lte: Date) => {
+      const [budgetAgg, websiteCostAgg, toolCostAgg] = await Promise.all([
+        prisma.project.aggregate({
+          _sum: { budget: true },
+          where: { createdAt: { gte, lte } },
+        }),
+        prisma.websiteCost.aggregate({
+          _sum: { amount: true },
+          where: { date: { gte, lte } },
+        }),
+        prisma.toolCost.aggregate({
+          _sum: { cost: true },
+          where: { createdAt: { gte, lte } },
+        }),
+      ]);
+      const budget = budgetAgg._sum.budget ?? 0;
+      const costs = (websiteCostAgg._sum.amount ?? 0) + (toolCostAgg._sum.cost ?? 0);
+      return { budget, costs, profit: budget - costs };
+    };
+
     // ════════════════════════════════════════════════════════════════════════
     // CRITICAL SECTION: KPIs + counts + recent orders
     // ════════════════════════════════════════════════════════════════════════
@@ -87,6 +108,30 @@ export async function GET(req: Request) {
               variant:       { select: { name: true } },
               createdByUser: { select: { name: true, role: true } },
             },
+          }),
+        ])
+      : null;
+
+    const projectPromises = (section === 'critical' || section === 'all')
+      ? Promise.all([
+          // ① Today
+          projectStatsQuery(startOfToday, endOfToday),
+          // ② This Month
+          projectStatsQuery(startOfMonth, endOfMonth),
+          // ③ Last 7 Days
+          projectStatsQuery(startOfLast7Days, endOfToday),
+          // ④ Prev 7 Days
+          projectStatsQuery(startOfPrev7Days, endOfPrev7Days),
+          // ⑤ 7 Days ago
+          projectStatsQuery(startOf7DaysAgo, endOf7DaysAgo),
+          // ⑥ Total projects count
+          prisma.project.count(),
+          // ⑦ Total running projects count
+          prisma.project.count({ where: { status: 'running' } }),
+          // ⑧ Product expenses this month
+          prisma.order.aggregate({
+            _sum: { importPrice: true },
+            where: { createdAt: { gte: startOfMonth, lte: endOfMonth } }
           }),
         ])
       : null;
@@ -142,10 +187,43 @@ export async function GET(req: Request) {
         ])
       : null;
 
-    // Chạy song song 2 sections (nếu section='all')
-    const [criticalResults, chartsResults] = await Promise.all([
+    const projectChartsPromise = (section === 'charts' || section === 'all')
+      ? Promise.all([
+          // ① Projects in last 15 days
+          prisma.project.findMany({
+            where: { createdAt: { gte: startOfLast15Days, lte: endOfToday } },
+            select: { createdAt: true, budget: true },
+          }),
+          // ② Website costs in last 15 days
+          prisma.websiteCost.findMany({
+            where: { date: { gte: startOfLast15Days, lte: endOfToday } },
+            select: { date: true, amount: true },
+          }),
+          // ③ Tool costs in last 15 days
+          prisma.toolCost.findMany({
+            where: { createdAt: { gte: startOfLast15Days, lte: endOfToday } },
+            select: { createdAt: true, cost: true },
+          }),
+          // ④ Top 5 projects by budget
+          prisma.project.findMany({
+            take: 5,
+            orderBy: { budget: 'desc' },
+            select: { name: true, budget: true, progress: true },
+          }),
+          // ⑤ Project status distribution
+          prisma.project.groupBy({
+            by: ['status'],
+            _count: { id: true },
+          }),
+        ])
+      : null;
+
+    // Chạy song song tất cả các sections
+    const [criticalResults, chartsResults, projectResults, projectChartsResults] = await Promise.all([
       criticalPromise,
       chartsPromise,
+      projectPromises,
+      projectChartsPromise,
     ]);
 
     if (section === 'critical' || section === 'all') {
@@ -156,7 +234,7 @@ export async function GET(req: Request) {
     let overviewData: Record<string, unknown> | null = null;
     let recentOrdersData: unknown[] = [];
 
-    if (criticalResults) {
+    if (criticalResults && projectResults) {
       console.time(`[dashboard:${section}] revenue stats`);
       const [
         todayRevRaw, todayRenewAgg,
@@ -168,12 +246,28 @@ export async function GET(req: Request) {
         recentOrdersRaw,
       ] = criticalResults;
 
+      const [
+        projToday, projMonth, projLast7, projPrev7, proj7DaysAgo,
+        totalProjects, runningProjectsCount, productExpensesMonthAgg
+      ] = projectResults as any;
+
       const toNum = (raw: { total: number }[]) => Number(raw[0]?.total ?? 0);
-      const revToday    = toNum(todayRevRaw)   + (todayRenewAgg._sum.price   ?? 0);
-      const revMonth    = toNum(monthRevRaw)   + (monthRenewAgg._sum.price   ?? 0);
-      const revLast7    = toNum(last7RevRaw)   + (last7RenewAgg._sum.price   ?? 0);
-      const revPrev7    = toNum(prev7RevRaw)   + (prev7RenewAgg._sum.price   ?? 0);
-      const rev7DaysAgo = toNum(daysAgoRevRaw) + (daysAgoRenewAgg._sum.price ?? 0);
+      
+      const productRevenueToday = toNum(todayRevRaw) + (todayRenewAgg._sum.price ?? 0);
+      const productRevenueMonth = toNum(monthRevRaw) + (monthRenewAgg._sum.price ?? 0);
+      const projectRevenueToday = projToday.budget;
+      const projectRevenueMonth = projMonth.budget;
+
+      const revToday    = productRevenueToday + projectRevenueToday;
+      const revMonth    = productRevenueMonth + projectRevenueMonth;
+      const revLast7    = toNum(last7RevRaw)   + (last7RenewAgg._sum.price   ?? 0) + projLast7.budget;
+      const revPrev7    = toNum(prev7RevRaw)   + (prev7RenewAgg._sum.price   ?? 0) + projPrev7.budget;
+      const rev7DaysAgo = toNum(daysAgoRevRaw) + (daysAgoRenewAgg._sum.price ?? 0) + proj7DaysAgo.budget;
+
+      const productExpensesMonth = productExpensesMonthAgg._sum.importPrice ?? 0;
+      const projectExpensesMonth = projMonth.costs;
+      const expensesMonth = productExpensesMonth + projectExpensesMonth;
+      const profitMonth = revMonth - expensesMonth;
 
       const calcGrowth = (cur: number, prev: number) =>
         prev === 0 ? (cur > 0 ? 100 : 0) : ((cur - prev) / prev) * 100;
@@ -188,6 +282,13 @@ export async function GET(req: Request) {
         totalCustomers,
         totalOrders,
         expiringSoonCount,
+        // Project metrics
+        totalProjects,
+        runningProjectsCount,
+        productRevenueMonth,
+        projectRevenueMonth,
+        expensesMonth,
+        profitMonth,
       };
 
       recentOrdersData = (recentOrdersRaw as typeof criticalResults[13]).map(o => ({
@@ -210,37 +311,84 @@ export async function GET(req: Request) {
     // ── Xử lý charts data ─────────────────────────────────────────────────
     let chartsData: Record<string, unknown> | null = null;
 
-    if (chartsResults) {
+    if (chartsResults && projectChartsResults) {
       console.time(`[dashboard:${section}] charts build`);
       const [dailyOrders, dailyRenewals, topProductsRaw, topCreatorsRaw, statusGroupBy] = chartsResults;
+      const [dailyProjects, dailyWebsiteCosts, dailyToolCosts, topProjectsRaw, projectStatusGroupBy] = projectChartsResults;
 
       // Daily chart
       const formatDayKey = (d: Date) =>
         `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`;
 
-      const dailyMap = new Map<string, { revenue: number; importPrice: number; profit: number }>();
+      const dailyMap = new Map<string, {
+        productRevenue: number;
+        projectRevenue: number;
+        productCosts: number;
+        projectCosts: number;
+      }>();
+
       const cursor = new Date(startOfLast15Days);
       while (cursor <= endOfToday) {
-        dailyMap.set(formatDayKey(cursor), { revenue: 0, importPrice: 0, profit: 0 });
+        dailyMap.set(formatDayKey(cursor), {
+          productRevenue: 0,
+          projectRevenue: 0,
+          productCosts: 0,
+          projectCosts: 0,
+        });
         cursor.setDate(cursor.getDate() + 1);
       }
+
       for (const o of dailyOrders) {
         const slot = dailyMap.get(formatDayKey(new Date(o.createdAt)));
         if (slot) {
-          const val = o.customPrice ?? o.price;
-          const imp = o.importPrice ?? 0;
-          slot.revenue += val; slot.importPrice += imp; slot.profit += val - imp;
+          slot.productRevenue += o.customPrice ?? o.price;
+          slot.productCosts += o.importPrice ?? 0;
         }
       }
+
       for (const r of dailyRenewals) {
         const slot = dailyMap.get(formatDayKey(new Date(r.createdAt)));
-        if (slot) { slot.revenue += r.price; slot.profit += r.price; }
+        if (slot) {
+          slot.productRevenue += r.price;
+        }
       }
-      const dailyRevenue = Array.from(dailyMap.entries()).map(([label, s]) => ({
-        label, value: s.revenue, revenue: s.revenue, importPrice: s.importPrice, profit: s.profit,
-      }));
 
-      // Rankings (từ rawQuery – đã có name, không cần resolve)
+      for (const p of dailyProjects) {
+        const slot = dailyMap.get(formatDayKey(new Date(p.createdAt)));
+        if (slot) {
+          slot.projectRevenue += p.budget;
+        }
+      }
+
+      for (const w of dailyWebsiteCosts) {
+        const slot = dailyMap.get(formatDayKey(new Date(w.date)));
+        if (slot) {
+          slot.projectCosts += w.amount;
+        }
+      }
+
+      for (const t of dailyToolCosts) {
+        const slot = dailyMap.get(formatDayKey(new Date(t.createdAt)));
+        if (slot) {
+          slot.projectCosts += t.cost;
+        }
+      }
+
+      const dailyRevenue = Array.from(dailyMap.entries()).map(([label, s]) => {
+        const totalRevenue = s.productRevenue + s.projectRevenue;
+        const totalCosts = s.productCosts + s.projectCosts;
+        return {
+          label,
+          value: totalRevenue,
+          productRevenue: s.productRevenue,
+          projectRevenue: s.projectRevenue,
+          productCosts: s.productCosts,
+          projectCosts: s.projectCosts,
+          profit: totalRevenue - totalCosts,
+        };
+      });
+
+      // Rankings
       const topProducts = (topProductsRaw as { product_name: string; total: number }[]).map(p => ({
         label: p.product_name, value: Number(p.total),
       }));
@@ -250,6 +398,12 @@ export async function GET(req: Request) {
         label:    c.user_name,
         value:    Number(c.total),
         subLabel: ROLE_LABEL[c.user_role] ?? c.user_role,
+      }));
+
+      const topProjects = (topProjectsRaw as { name: string; budget: number; progress: number }[]).map(p => ({
+        label: p.name,
+        value: p.budget,
+        subLabel: `Tiến độ: ${p.progress}%`,
       }));
 
       // Status distribution
@@ -267,13 +421,27 @@ export async function GET(req: Request) {
         color: STATUS_COLORS[s.status] ?? '#94a3b8',
       }));
 
+      const PROJ_STATUS_COLORS: Record<string, string> = {
+        running: '#10b981', completed: '#3b82f6', paused: '#f59e0b',
+      };
+      const PROJ_STATUS_LABELS: Record<string, string> = {
+        running: 'Đang chạy', completed: 'Hoàn thành', paused: 'Tạm dừng',
+      };
+      const projectStatusDistribution = (projectStatusGroupBy as { status: string; _count: { id: number } }[]).map(s => ({
+        label: PROJ_STATUS_LABELS[s.status] ?? s.status,
+        value: s._count.id,
+        color: PROJ_STATUS_COLORS[s.status] ?? '#94a3b8',
+      }));
+
       chartsData = {
         dailyRevenue,
         monthlyRevenue: [],
         topProducts,
         topCreators,
+        topProjects,
         topCustomers: [],
         orderStatusDistribution,
+        projectStatusDistribution,
       };
       console.timeEnd(`[dashboard:${section}] charts build`);
     }

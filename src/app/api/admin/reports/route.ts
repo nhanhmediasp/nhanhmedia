@@ -25,6 +25,7 @@ export async function GET(req: Request) {
     const productId      = searchParams.get('productId');
     const statusFilter   = searchParams.get('status');
     const supplierId     = searchParams.get('supplierId');
+    const type           = searchParams.get('type') ?? 'all'; // 'all' | 'product' | 'project'
     const page           = Math.max(1, parseInt(searchParams.get('page') ?? '1', 10));
     const pageSize       = Math.min(50, Math.max(1, parseInt(searchParams.get('pageSize') ?? '20', 10)));
 
@@ -69,8 +70,16 @@ export async function GET(req: Request) {
       } : {}),
     };
 
+    const projectWhere: Prisma.ProjectWhereInput = {
+      ...(startFilterDate || endFilterDate ? {
+        createdAt: {
+          ...(startFilterDate ? { gte: startFilterDate } : {}),
+          ...(endFilterDate   ? { lte: endFilterDate   } : {}),
+        },
+      } : {}),
+    };
+
     // ── Build raw SQL WHERE clauses for SUM(COALESCE) ─────────────────────
-    // Prisma aggregate không hỗ trợ COALESCE nên cần rawQuery
     const whereParts: Prisma.Sql[] = [];
     if (creatorId)      whereParts.push(Prisma.sql`created_by_user_id = ${creatorId}`);
     if (productId)      whereParts.push(Prisma.sql`product_id = ${productId}`);
@@ -83,144 +92,179 @@ export async function GET(req: Request) {
       ? Prisma.sql`WHERE ${Prisma.join(whereParts, ' AND ')}`
       : Prisma.empty;
 
+    const runProducts = type === 'all' || type === 'product';
+    const runProjects = type === 'all' || type === 'project';
+
     // ── Phase 1: Tất cả queries chạy song song ────────────────────────────
     console.time('[reports] phase1 parallel');
 
-    const [
-      // SUM(COALESCE(custom_price, price)) – chính xác cho tổng revenue
-      revenueRaw,
-      // Renewal revenue
-      renewalsAgg,
-      // Import price aggregate
-      ordersImportAgg,
-      // Count orders có importPrice
-      ordersWithImportCount,
-      // Paginated detail list
-      detailOrders,
-      detailOrdersTotal,
-      // Chart data (chỉ trong chartStart → chartEnd)
-      chartOrders,
-      chartRenewals,
-      // Top rankings (groupBy – không scan toàn bảng)
-      topProductsGroup,
-      topCreatorsGroup,
-      topCustomersGroup,
-      // Status distribution (groupBy thay vì findMany toàn bảng)
-      statusGroupBy,
-      // Total customers count
-      totalCustomersCount,
-    ] = await Promise.all([
+    const productPromises = runProducts
+      ? Promise.all([
+          prisma.$queryRaw<{ total: number }[]>(
+            Prisma.sql`SELECT COALESCE(SUM(COALESCE(custom_price, price)), 0)::float AS total FROM orders ${rawWhere}`
+          ),
+          prisma.orderRenewal.aggregate({ _sum: { price: true }, where: renewalWhere }),
+          prisma.order.aggregate({
+            _sum: { importPrice: true },
+            where: { ...orderWhere, importPrice: { not: null } },
+          }),
+          prisma.order.count({ where: { ...orderWhere, importPrice: { not: null } } }),
+          prisma.order.findMany({
+            where: orderWhere,
+            take: pageSize,
+            skip: (page - 1) * pageSize,
+            orderBy: { createdAt: 'desc' },
+            select: {
+              orderCode:  true,
+              createdAt:  true,
+              price:      true,
+              customPrice:true,
+              importPrice:true,
+              status:     true,
+              startDate:  true,
+              endDate:    true,
+              customer:      { select: { name: true, phone: true } },
+              product:       { select: { name: true } },
+              variant:       { select: { name: true } },
+              createdByUser: { select: { name: true, role: true } },
+            },
+          }),
+          prisma.order.count({ where: orderWhere }),
+          prisma.order.findMany({
+            where: { ...orderWhere, createdAt: { gte: chartStart, lte: chartEnd } },
+            select: { createdAt: true, price: true, customPrice: true, importPrice: true },
+            orderBy: { createdAt: 'asc' },
+          }),
+          prisma.orderRenewal.findMany({
+            where: { ...renewalWhere, createdAt: { gte: chartStart, lte: chartEnd } },
+            select: { createdAt: true, price: true },
+            orderBy: { createdAt: 'asc' },
+          }),
+          prisma.order.groupBy({
+            by: ['productId'],
+            where: orderWhere,
+            _sum: { price: true, customPrice: true },
+            orderBy: { _sum: { price: 'desc' } },
+            take: 5,
+          }),
+          prisma.order.groupBy({
+            by: ['createdByUserId'],
+            where: orderWhere,
+            _sum: { price: true, customPrice: true },
+            orderBy: { _sum: { price: 'desc' } },
+            take: 5,
+          }),
+          prisma.order.groupBy({
+            by: ['customerId'],
+            where: orderWhere,
+            _sum: { price: true, customPrice: true },
+            _count: { id: true },
+            orderBy: { _sum: { price: 'desc' } },
+            take: 5,
+          }),
+          prisma.order.groupBy({ by: ['status'], _count: { id: true } }),
+          prisma.customer.count(),
+        ])
+      : Promise.resolve([
+          [{ total: 0 }],
+          { _sum: { price: null } },
+          { _sum: { importPrice: null } },
+          0,
+          [],
+          0,
+          [],
+          [],
+          [],
+          [],
+          [],
+          [],
+          0,
+        ]);
 
-      // ① Tổng revenue dùng COALESCE (chính xác khi mix price/customPrice)
-      prisma.$queryRaw<{ total: number }[]>(
-        Prisma.sql`SELECT COALESCE(SUM(COALESCE(custom_price, price)), 0)::float AS total FROM orders ${rawWhere}`
-      ),
+    const projectPromises = runProjects
+      ? Promise.all([
+          prisma.project.aggregate({ _sum: { budget: true }, where: projectWhere }),
+          prisma.websiteCost.aggregate({ _sum: { amount: true }, where: { project: projectWhere } }),
+          prisma.toolCost.aggregate({ _sum: { cost: true }, where: { project: projectWhere } }),
+          prisma.project.findMany({
+            where: projectWhere,
+            take: pageSize,
+            skip: (page - 1) * pageSize,
+            orderBy: { createdAt: 'desc' },
+            include: {
+              customer: true,
+              category: true,
+              websiteCosts: { select: { amount: true } },
+              toolCosts: { select: { cost: true } },
+            }
+          }),
+          prisma.project.count({ where: projectWhere }),
+          prisma.project.findMany({
+            where: { ...projectWhere, createdAt: { gte: chartStart, lte: chartEnd } },
+            select: { createdAt: true, budget: true },
+            orderBy: { createdAt: 'asc' },
+          }),
+          prisma.websiteCost.findMany({
+            where: { project: projectWhere, date: { gte: chartStart, lte: chartEnd } },
+            select: { date: true, amount: true },
+          }),
+          prisma.toolCost.findMany({
+            where: { project: projectWhere, createdAt: { gte: chartStart, lte: chartEnd } },
+            select: { createdAt: true, cost: true },
+          }),
+        ])
+      : Promise.resolve([
+          { _sum: { budget: null } },
+          { _sum: { amount: null } },
+          { _sum: { cost: null } },
+          [],
+          0,
+          [],
+          [],
+          [],
+        ]);
 
-      // ② Renewal SUM
-      prisma.orderRenewal.aggregate({
-        _sum: { price: true },
-        where: renewalWhere,
-      }),
-
-      // ③ Import price SUM (chỉ rows có importPrice != null)
-      prisma.order.aggregate({
-        _sum: { importPrice: true },
-        where: { ...orderWhere, importPrice: { not: null } },
-      }),
-
-      // ④ Count có importPrice
-      prisma.order.count({ where: { ...orderWhere, importPrice: { not: null } } }),
-
-      // ⑤ Paginated detail orders (chỉ select field cần dùng)
-      prisma.order.findMany({
-        where: orderWhere,
-        take: pageSize,
-        skip: (page - 1) * pageSize,
-        orderBy: { createdAt: 'desc' },
-        select: {
-          orderCode:  true,
-          createdAt:  true,
-          price:      true,
-          customPrice:true,
-          importPrice:true,
-          status:     true,
-          startDate:  true,
-          endDate:    true,
-          customer:      { select: { name: true, phone: true } },
-          product:       { select: { name: true } },
-          variant:       { select: { name: true } },
-          createdByUser: { select: { name: true, role: true } },
-        },
-      }),
-
-      // ⑥ Total count cho pagination
-      prisma.order.count({ where: orderWhere }),
-
-      // ⑦ Chart orders – CHỈ trong khoảng thời gian chart (tối đa 15 ngày nếu không lọc)
-      prisma.order.findMany({
-        where: {
-          ...orderWhere,
-          createdAt: { gte: chartStart, lte: chartEnd },
-        },
-        select: { createdAt: true, price: true, customPrice: true, importPrice: true },
-        orderBy: { createdAt: 'asc' },
-      }),
-
-      // ⑧ Chart renewals
-      prisma.orderRenewal.findMany({
-        where: {
-          ...renewalWhere,
-          createdAt: { gte: chartStart, lte: chartEnd },
-        },
-        select: { createdAt: true, price: true },
-        orderBy: { createdAt: 'asc' },
-      }),
-
-      // ⑨ Top 5 products (groupBy – không load toàn bộ)
-      prisma.order.groupBy({
-        by: ['productId'],
-        where: orderWhere,
-        _sum: { price: true, customPrice: true },
-        orderBy: { _sum: { price: 'desc' } },
-        take: 5,
-      }),
-
-      // ⑩ Top 5 creators (groupBy)
-      prisma.order.groupBy({
-        by: ['createdByUserId'],
-        where: orderWhere,
-        _sum: { price: true, customPrice: true },
-        orderBy: { _sum: { price: 'desc' } },
-        take: 5,
-      }),
-
-      // ⑪ Top 5 customers (groupBy)
-      prisma.order.groupBy({
-        by: ['customerId'],
-        where: orderWhere,
-        _sum: { price: true, customPrice: true },
-        _count: { id: true },
-        orderBy: { _sum: { price: 'desc' } },
-        take: 5,
-      }),
-
-      // ⑫ Status distribution (groupBy – thay vì findMany toàn bảng)
-      prisma.order.groupBy({
-        by: ['status'],
-        _count: { id: true },
-      }),
-      
-      // ⑬ Total customers count
-      prisma.customer.count(),
+    const [productResults, projectResults] = await Promise.all([
+      productPromises,
+      projectPromises,
     ]);
 
     console.timeEnd('[reports] phase1 parallel');
 
+    // Unpack products
+    const [
+      revenueRaw,
+      renewalsAgg,
+      ordersImportAgg,
+      ordersWithImportCount,
+      detailOrders,
+      detailOrdersTotal,
+      chartOrders,
+      chartRenewals,
+      topProductsGroup,
+      topCreatorsGroup,
+      topCustomersGroup,
+      statusGroupBy,
+      totalCustomersCount,
+    ] = productResults as any;
+
+    // Unpack projects
+    const [
+      projectsBudgetAgg,
+      websiteCostsAgg,
+      toolCostsAgg,
+      detailProjects,
+      detailProjectsTotal,
+      chartProjects,
+      chartWebsiteCosts,
+      chartToolCosts,
+    ] = projectResults as any;
+
     // ── Phase 2: Resolve entity names (song song) ─────────────────────────
     console.time('[reports] phase2 resolve names');
-    const productIds  = topProductsGroup.map(p => p.productId);
-    const creatorIds  = topCreatorsGroup.map(c => c.createdByUserId);
-    const customerIds = topCustomersGroup.map(c => c.customerId);
+    const productIds  = topProductsGroup.map((p: any) => p.productId);
+    const creatorIds  = topCreatorsGroup.map((c: any) => c.createdByUserId);
+    const customerIds = topCustomersGroup.map((c: any) => c.customerId);
 
     const [products, creators, customers] = await Promise.all([
       productIds.length  ? prisma.product.findMany({ where: { id: { in: productIds  } }, select: { id: true, name: true } }) : [],
@@ -229,43 +273,91 @@ export async function GET(req: Request) {
     ]);
     console.timeEnd('[reports] phase2 resolve names');
 
-    // ── Tính revenue ───────────────────────────────────────────────────────
-    console.time('[reports] total revenue');
+    // ── Tính toán tài chính ────────────────────────────────────────────────
+    console.time('[reports] financial calculations');
     const totalOrderRevenue    = Number(revenueRaw[0]?.total ?? 0);
     const totalRenewalRevenue  = renewalsAgg._sum.price ?? 0;
-    const totalFilteredRevenue = totalOrderRevenue + totalRenewalRevenue;
-    const totalImport          = ordersImportAgg._sum.importPrice ?? 0;
-    const totalFilteredProfit  = totalFilteredRevenue - totalImport;
-    console.timeEnd('[reports] total revenue');
+    const totalProductRevenue  = totalOrderRevenue + totalRenewalRevenue;
+    const totalProjectRevenue  = projectsBudgetAgg._sum.budget ?? 0;
+    const totalFilteredRevenue = totalProductRevenue + totalProjectRevenue;
+
+    const totalProductImport   = ordersImportAgg._sum.importPrice ?? 0;
+    const totalProjectCosts    = (websiteCostsAgg._sum.amount ?? 0) + (toolCostsAgg._sum.cost ?? 0);
+    const totalExpenses        = totalProductImport + totalProjectCosts;
+
+    const totalFilteredProfit  = totalFilteredRevenue - totalExpenses;
+    console.timeEnd('[reports] financial calculations');
 
     // ── Daily chart build ──────────────────────────────────────────────────
     console.time('[reports] daily revenue');
     const formatDayKey = (d: Date) =>
       `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`;
 
-    const dailyMap = new Map<string, { revenue: number; importPrice: number; profit: number }>();
+    const dailyMap = new Map<string, {
+      productRevenue: number;
+      projectRevenue: number;
+      productCosts: number;
+      projectCosts: number;
+    }>();
+
     const cur = new Date(chartStart);
     while (cur <= chartEnd) {
-      dailyMap.set(formatDayKey(cur), { revenue: 0, importPrice: 0, profit: 0 });
+      dailyMap.set(formatDayKey(cur), {
+        productRevenue: 0,
+        projectRevenue: 0,
+        productCosts: 0,
+        projectCosts: 0,
+      });
       cur.setDate(cur.getDate() + 1);
     }
+
     for (const o of chartOrders) {
       const slot = dailyMap.get(formatDayKey(new Date(o.createdAt)));
       if (slot) {
-        const val = o.customPrice ?? o.price;
-        const imp = o.importPrice ?? 0;
-        slot.revenue     += val;
-        slot.importPrice += imp;
-        slot.profit      += val - imp;
+        slot.productRevenue += o.customPrice ?? o.price;
+        slot.productCosts += o.importPrice ?? 0;
       }
     }
     for (const r of chartRenewals) {
       const slot = dailyMap.get(formatDayKey(new Date(r.createdAt)));
-      if (slot) { slot.revenue += r.price; slot.profit += r.price; }
+      if (slot) {
+        slot.productRevenue += r.price;
+      }
     }
-    const dailyRevenue = Array.from(dailyMap.entries()).map(([label, s]) => ({
-      label, value: s.revenue, revenue: s.revenue, importPrice: s.importPrice, profit: s.profit,
-    }));
+    for (const p of chartProjects) {
+      const slot = dailyMap.get(formatDayKey(new Date(p.createdAt)));
+      if (slot) {
+        slot.projectRevenue += p.budget;
+      }
+    }
+    for (const w of chartWebsiteCosts) {
+      const slot = dailyMap.get(formatDayKey(new Date(w.date)));
+      if (slot) {
+        slot.projectCosts += w.amount;
+      }
+    }
+    for (const t of chartToolCosts) {
+      const slot = dailyMap.get(formatDayKey(new Date(t.createdAt)));
+      if (slot) {
+        slot.projectCosts += t.cost;
+      }
+    }
+
+    const dailyRevenue = Array.from(dailyMap.entries()).map(([label, s]) => {
+      const revenue = s.productRevenue + s.projectRevenue;
+      const costs = s.productCosts + s.projectCosts;
+      return {
+        label,
+        value: revenue,
+        revenue,
+        productRevenue: s.productRevenue,
+        projectRevenue: s.projectRevenue,
+        importPrice: costs,
+        productCosts: s.productCosts,
+        projectCosts: s.projectCosts,
+        profit: revenue - costs,
+      };
+    });
     console.timeEnd('[reports] daily revenue');
 
     // ── Monthly chart ──────────────────────────────────────────────────────
@@ -286,6 +378,13 @@ export async function GET(req: Request) {
         monthlyMap.set(key, (monthlyMap.get(key) ?? 0) + r.price);
       }
     }
+    for (const p of chartProjects) {
+      const d = new Date(p.createdAt);
+      if (d.getFullYear() === now.getFullYear()) {
+        const key = `Thg ${d.getMonth() + 1}`;
+        monthlyMap.set(key, (monthlyMap.get(key) ?? 0) + p.budget);
+      }
+    }
     const monthlyRevenue = Array.from(monthlyMap.entries()).map(([label, value]) => ({ label, value }));
     console.timeEnd('[reports] monthly revenue');
 
@@ -294,12 +393,12 @@ export async function GET(req: Request) {
     const creatorMap  = new Map(creators.map(u  => [u.id, u]));
     const customerMap = new Map(customers.map(c => [c.id, c]));
 
-    const topProducts = topProductsGroup.map(p => ({
+    const topProducts = topProductsGroup.map((p: any) => ({
       label: productMap.get(p.productId) ?? p.productId,
       value: (p._sum.customPrice ?? 0) || (p._sum.price ?? 0),
-    })).sort((a, b) => b.value - a.value);
+    })).sort((a: any, b: any) => b.value - a.value);
 
-    const topCreators = topCreatorsGroup.map(c => {
+    const topCreators = topCreatorsGroup.map((c: any) => {
       const user = creatorMap.get(c.createdByUserId);
       return {
         label: user?.name ?? c.createdByUserId,
@@ -308,16 +407,16 @@ export async function GET(req: Request) {
                 : user?.role === 'agency'       ? 'Đại lý'
                 : 'Thành viên',
       };
-    }).sort((a, b) => b.value - a.value);
+    }).sort((a: any, b: any) => b.value - a.value);
 
-    const topCustomers = topCustomersGroup.map(c => {
+    const topCustomers = topCustomersGroup.map((c: any) => {
       const cust = customerMap.get(c.customerId);
       return {
         label: cust?.name ?? c.customerId,
         value: (c._sum.customPrice ?? 0) || (c._sum.price ?? 0),
         subLabel: `${cust?.phone ?? ''} (${c._count.id} đơn)`,
       };
-    }).sort((a, b) => b.value - a.value);
+    }).sort((a: any, b: any) => b.value - a.value);
 
     // Status distribution
     const STATUS_COLORS: Record<string, string> = {
@@ -328,18 +427,18 @@ export async function GET(req: Request) {
       new: 'Mới tạo', processing: 'Đang xử lý', running: 'Đang chạy',
       expired_soon: 'Sắp hết hạn', expired: 'Đã hết hạn', cancelled: 'Đã hủy',
     };
-    const orderStatusDistribution = statusGroupBy.map(s => ({
+    const orderStatusDistribution = statusGroupBy.map((s: any) => ({
       label: STATUS_LABELS[s.status] ?? s.status,
       value: s._count.id,
       color: STATUS_COLORS[s.status] ?? '#94a3b8',
     }));
 
-    // ── Format detail list ─────────────────────────────────────────────────
-    const formattedOrders = detailOrders.map(o => ({
+    // ── Format detail lists ────────────────────────────────────────────────
+    const formattedOrders = detailOrders.map((o: any) => ({
       createdAt:    o.createdAt,
       orderCode:    o.orderCode,
       customerName: o.customer.name,
-      customerPhone:o.customer.phone,
+      customerPhone: o.customer.phone,
       creatorName:  o.createdByUser.name,
       creatorRole:  o.createdByUser.role,
       productName:  o.product.name,
@@ -352,20 +451,41 @@ export async function GET(req: Request) {
       endDate:      o.endDate,
     }));
 
+    const formattedProjects = detailProjects.map((p: any) => {
+      const webCostSum = p.websiteCosts.reduce((acc: number, curr: any) => acc + curr.amount, 0);
+      const toolCostSum = p.toolCosts.reduce((acc: number, curr: any) => acc + curr.cost, 0);
+      const totalCost = webCostSum + toolCostSum;
+      return {
+        id: p.id,
+        name: p.name,
+        customerName: p.customer?.name || 'N/A',
+        categoryName: p.category?.name || 'N/A',
+        budget: p.budget,
+        totalCost,
+        profit: p.budget - totalCost,
+        status: p.status,
+        progress: p.progress,
+        createdAt: p.createdAt,
+      };
+    });
+
     console.timeEnd('[reports] total');
 
     return NextResponse.json({
+      type,
       filteredReport: {
         totalRevenue:          totalFilteredRevenue,
         totalProfit:           totalFilteredProfit,
-        totalImport,
+        totalImport:           totalExpenses,
         ordersWithImportPrice: ordersWithImportCount,
         orderCount:            detailOrdersTotal,
+        projectCount:          detailProjectsTotal,
         totalCustomers:        totalCustomersCount,
-        totalPages:            Math.ceil(detailOrdersTotal / pageSize),
+        totalPages:            type === 'project' ? Math.ceil(detailProjectsTotal / pageSize) : Math.ceil(detailOrdersTotal / pageSize),
         currentPage:           page,
         pageSize,
         orders:                formattedOrders,
+        projects:              formattedProjects,
       },
       charts: {
         dailyRevenue,

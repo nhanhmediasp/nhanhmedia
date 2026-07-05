@@ -6,23 +6,29 @@ import {
   Card, CardHeader, CardTitle, CardContent,
   showToast, PageHeader, StatCard, StatusBadge,
 } from '@/components/ui';
-import { AreaChart, DonutChart, HorizontalBarChart } from '@/components/Charts';
+import { AreaChart, DonutChart, HorizontalBarChart, MultiLineChart } from '@/components/Charts';
 import {
   DollarSign, ShoppingCart, Users, AlertTriangle,
   ArrowUpRight, TrendingUp, Package, Activity, CalendarClock,
+  FolderGit2,
 } from 'lucide-react';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 interface OverviewStats {
   revenueToday:           number;
   revenueMonth:           number;
-  revenueYear:            number;
   totalCustomers:         number;
   totalOrders:            number;
   expiringSoonCount:      number;
   revenueLast7Days:       number;
   revenueLast7DaysGrowth: number;
   revenueTodayGrowth:     number;
+  totalProjects:          number;
+  runningProjectsCount:   number;
+  productRevenueMonth:    number;
+  projectRevenueMonth:    number;
+  expensesMonth:          number;
+  profitMonth:            number;
 }
 
 interface RecentOrder {
@@ -41,11 +47,13 @@ interface RecentOrder {
 }
 
 interface ChartData {
-  dailyRevenue:           { label: string; value: number }[];
+  dailyRevenue:           { label: string; [key: string]: any }[];
   monthlyRevenue:         { label: string; value: number }[];
   topProducts:            { label: string; value: number }[];
   topCreators:            { label: string; value: number; subLabel?: string }[];
+  topProjects:            { label: string; value: number; subLabel?: string }[];
   orderStatusDistribution:{ label: string; value: number; color: string }[];
+  projectStatusDistribution:{ label: string; value: number; color: string }[];
 }
 
 // ── Skeleton components ────────────────────────────────────────────────────
@@ -164,42 +172,37 @@ export default function AdminDashboardPage() {
         {stats ? (
           <>
             <StatCard
-              title="Doanh thu hôm nay"
-              value={formatVND(stats.revenueToday)}
-              trend={stats.revenueTodayGrowth !== undefined ? {
-                value: `${stats.revenueTodayGrowth >= 0 ? '+' : '-'}${Math.abs(stats.revenueTodayGrowth).toFixed(1)}% - 7 ngày trước`,
-                isPositive: stats.revenueTodayGrowth >= 0,
-              } : undefined}
+              title="Doanh thu tháng này"
+              value={formatVND(stats.revenueMonth)}
+              description={`SP: ${formatVND(stats.productRevenueMonth || 0)} | DA: ${formatVND(stats.projectRevenueMonth || 0)}`}
               icon={<DollarSign className="w-5.5 h-5.5" />}
               iconColor="primary"
             />
             <StatCard
-              title="Doanh thu 7 ngày qua"
-              value={formatVND(stats.revenueLast7Days)}
-              trend={stats.revenueLast7DaysGrowth !== undefined ? {
-                value: `${stats.revenueLast7DaysGrowth >= 0 ? '+' : '-'}${Math.abs(stats.revenueLast7DaysGrowth).toFixed(1)}% - 7 ngày trước`,
-                isPositive: stats.revenueLast7DaysGrowth >= 0,
-              } : undefined}
+              title="Chi phí tháng này"
+              value={formatVND(stats.expensesMonth || 0)}
+              description="Gồm giá nhập SP & chi phí DA"
+              icon={<TrendingUp className="w-5.5 h-5.5" style={{ color: '#ef4444' }} />}
+              iconColor="danger"
+            />
+            <StatCard
+              title="Lợi nhuận tháng này"
+              value={formatVND(stats.profitMonth || 0)}
+              description="Doanh thu trừ Chi phí"
               icon={<TrendingUp className="w-5.5 h-5.5" />}
               iconColor="success"
             />
             <StatCard
-              title="Doanh thu tháng này"
-              value={formatVND(stats.revenueMonth)}
-              icon={<TrendingUp className="w-5.5 h-5.5" />}
-              iconColor="success"
-            />
-            <StatCard
-              title="Đơn hàng & Khách hàng"
-              value={`${stats.totalOrders} đơn`}
-              description={`${stats.totalCustomers} khách hàng`}
-              icon={<Users className="w-5.5 h-5.5" />}
+              title="Đơn hàng & Dự án"
+              value={`${stats.totalOrders} Đơn hàng`}
+              description={`${stats.totalProjects || 0} Dự án (${stats.runningProjectsCount || 0} đang chạy)`}
+              icon={<FolderGit2 className="w-5.5 h-5.5" />}
               iconColor="info"
             />
             <StatCard
-              title="Sắp hết hạn"
-              value={`${stats.expiringSoonCount} dịch vụ`}
-              description="Trong 7 ngày tới"
+              title="Khách hàng & Nhắc hạn"
+              value={`${stats.totalCustomers} Khách hàng`}
+              description={`${stats.expiringSoonCount} dịch vụ sắp hết hạn`}
               icon={<AlertTriangle className="w-5.5 h-5.5" />}
               iconColor="danger"
             />
@@ -233,31 +236,74 @@ export default function AdminDashboardPage() {
             <CardContent className="pt-2">
               {chartsLoading
                 ? <SkeletonChart height={240} />
-                : <AreaChart data={charts?.dailyRevenue ?? []} height={240} />
+                : (
+                  <>
+                    <MultiLineChart 
+                      data={charts?.dailyRevenue ?? []} 
+                      keys={['productRevenue', 'projectRevenue']} 
+                      colors={['#a145ab', '#10b981']} 
+                      height={240} 
+                    />
+                    <div className="flex justify-center gap-6 mt-3 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                      <div className="flex items-center gap-2">
+                        <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: '#a145ab' }} />
+                        <span>Sản phẩm & Dịch vụ</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: '#10b981' }} />
+                        <span>Dự án</span>
+                      </div>
+                    </div>
+                  </>
+                )
               }
             </CardContent>
           </Card>
 
-          {/* Order status donut */}
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle className="flex items-center gap-2">
-                <span
-                  className="w-7 h-7 rounded-lg flex items-center justify-center"
-                  style={{ background: 'linear-gradient(135deg,#cffafe,#a5f3fc)', color: '#0891b2' }}
-                >
-                  <ShoppingCart className="w-4 h-4" />
-                </span>
-                Phân bổ trạng thái Đơn hàng
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="pb-2">
-              {chartsLoading
-                ? <SkeletonChart height={200} />
-                : <DonutChart data={charts?.orderStatusDistribution ?? []} />
-              }
-            </CardContent>
-          </Card>
+          {/* Status Donut Charts side-by-side */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            {/* Order status donut */}
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <CardTitle className="flex items-center gap-2">
+                  <span
+                    className="w-7 h-7 rounded-lg flex items-center justify-center"
+                    style={{ background: 'linear-gradient(135deg,#cffafe,#a5f3fc)', color: '#0891b2' }}
+                  >
+                    <ShoppingCart className="w-4 h-4" />
+                  </span>
+                  Phân bổ trạng thái Đơn hàng
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="pb-2">
+                {chartsLoading
+                  ? <SkeletonChart height={200} />
+                  : <DonutChart data={charts?.orderStatusDistribution ?? []} />
+                }
+              </CardContent>
+            </Card>
+
+            {/* Project status donut */}
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <CardTitle className="flex items-center gap-2">
+                  <span
+                    className="w-7 h-7 rounded-lg flex items-center justify-center"
+                    style={{ background: 'linear-gradient(135deg,#e0f2fe,#bae6fd)', color: '#0369a1' }}
+                  >
+                    <FolderGit2 className="w-4 h-4" />
+                  </span>
+                  Phân bổ trạng thái Dự án
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="pb-2">
+                {chartsLoading
+                  ? <SkeletonChart height={200} />
+                  : <DonutChart data={charts?.projectStatusDistribution ?? []} />
+                }
+              </CardContent>
+            </Card>
+          </div>
         </div>
 
         {/* Right – Rankings */}
@@ -278,6 +324,26 @@ export default function AdminDashboardPage() {
               {chartsLoading
                 ? <SkeletonChart height={160} />
                 : <HorizontalBarChart data={charts?.topProducts ?? []} isCurrency={true} />
+              }
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <span
+                  className="w-7 h-7 rounded-lg flex items-center justify-center"
+                  style={{ background: 'linear-gradient(135deg,#e0e7ff,#c7d2fe)', color: '#4f46e5' }}
+                >
+                  <FolderGit2 className="w-4 h-4" />
+                </span>
+                Top 5 dự án (Ngân sách)
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {chartsLoading
+                ? <SkeletonChart height={160} />
+                : <HorizontalBarChart data={charts?.topProjects ?? []} isCurrency={true} />
               }
             </CardContent>
           </Card>

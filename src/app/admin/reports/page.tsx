@@ -40,6 +40,7 @@ interface Product {
 
 export default function AdminReportsPage() {
   const [reportData, setReportData] = useState<OrderReportItem[]>([]);
+  const [projectsData, setProjectsData] = useState<any[]>([]);
   const [creators, setCreators] = useState<Creator[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
@@ -59,6 +60,7 @@ export default function AdminReportsPage() {
   const [revenueLast7DaysGrowth, setRevenueLast7DaysGrowth] = useState(0);
 
   // Filter States
+  const [businessType, setBusinessType] = useState('all');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [creatorId, setCreatorId] = useState('');
@@ -75,6 +77,8 @@ export default function AdminReportsPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalOrderCount, setTotalOrderCount] = useState(0);
+  const [totalProjectsCount, setTotalProjectsCount] = useState(0);
+  const [activeListTab, setActiveListTab] = useState<'orders' | 'projects'>('orders');
   const PAGE_SIZE = 20;
 
   const handleSort = (field: SortField) => {
@@ -134,6 +138,7 @@ export default function AdminReportsPage() {
       if (productId)  queryParams.append('productId', productId);
       if (status)     queryParams.append('status', status);
       if (supplierId) queryParams.append('supplierId', supplierId);
+      queryParams.append('type', businessType);
       queryParams.append('page', String(page));
       queryParams.append('pageSize', String(PAGE_SIZE));
 
@@ -141,12 +146,14 @@ export default function AdminReportsPage() {
       if (res.ok) {
         const data = await res.json();
         setReportData(data.filteredReport.orders || []);
+        setProjectsData(data.filteredReport.projects || []);
         setTotalRevenue(data.filteredReport.totalRevenue || 0);
         setTotalProfit(data.filteredReport.totalProfit || 0);
         setOrdersWithImportPrice(data.filteredReport.ordersWithImportPrice || 0);
         setTotalImport(data.filteredReport.totalImport || 0);
         setTotalPages(data.filteredReport.totalPages || 1);
         setTotalOrderCount(data.filteredReport.orderCount || 0);
+        setTotalProjectsCount(data.filteredReport.projectCount || 0);
         setTotalCustomers(data.filteredReport.totalCustomers || 0);
         setDailyChartData(data.charts.dailyRevenue || []);
         setTopCreators(data.charts?.topCreators || []);
@@ -170,8 +177,13 @@ export default function AdminReportsPage() {
   useEffect(() => {
     setCurrentPage(1);
     fetchReport(1);
+    if (businessType === 'project') {
+      setActiveListTab('projects');
+    } else if (businessType === 'product') {
+      setActiveListTab('orders');
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [startDate, endDate, creatorId, productId, status, supplierId]);
+  }, [startDate, endDate, creatorId, productId, status, supplierId, businessType]);
 
   const handlePageChange = (page: number) => {
     setCurrentPage(page);
@@ -188,6 +200,7 @@ export default function AdminReportsPage() {
     setProductId('');
     setStatus('');
     setSupplierId('');
+    setBusinessType('all');
     showToast('Đã xóa tất cả bộ lọc', 'info');
   };
 
@@ -300,6 +313,17 @@ export default function AdminReportsPage() {
           <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-4">Bộ lọc thống kê</h3>
           
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+            <Select
+              label="Loại hình kinh doanh"
+              options={[
+                { value: 'all', label: 'Tất cả loại hình' },
+                { value: 'product', label: 'Sản phẩm dịch vụ' },
+                { value: 'project', label: 'Dự án khách hàng' },
+              ]}
+              value={businessType}
+              onChange={(e) => setBusinessType(e.target.value)}
+            />
+
             <div>
               <Input
                 label="Từ ngày"
@@ -331,44 +355,48 @@ export default function AdminReportsPage() {
               onChange={(e) => setCreatorId(e.target.value)}
             />
 
-            <Select
-              label="Sản phẩm"
-              options={[
-                { value: '', label: 'Tất cả sản phẩm' },
-                ...products.map((p) => ({
-                  value: p.id,
-                  label: p.name,
-                })),
-              ]}
-              value={productId}
-              onChange={(e) => setProductId(e.target.value)}
-            />
+            {businessType !== 'project' && (
+              <>
+                <Select
+                  label="Sản phẩm"
+                  options={[
+                    { value: '', label: 'Tất cả sản phẩm' },
+                    ...products.map((p) => ({
+                      value: p.id,
+                      label: p.name,
+                    })),
+                  ]}
+                  value={productId}
+                  onChange={(e) => setProductId(e.target.value)}
+                />
 
-            <Select
-              label="Trạng thái đơn"
-              options={[
-                { value: '', label: 'Tất cả trạng thái' },
-                ...statuses,
-              ]}
-              value={status}
-              onChange={(e) => setStatus(e.target.value)}
-            />
+                <Select
+                  label="Trạng thái đơn"
+                  options={[
+                    { value: '', label: 'Tất cả trạng thái' },
+                    ...statuses,
+                  ]}
+                  value={status}
+                  onChange={(e) => setStatus(e.target.value)}
+                />
 
-            <Select
-              label="Nguồn hàng (Tag)"
-              options={[
-                { value: '', label: 'Tất cả nguồn hàng' },
-                ...suppliers.map((s) => ({
-                  value: s.id,
-                  label: s.name,
-                })),
-              ]}
-              value={supplierId}
-              onChange={(e) => setSupplierId(e.target.value)}
-            />
+                <Select
+                  label="Nguồn hàng (Tag)"
+                  options={[
+                    { value: '', label: 'Tất cả nguồn hàng' },
+                    ...suppliers.map((s) => ({
+                      value: s.id,
+                      label: s.name,
+                    })),
+                  ]}
+                  value={supplierId}
+                  onChange={(e) => setSupplierId(e.target.value)}
+                />
+              </>
+            )}
           </div>
 
-          {(startDate || endDate || creatorId || productId || status || supplierId) && (
+          {(startDate || endDate || creatorId || productId || status || supplierId || businessType !== 'all') && (
             <div className="flex justify-end mt-4">
               <Button variant="outline" size="sm" onClick={handleClearFilters}>
                 Xóa bộ lọc
@@ -394,12 +422,18 @@ export default function AdminReportsPage() {
               <div className="space-y-1.5 pb-4 md:pb-0">
                 <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest">Tổng Doanh thu</span>
                 <div className="text-2xl font-black text-slate-800 dark:text-slate-100 leading-none">{formatVND(totalRevenue)}</div>
-                <p className="text-[10px] font-medium text-slate-400">Bao gồm doanh thu đơn mới & gia hạn</p>
+                <p className="text-[10px] font-medium text-slate-400">
+                  {businessType === 'all' ? 'Bao gồm doanh thu đơn mới, gia hạn & ngân sách dự án' : businessType === 'project' ? 'Tổng ngân sách dự án phát sinh trong kỳ' : 'Bao gồm doanh thu đơn mới & gia hạn'}
+                </p>
               </div>
               <div className="space-y-1.5 pt-4 md:pt-0 md:pl-6 pb-4 md:pb-0">
-                <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest">Chi phí (Giá nhập)</span>
+                <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest">
+                  {businessType === 'all' ? 'Chi phí (Vốn)' : businessType === 'project' ? 'Chi phí dự án' : 'Chi phí (Giá nhập)'}
+                </span>
                 <div className="text-2xl font-black text-rose-500 leading-none">{formatVND(totalImport)}</div>
-                <p className="text-[10px] font-medium text-slate-400">Tổng chi phí nhập từ nguồn hàng</p>
+                <p className="text-[10px] font-medium text-slate-400">
+                  {businessType === 'all' ? 'Tổng chi phí nhập SP & chi phí phát sinh DA' : businessType === 'project' ? 'Chi phí website & chi phí mua tool' : 'Tổng chi phí nhập từ nguồn hàng'}
+                </p>
               </div>
               <div className="space-y-1.5 pt-4 md:pt-0 md:pl-6">
                 <span className="text-[10px] font-extrabold text-emerald-600 dark:text-emerald-400 uppercase tracking-widest">Lợi nhuận ròng</span>
@@ -414,9 +448,15 @@ export default function AdminReportsPage() {
         <Card className="flex flex-col justify-center bg-card animate-fade-in">
           <CardContent className="py-6 space-y-6">
             <div className="space-y-1.5 border-b border-border/60 pb-4">
-              <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest block">Số lượng Đơn hàng</span>
-              <div className="text-2xl font-black text-slate-800 dark:text-slate-100 leading-none">{totalOrderCount} đơn</div>
-              <p className="text-[10px] font-medium text-slate-400">Đơn hàng ghi nhận theo bộ lọc</p>
+              <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest block">
+                {businessType === 'project' ? 'Số lượng Dự án' : 'Số lượng Đơn hàng'}
+              </span>
+              <div className="text-2xl font-black text-slate-800 dark:text-slate-100 leading-none">
+                {businessType === 'project' ? `${totalProjectsCount} dự án` : `${totalOrderCount} đơn`}
+              </div>
+              <p className="text-[10px] font-medium text-slate-400">
+                {businessType === 'project' ? 'Dự án ghi nhận theo bộ lọc' : 'Đơn hàng ghi nhận theo bộ lọc'}
+              </p>
             </div>
             <div className="space-y-1.5">
               <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest block">Tổng số khách hàng</span>
@@ -436,7 +476,7 @@ export default function AdminReportsPage() {
               <CardTitle>Biểu đồ Doanh thu & Chi phí</CardTitle>
               <div className="flex gap-4 text-[10px] font-extrabold uppercase tracking-wider text-slate-500">
                 <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded bg-[#a145ab]" />Doanh thu</span>
-                <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded bg-orange-500" />Chi phí (Giá nhập)</span>
+                <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded bg-orange-500" />{businessType === 'all' ? 'Chi phí (Vốn)' : businessType === 'project' ? 'Chi phí dự án' : 'Chi phí (Giá nhập)'}</span>
               </div>
             </CardHeader>
             <CardContent className="pt-6">
@@ -562,18 +602,115 @@ export default function AdminReportsPage() {
 
       {/* Detailed Reports list */}
       <Card>
-        <CardHeader className="py-5 border-b border-border/30 flex flex-row items-center justify-between">
+        <CardHeader className="py-5 border-b border-border/30 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <CardTitle>Bảng chi tiết báo cáo doanh thu</CardTitle>
+          {businessType === 'all' && (
+            <div className="flex gap-2 p-1 bg-slate-100 rounded-xl">
+              <button
+                onClick={() => setActiveListTab('orders')}
+                className={`px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  activeListTab === 'orders' ? 'bg-[#a145ab] text-white' : 'text-slate-500 hover:text-slate-700'
+                }`}
+              >
+                Đơn hàng sản phẩm ({totalOrderCount})
+              </button>
+              <button
+                onClick={() => setActiveListTab('projects')}
+                className={`px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  activeListTab === 'projects' ? 'bg-[#a145ab] text-white' : 'text-slate-500 hover:text-slate-700'
+                }`}
+              >
+                Dự án khách hàng ({totalProjectsCount})
+              </button>
+            </div>
+          )}
         </CardHeader>
         <CardContent className="p-0">
           {loading ? (
             <div className="p-6">
               <LoadingSkeleton variant="table" />
             </div>
+          ) : activeListTab === 'projects' ? (
+            projectsData.length === 0 ? (
+              <div className="p-6">
+                <EmptyState 
+                  title="Không tìm thấy dữ liệu dự án" 
+                  description="Không tìm thấy dự án nào khớp điều kiện lọc." 
+                  actionLabel="Xóa bộ lọc" 
+                  onAction={handleClearFilters}
+                />
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="border-b border-border bg-[#f5f5f9] text-slate-500 font-semibold uppercase tracking-wider">
+                      <th className="px-4 py-4 w-[48px] text-center">STT</th>
+                      <th className="px-4 py-4">Ngày tạo</th>
+                      <th className="px-4 py-4">Tên dự án</th>
+                      <th className="px-4 py-4">Khách hàng</th>
+                      <th className="px-4 py-4">Phân loại</th>
+                      <th className="px-4 py-4 text-right">Ngân sách</th>
+                      <th className="px-4 py-4 text-right">Tổng chi phí</th>
+                      <th className="px-4 py-4 text-right">Lợi nhuận</th>
+                      <th className="px-4 py-4 text-center">Tiến độ</th>
+                      <th className="px-4 py-4 text-center">Trạng thái</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {projectsData.map((p, idx) => (
+                      <tr
+                        key={p.id}
+                        className="border-b border-border hover:bg-slate-50/50 transition-colors"
+                      >
+                        <td className="px-4 py-3 text-center font-bold text-slate-400">
+                          {(currentPage - 1) * PAGE_SIZE + idx + 1}
+                        </td>
+                        <td className="px-4 py-3 text-slate-500">
+                          {formatDate(p.createdAt)}
+                        </td>
+                        <td className="px-4 py-3 font-bold text-slate-700">
+                          {p.name}
+                        </td>
+                        <td className="px-4 py-3 font-medium text-slate-600">
+                          {p.customerName}
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className="px-2 py-1 rounded bg-slate-100 font-semibold text-slate-600">
+                            {p.categoryName}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-right font-extrabold text-slate-700">
+                          {formatVND(p.budget)}
+                        </td>
+                        <td className="px-4 py-3 text-right font-extrabold text-rose-500">
+                          {formatVND(p.totalCost)}
+                        </td>
+                        <td className={`px-4 py-3 text-right font-extrabold ${p.profit >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>
+                          {formatVND(p.profit)}
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <span className="font-bold text-slate-700">{p.progress}%</span>
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <span className={`px-2 py-1 rounded-full text-[10px] font-extrabold uppercase ${
+                            p.status === 'completed' ? 'bg-emerald-100 text-emerald-700' :
+                            p.status === 'running' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'
+                          }`}>
+                            {p.status === 'completed' ? 'Hoàn thành' :
+                             p.status === 'running' ? 'Đang chạy' : 'Tạm dừng'}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )
           ) : sortedReportData.length === 0 ? (
             <div className="p-6">
               <EmptyState 
-                title="Không tìm thấy dữ liệu" 
+                title="Không tìm thấy dữ liệu đơn hàng" 
                 description="Không tìm thấy đơn hàng nào khớp điều kiện lọc." 
                 actionLabel="Xóa bộ lọc" 
                 onAction={handleClearFilters}
@@ -745,7 +882,11 @@ export default function AdminReportsPage() {
           {!loading && totalPages > 1 && (
             <div className="flex flex-col sm:flex-row items-center justify-between px-6 py-4 gap-4 border-t border-border bg-[#f8f9fa] dark:bg-slate-900/50">
               <div className="text-xs text-slate-500 font-semibold text-center sm:text-left">
-                Hiển thị <span className="text-foreground">{(currentPage - 1) * PAGE_SIZE + 1}</span> - <span className="text-foreground">{Math.min(currentPage * PAGE_SIZE, totalOrderCount)}</span> trong tổng số <span className="text-foreground">{totalOrderCount}</span> đơn hàng
+                {activeListTab === 'projects' ? (
+                  <>Hiển thị <span className="text-foreground">{(currentPage - 1) * PAGE_SIZE + 1}</span> - <span className="text-foreground">{Math.min(currentPage * PAGE_SIZE, totalProjectsCount)}</span> trong tổng số <span className="text-foreground">{totalProjectsCount}</span> dự án</>
+                ) : (
+                  <>Hiển thị <span className="text-foreground">{(currentPage - 1) * PAGE_SIZE + 1}</span> - <span className="text-foreground">{Math.min(currentPage * PAGE_SIZE, totalOrderCount)}</span> trong tổng số <span className="text-foreground">{totalOrderCount}</span> đơn hàng</>
+                )}
               </div>
               <div className="flex items-center gap-1.5 flex-wrap justify-center">
                 <Button

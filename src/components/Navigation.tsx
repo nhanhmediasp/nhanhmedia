@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useAuth } from './AuthContext';
@@ -25,6 +25,10 @@ import {
   Globe,
   Mail,
   FolderGit2,
+  Sparkles,
+  MessageSquare,
+  Send,
+  RefreshCw,
 } from 'lucide-react';
 import { Badge } from './ui';
 
@@ -84,7 +88,6 @@ const menuItems = [
 
 const adminSettingsLinks = [
   { label: 'Tùy chỉnh Website',  href: '/admin/settings/website',  icon: Globe },
-  { label: 'Quản lý Thông báo',  href: '/admin/notifications',      icon: Megaphone },
   { label: 'Cấu hình Email',     href: '/admin/settings/email',     icon: Mail },
   { label: 'Nhật ký hoạt động',  href: '/admin/audit-logs',         icon: History },
 ];
@@ -136,6 +139,96 @@ export default function Navigation({ children }: { children: React.ReactNode }) 
     };
     fetchSettings();
   }, []);
+
+  // Floating AI Chat Widget States
+  const [isWidgetOpen, setIsWidgetOpen] = useState(false);
+  const [widgetMessages, setWidgetMessages] = useState<any[]>([
+    {
+      role: 'assistant',
+      content: `Xin chào! Tôi là **Trợ lý của Nhanh Media** 🤖.
+
+Tôi có thể giúp bạn kiểm tra dự án, doanh thu, đơn hàng dịch vụ hoặc thao tác trực tiếp các dữ liệu trên hệ thống. Bạn cần tôi hỗ trợ việc gì?`,
+    },
+  ]);
+  const [widgetInput, setWidgetInput] = useState('');
+  const [widgetSending, setWidgetSending] = useState(false);
+  const widgetMessagesEndRef = useRef<HTMLDivElement>(null);
+
+  const handleSendWidgetMessage = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!widgetInput.trim() || widgetSending) return;
+
+    const userMsg = { role: 'user', content: widgetInput };
+    setWidgetMessages((prev) => [...prev, userMsg]);
+    const promptToSend = widgetInput;
+    setWidgetInput('');
+    setWidgetSending(true);
+
+    try {
+      const res = await fetch('/api/admin/assistant', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          prompt: promptToSend,
+          history: widgetMessages.slice(1).map(msg => ({
+            role: msg.role,
+            content: msg.content
+          })),
+        }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setWidgetMessages((prev) => [...prev, { role: 'assistant', content: data.reply }]);
+      } else {
+        setWidgetMessages((prev) => [
+          ...prev,
+          { role: 'assistant', content: 'Có lỗi xảy ra khi kết nối máy chủ AI.' },
+        ]);
+      }
+    } catch {
+      setWidgetMessages((prev) => [
+        ...prev,
+        { role: 'assistant', content: 'Không thể kết nối máy chủ AI.' },
+      ]);
+    } finally {
+      setWidgetSending(false);
+    }
+  };
+
+  const handleClearWidgetChat = () => {
+    setWidgetMessages([
+      {
+        role: 'assistant',
+        content: `Tôi đã được làm mới bộ nhớ. Hãy đặt câu hỏi bất kỳ về dữ liệu hệ thống nhé!`,
+      },
+    ]);
+  };
+
+  useEffect(() => {
+    if (isWidgetOpen) {
+      widgetMessagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [widgetMessages, isWidgetOpen]);
+
+  const formatWidgetMessage = (text: string) => {
+    let formatted = text
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+    formatted = formatted.replace(
+      /```([\s\S]*?)```/g,
+      '<pre class="bg-slate-900 text-slate-100 p-2 rounded-lg my-1.5 font-mono text-[9px] overflow-x-auto border border-slate-800 shadow-inner select-text whitespace-pre-wrap break-all">$1</pre>'
+    );
+    formatted = formatted.replace(
+      /`([^`]+)`/g,
+      '<code class="px-1 py-0.5 bg-slate-100 text-slate-800 rounded font-mono text-[9px] border border-slate-200">$1</code>'
+    );
+    formatted = formatted.replace(/\*\*([^*]+)\*\*/g, '<strong class="font-bold text-slate-900">$1</strong>');
+    formatted = formatted.replace(/^\s*\*\s+(.*)$/gm, '<li class="ml-2.5 list-disc pl-0.5 text-slate-700">$1</li>');
+    formatted = formatted.replace(/\n/g, '<br/>');
+    return <div className="space-y-0.5" dangerouslySetInnerHTML={{ __html: formatted }} />;
+  };
 
   const fetchUserNotifications = async () => {
     try {
@@ -419,6 +512,47 @@ export default function Navigation({ children }: { children: React.ReactNode }) 
           }
         })}
 
+        {/* Trợ lý AI */}
+        {(() => {
+          const isActive = pathname === '/admin/assistant';
+          return (
+            <Link
+              href="/admin/assistant"
+              onClick={() => setIsMobileOpen(false)}
+              className="group flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 relative"
+              style={
+                isActive
+                  ? {
+                      background: 'linear-gradient(90deg,#f3d0f7 0%,#ede1f7 100%)',
+                      color: '#a145ab',
+                    }
+                  : {
+                      color: '#697a8d',
+                      background: 'transparent',
+                    }
+              }
+            >
+              {isActive && (
+                <span
+                  className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 rounded-r-full"
+                  style={{ background: '#a145ab' }}
+                />
+              )}
+              <span
+                className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 transition-all duration-200"
+                style={
+                  isActive
+                    ? { background: '#a145ab', color: '#fff', boxShadow: '0 3px 8px rgba(161,69,171,0.35)' }
+                    : { background: 'rgba(108,117,147,0.06)', color: '#a1acb8' }
+                }
+              >
+                <Sparkles className="w-4 h-4" />
+              </span>
+              <span className="flex-1 leading-none">Trợ Lý AI</span>
+            </Link>
+          );
+        })()}
+
         {isAdmin && (
           <div className="space-y-0.5">
             <button
@@ -695,19 +829,6 @@ export default function Navigation({ children }: { children: React.ReactNode }) 
                       ))
                     )}
                   </div>
-
-                  {/* Footer */}
-                  {isAdmin && (
-                    <div className="px-3 py-2 border-t border-border bg-muted/10 text-center">
-                      <Link
-                        href="/admin/notifications"
-                        onClick={() => setShowNotifications(false)}
-                        className="text-[10px] font-bold text-primary hover:underline"
-                      >
-                        Quản lý thông báo →
-                      </Link>
-                    </div>
-                  )}
                 </div>
               </>
             )}
@@ -843,19 +964,6 @@ export default function Navigation({ children }: { children: React.ReactNode }) 
                         ))
                       )}
                     </div>
-
-                    {/* Footer */}
-                    {isAdmin && (
-                      <div className="px-4 py-2.5 border-t border-border bg-muted/10 text-center">
-                        <Link
-                          href="/admin/notifications"
-                          onClick={() => setShowNotifications(false)}
-                          className="text-[11px] font-bold text-primary hover:underline"
-                        >
-                          Quản lý thông báo →
-                        </Link>
-                      </div>
-                    )}
                   </div>
                 </>
               )}
@@ -938,6 +1046,130 @@ export default function Navigation({ children }: { children: React.ReactNode }) 
         <main className="flex-1 px-8 py-8 overflow-y-auto w-full max-w-[1400px] mx-auto animate-fade-in">
           {children}
         </main>
+
+        {/* ── Floating AI Chat Assistant Widget ── */}
+        <div>
+          <button
+            onClick={() => setIsWidgetOpen(!isWidgetOpen)}
+            className="fixed bottom-4 right-4 md:bottom-6 md:right-6 z-[999] w-12 h-12 md:w-14 md:h-14 rounded-full flex items-center justify-center text-white cursor-pointer shadow-lg hover:scale-105 active:scale-95 transition-transform"
+            style={{
+              background: 'linear-gradient(135deg, #a145ab 0%, #7c2d82 100%)',
+              boxShadow: '0 4px 16px rgba(161,69,171,0.4)',
+            }}
+          >
+            {isWidgetOpen ? <X className="w-5 h-5 md:w-6 md:h-6 animate-fade-in" /> : <MessageSquare className="w-5 h-5 md:w-6 md:h-6 animate-fade-in" />}
+          </button>
+
+          {isWidgetOpen && (
+            <div
+              className="fixed bottom-20 right-4 md:bottom-24 md:right-6 z-[999] w-[calc(100vw-32px)] md:w-[380px] h-[480px] md:h-[520px] rounded-2xl shadow-2xl border border-slate-200/80 bg-white flex flex-col overflow-hidden animate-slide-up"
+              style={{
+                boxShadow: '0 12px 40px rgba(108,117,147,0.18)',
+              }}
+            >
+              {/* Header */}
+              <div
+                className="px-4 py-3 md:py-3.5 text-white flex justify-between items-center shrink-0 select-none"
+                style={{ background: 'linear-gradient(135deg, #a145ab 0%, #7c2d82 100%)' }}
+              >
+                <div className="flex items-center gap-2">
+                  <div className="w-7 h-7 md:w-8 md:h-8 rounded-lg bg-white/10 flex items-center justify-center">
+                    <Sparkles className="w-3.5 h-3.5 md:w-4 md:h-4 text-white" />
+                  </div>
+                  <div>
+                    <span className="font-bold text-xs block leading-none">Trợ lý Nhanh Media</span>
+                    <span className="text-[9px] opacity-80 leading-none mt-1 block">Groq AI • Hoạt động</span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={handleClearWidgetChat}
+                    title="Làm mới cuộc trò chuyện"
+                    className="p-1.5 rounded-lg hover:bg-white/10 transition-colors text-white cursor-pointer"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    onClick={() => setIsWidgetOpen(false)}
+                    className="p-1.5 rounded-lg hover:bg-white/10 transition-colors text-white cursor-pointer"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Messages List */}
+              <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-50/50 flex flex-col">
+                {widgetMessages.map((msg, index) => {
+                  const isAI = msg.role === 'assistant';
+                  return (
+                    <div
+                      key={index}
+                      className={`flex gap-2.5 max-w-[85%] ${
+                        isAI ? 'self-start' : 'self-end flex-row-reverse ml-auto'
+                      }`}
+                    >
+                      <div
+                        className={`w-7 h-7 rounded-lg shrink-0 flex items-center justify-center text-white text-xs select-none ${
+                          isAI ? 'bg-primary' : 'bg-slate-600'
+                        }`}
+                        style={isAI ? { background: 'linear-gradient(135deg, #a145ab 0%, #7c2d82 100%)' } : {}}
+                      >
+                        {isAI ? <Sparkles className="w-3.5 h-3.5" /> : <User className="w-3.5 h-3.5" />}
+                      </div>
+                      <div
+                        className={`rounded-2xl p-3 shadow-sm border text-[11px] leading-relaxed break-words ${
+                          isAI
+                            ? 'bg-white border-slate-100 text-slate-800 rounded-tl-none'
+                            : 'bg-primary text-white border-transparent rounded-tr-none'
+                        }`}
+                        style={!isAI ? { background: 'linear-gradient(135deg, #a145ab 0%, #8b3c94 100%)' } : {}}
+                      >
+                        {isAI ? formatWidgetMessage(msg.content) : msg.content}
+                      </div>
+                    </div>
+                  );
+                })}
+                {widgetSending && (
+                  <div className="flex gap-2.5 max-w-[80%] self-start">
+                    <div
+                      className="w-7 h-7 rounded-lg shrink-0 flex items-center justify-center text-white select-none"
+                      style={{ background: 'linear-gradient(135deg, #a145ab 0%, #7c2d82 100%)' }}
+                    >
+                      <Sparkles className="w-3.5 h-3.5 animate-pulse" />
+                    </div>
+                    <div className="bg-white border border-slate-100 rounded-2xl rounded-tl-none p-3 shadow-sm flex items-center gap-1.5 min-w-[55px]">
+                      <span className="w-1.5 h-1.5 rounded-full bg-primary/40 animate-bounce [animation-delay:-0.3s]"></span>
+                      <span className="w-1.5 h-1.5 rounded-full bg-primary/70 animate-bounce [animation-delay:-0.15s]"></span>
+                      <span className="w-1.5 h-1.5 rounded-full bg-primary animate-bounce"></span>
+                    </div>
+                  </div>
+                )}
+                <div ref={widgetMessagesEndRef} />
+              </div>
+
+              {/* Input Form */}
+              <form onSubmit={handleSendWidgetMessage} className="p-3 border-t border-slate-100 bg-white flex gap-2 shrink-0">
+                <input
+                  type="text"
+                  value={widgetInput}
+                  onChange={(e) => setWidgetInput(e.target.value)}
+                  placeholder="Nhập yêu cầu hoặc hỏi trợ lý..."
+                  disabled={widgetSending}
+                  className="flex-1 px-3 py-2 text-xs rounded-lg focus:outline-none bg-slate-50 border border-slate-200 focus:border-primary focus:bg-white disabled:opacity-50"
+                />
+                <button
+                  type="submit"
+                  disabled={!widgetInput.trim() || widgetSending}
+                  className="px-3 py-2 text-white rounded-lg hover:opacity-90 transition-opacity font-bold text-xs cursor-pointer flex items-center justify-center shrink-0 disabled:opacity-40"
+                  style={{ background: 'linear-gradient(135deg, #a145ab 0%, #7c2d82 100%)' }}
+                >
+                  <Send className="w-3.5 h-3.5" />
+                </button>
+              </form>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
