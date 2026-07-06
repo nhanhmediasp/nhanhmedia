@@ -22,23 +22,36 @@ export function getPaymentContent(orderCode: string): string {
 
 /**
  * Extract orderCode from webhook transfer content.
- * Standard format generated: NM[yy][MM][dd]-[rand] (e.g. NM260706-1234)
- * When stripped of hyphen: NM2607061234 (NM + 10 digits)
+ * New format: NHANH[yy][MM][dd]-[rand] (e.g. NHANH260706-1234) -> NHANH2607061234
+ * Legacy format: NM[yy][MM][dd]-[rand] (e.g. NM260706-1234) -> NM2607061234
  */
 export function extractOrderCodeFromContent(content: string | null | undefined): string | null {
   if (!content) return null;
   
-  // Try matching NM followed by 10 digits (without hyphen)
-  const matchNoHyphen = content.match(/NM\d{10}/i);
-  if (matchNoHyphen) {
-    const code = matchNoHyphen[0].toUpperCase();
-    return `${code.substring(0, 8)}-${code.substring(8)}`;
+  // 1. Try matching NHANH followed by 10 digits (without hyphen)
+  const matchNhanhNoHyphen = content.match(/NHANH\d{10}/i);
+  if (matchNhanhNoHyphen) {
+    const code = matchNhanhNoHyphen[0].toUpperCase();
+    return `${code.substring(0, 11)}-${code.substring(11)}`; // NHANH (5) + YYMMDD (6) = 11
   }
 
-  // Try matching standard order code with hyphen
-  const matchWithHyphen = content.match(/NM\d{6}-\d{4}/i);
-  if (matchWithHyphen) {
-    return matchWithHyphen[0].toUpperCase();
+  // 2. Try matching NHANH order code with hyphen
+  const matchNhanhWithHyphen = content.match(/NHANH\d{6}-\d{4}/i);
+  if (matchNhanhWithHyphen) {
+    return matchNhanhWithHyphen[0].toUpperCase();
+  }
+
+  // 3. Legacy: Try matching NM followed by 10 digits (without hyphen)
+  const matchNmNoHyphen = content.match(/NM\d{10}/i);
+  if (matchNmNoHyphen) {
+    const code = matchNmNoHyphen[0].toUpperCase();
+    return `${code.substring(0, 8)}-${code.substring(8)}`; // NM (2) + YYMMDD (6) = 8
+  }
+
+  // 4. Legacy: Try matching NM order code with hyphen
+  const matchNmWithHyphen = content.match(/NM\d{6}-\d{4}/i);
+  if (matchNmWithHyphen) {
+    return matchNmWithHyphen[0].toUpperCase();
   }
 
   return null;
