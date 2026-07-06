@@ -10,6 +10,7 @@ import {
   FileText,
   Users,
   BarChart3,
+  CreditCard,
   UserCheck,
   Settings,
   LogOut,
@@ -50,6 +51,12 @@ const menuItems = [
     label: 'Báo cáo doanh thu',
     href: '/admin/reports',
     icon: BarChart3,
+  },
+  {
+    type: 'link' as const,
+    label: 'Lịch sử thanh toán QR',
+    href: '/admin/reports/payments',
+    icon: CreditCard,
   },
   {
     type: 'group' as const,

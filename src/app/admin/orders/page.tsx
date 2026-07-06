@@ -176,6 +176,7 @@ export default function AdminOrdersPage() {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [bulkActionLoading, setBulkActionLoading] = useState(false);
   const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
+  const [bulkAmountPaid, setBulkAmountPaid] = useState('');
 
   const handleSelectAll = (checked: boolean) => {
     if (checked) {
@@ -234,6 +235,31 @@ export default function AdminOrdersPage() {
 
       if (res.ok) {
         showToast(`Đã cập nhật trạng thái cho ${selectedIds.length} đơn hàng thành công!`, 'success');
+        setSelectedIds([]);
+        fetchData();
+      } else {
+        const data = await res.json();
+        showToast(data.error || 'Có lỗi xảy ra khi cập nhật hàng loạt.', 'error');
+      }
+    } catch {
+      showToast('Lỗi kết nối máy chủ.', 'error');
+    } finally {
+      setBulkActionLoading(false);
+    }
+  };
+
+  const handleBulkUpdatePaymentPercentage = async (percentage: number) => {
+    if (selectedIds.length === 0) return;
+    setBulkActionLoading(true);
+    try {
+      const res = await fetch('/api/orders', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: selectedIds, paymentPercentage: percentage }),
+      });
+
+      if (res.ok) {
+        showToast(`Đã cập nhật mức thanh toán ${percentage * 100}% cho ${selectedIds.length} đơn hàng thành công!`, 'success');
         setSelectedIds([]);
         fetchData();
       } else {
@@ -937,6 +963,27 @@ export default function AdminOrdersPage() {
                 {statuses.map(s => (
                   <option key={s.value} value={s.value}>{s.label}</option>
                 ))}
+              </select>
+            </div>
+
+            {/* Bulk Payment edit */}
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] uppercase font-bold text-slate-400">Nhận tiền:</span>
+              <select
+                disabled={bulkActionLoading}
+                onChange={(e) => {
+                  if (e.target.value !== '') {
+                    handleBulkUpdatePaymentPercentage(parseFloat(e.target.value));
+                    e.target.value = ''; // Reset select
+                  }
+                }}
+                className="bg-slate-800 border border-slate-700 text-white rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:border-primary cursor-pointer disabled:opacity-50"
+              >
+                <option value="">-- Chọn % --</option>
+                <option value="1">THANH TOÁN 100%</option>
+                <option value="0.5">THANH TOÁN 50%</option>
+                <option value="0.25">THANH TOÁN 25%</option>
+                <option value="0">CHƯA THANH TOÁN</option>
               </select>
             </div>
 

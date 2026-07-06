@@ -93,19 +93,22 @@ export async function POST(req: Request) {
 
     const { name, phone, facebook, zalo, email, note } = await req.json();
 
-    if (!name || !phone) {
-      return NextResponse.json({ error: 'Họ tên và số điện thoại là bắt buộc.' }, { status: 400 });
+    if (!name) {
+      return NextResponse.json({ error: 'Họ tên là bắt buộc.' }, { status: 400 });
     }
 
     // Check if phone number already exists
-    const existing = await prisma.customer.findUnique({
-      where: { phone: phone.trim() },
-      include: {
-        createdByUser: {
-          select: { name: true },
+    let existing = null;
+    if (phone && phone.trim()) {
+      existing = await prisma.customer.findUnique({
+        where: { phone: phone.trim() },
+        include: {
+          createdByUser: {
+            select: { name: true },
+          },
         },
-      },
-    });
+      });
+    }
 
     if (existing) {
       return NextResponse.json(
@@ -125,7 +128,7 @@ export async function POST(req: Request) {
     const newCustomer = await prisma.customer.create({
       data: {
         name: name.trim(),
-        phone: phone.trim(),
+        phone: phone && phone.trim() ? phone.trim() : null,
         facebook: facebook ? facebook.trim() : null,
         zalo: zalo ? zalo.trim() : null,
         email: email ? email.trim() : null,

@@ -62,6 +62,7 @@ function AdminOrderCreateForm() {
   const [startDate, setStartDate]         = useState(new Date().toISOString().substring(0, 10));
   const [note, setNote]                   = useState('');
   const [internalNote, setInternalNote]   = useState('');
+  const [accountInfo, setAccountInfo]     = useState('');
   const [customPrice, setCustomPrice]     = useState('');
   const [importPrice, setImportPrice]     = useState('');
 
@@ -169,7 +170,7 @@ function AdminOrderCreateForm() {
   /* ── submit ── */
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!productId || !variantId || !customerName || !customerPhone) {
+    if (!productId || !variantId || !customerName) {
       showToast('Vui lòng điền đầy đủ các thông tin bắt buộc.', 'error');
       return;
     }
@@ -182,7 +183,7 @@ function AdminOrderCreateForm() {
           productId, variantId,
           customerName, customerPhone,
           customerFacebook, customerZalo, customerEmail,
-          startDate, note, internalNote,
+          startDate, note, internalNote, accountInfo,
           customPrice: customPrice ? parseFloat(customPrice) : undefined,
           importPrice: importPrice ? parseFloat(importPrice) : undefined,
         }),
@@ -243,7 +244,7 @@ function AdminOrderCreateForm() {
         <div className="lg:col-span-2 space-y-6">
 
           {/* ─ Customer Card ─ */}
-          <Card>
+          <Card style={{ overflow: 'visible' }}>
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle className="flex items-center gap-2">
                 <span className="w-7 h-7 rounded-lg flex items-center justify-center"
@@ -383,40 +384,41 @@ function AdminOrderCreateForm() {
               {/* ─── NEW MODE ─── */}
               {customerMode === 'new' && (
                 <div className="space-y-5">
-                  <div className="relative">
-                    <Input
-                      label="Số điện thoại khách hàng *"
-                      placeholder="Nhập số điện thoại..."
-                      value={customerPhone}
-                      onChange={e => setCustomerPhone(e.target.value)}
-                      required
-                    />
-                    {matchingCustomer && (
-                      <div className="mt-2 p-3 rounded-xl flex items-center justify-between text-xs animate-fade-in"
-                        style={{ background: '#f7eafa', border: '1px solid rgba(161,69,171,0.20)' }}>
-                        <div className="flex items-center gap-1.5 font-semibold" style={{ color: '#a145ab' }}>
-                          <Sparkles className="w-4 h-4 animate-bounce" />
-                          <span>Phát hiện khách cũ: <strong>{matchingCustomer.name}</strong></span>
-                        </div>
-                        <button type="button" onClick={handleAutofill}
-                          className="text-white px-2.5 py-1.5 rounded-lg text-[10px] font-extrabold cursor-pointer"
-                          style={{ background: '#a145ab' }}>
-                          Dùng thông tin cũ
-                        </button>
-                      </div>
-                    )}
-                  </div>
-
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                     <Input label="Họ tên khách hàng *" placeholder="Ví dụ: Nguyễn Văn A"
                       value={customerName} onChange={e => setCustomerName(e.target.value)} required />
-                    <Input label="Link Facebook khách hàng" placeholder="https://facebook.com/user"
-                      value={customerFacebook} onChange={e => setCustomerFacebook(e.target.value)} />
+                    <div className="relative">
+                      <Input
+                        label="Số điện thoại khách hàng"
+                        placeholder="Nhập số điện thoại..."
+                        value={customerPhone}
+                        onChange={e => setCustomerPhone(e.target.value)}
+                      />
+                      {matchingCustomer && (
+                        <div className="mt-2 p-3 rounded-xl flex items-center justify-between text-xs animate-fade-in"
+                          style={{ background: '#f7eafa', border: '1px solid rgba(161,69,171,0.20)' }}>
+                          <div className="flex items-center gap-1.5 font-semibold" style={{ color: '#a145ab' }}>
+                            <Sparkles className="w-4 h-4 animate-bounce" />
+                            <span>Phát hiện khách cũ: <strong>{matchingCustomer.name}</strong></span>
+                          </div>
+                          <button type="button" onClick={handleAutofill}
+                            className="text-white px-2.5 py-1.5 rounded-lg text-[10px] font-extrabold cursor-pointer"
+                            style={{ background: '#a145ab' }}>
+                            Dùng thông tin cũ
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                    <Input label="Link Facebook khách hàng" placeholder="https://facebook.com/user"
+                      value={customerFacebook} onChange={e => setCustomerFacebook(e.target.value)} />
                     <Input label="Số điện thoại Zalo" placeholder="Ví dụ: 0977111222"
                       value={customerZalo} onChange={e => setCustomerZalo(e.target.value)} />
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                     <Input label="Email khách hàng" type="email" placeholder="customer@gmail.com"
                       value={customerEmail} onChange={e => setCustomerEmail(e.target.value)} />
                   </div>
@@ -575,7 +577,7 @@ function AdminOrderCreateForm() {
           {/* ─ Notes Card ─ */}
           <Card>
             <CardHeader>
-              <CardTitle>Ghi chú đơn hàng &amp; Ghi chú Nội bộ</CardTitle>
+              <CardTitle>Ghi chú &amp; Thông tin tài khoản</CardTitle>
             </CardHeader>
             <CardContent className="space-y-5">
               <Textarea label="Ghi chú đơn hàng (Khách có thể xem)"
@@ -584,6 +586,9 @@ function AdminOrderCreateForm() {
               <Textarea label="Ghi chú nội bộ (Chỉ quản trị viên xem)"
                 placeholder="Nhập ghi chú kỹ thuật, trạng thái thanh toán nội bộ..."
                 value={internalNote} onChange={e => setInternalNote(e.target.value)} rows={3} />
+              <Textarea label="Thông tin tài khoản (Chỉ quản trị viên xem)"
+                placeholder="Nhập thông tin tài khoản cung cấp cho khách (Email|Pass, cookie, profile...)"
+                value={accountInfo} onChange={e => setAccountInfo(e.target.value)} rows={3} />
             </CardContent>
           </Card>
         </div>

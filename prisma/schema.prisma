@@ -35,7 +35,7 @@ model User {
 model Customer {
   id               String   @id @default(uuid())
   name             String
-  phone            String   @unique
+  phone            String?  @unique
   facebook         String?
   zalo             String?
   email            String?
@@ -126,6 +126,7 @@ model Order {
   endDate         DateTime @map("end_date")
   note            String?
   internalNote    String?  @map("internal_note")
+  accountInfo     String?  @map("account_info")
   createdAt       DateTime @default(now()) @map("created_at")
   updatedAt       DateTime @updatedAt @map("updated_at")
   refundAmount    Float?   @map("refund_amount")
@@ -138,6 +139,7 @@ model Order {
   supplier      Supplier?      @relation(fields: [supplierId], references: [id], onDelete: SetNull)
   renewals      OrderRenewal[]
   emailLogs     EmailLog[]
+  paymentTransactions PaymentTransaction[]
 
   @@index([createdAt])
   @@index([status])
@@ -477,4 +479,26 @@ model ProjectRequirementNote {
   project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   @@map("project_requirement_notes")
+}
+
+model PaymentTransaction {
+  id            String   @id @default(uuid())
+  sepayId       String   @unique @map("sepay_id")   // chống webhook trùng
+  orderId       String?  @map("order_id")           // null nếu không khớp đơn
+  amount        Float
+  content       String?
+  code          String?
+  accountNumber String?  @map("account_number")
+  gateway       String?                              // tên ngân hàng
+  transactionAt DateTime @map("transaction_at")
+  matched       Boolean  @default(false)            // đã khớp được đơn chưa
+  raw           Json                                 // lưu nguyên payload để đối soát
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  order         Order?   @relation(fields: [orderId], references: [id], onDelete: SetNull)
+
+  @@index([transactionAt])
+  @@index([orderId])
+  @@index([matched])
+  @@map("payment_transactions")
 }

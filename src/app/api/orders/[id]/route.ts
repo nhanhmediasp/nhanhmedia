@@ -57,9 +57,9 @@ export async function GET(
       return NextResponse.json({ error: 'Bạn không có quyền xem đơn hàng này.' }, { status: 403 });
     }
 
-    // Hide importPrice and auditLogs from non-admin
+    // Hide importPrice, accountInfo and auditLogs from non-admin
     if (!isAdmin) {
-      const { importPrice, ...rest } = order as any;
+      const { importPrice, accountInfo, ...rest } = order as any;
       return NextResponse.json({ order: rest, auditLogs: [] });
     }
 
@@ -94,7 +94,7 @@ export async function PUT(
     }
 
     const body = await req.json();
-    const { status, startDate, endDate, note, internalNote, customPrice, importPrice, amountPaid, supplierId } = body;
+    const { status, startDate, endDate, note, internalNote, accountInfo, customPrice, importPrice, amountPaid, supplierId } = body;
 
     const order = await prisma.order.findUnique({
       where: { id },
@@ -120,6 +120,7 @@ export async function PUT(
 
     if (isAdmin) {
       updateData.internalNote = internalNote !== undefined ? (internalNote ? internalNote.trim() : null) : order.internalNote;
+      updateData.accountInfo = accountInfo !== undefined ? (accountInfo ? accountInfo.trim() : null) : order.accountInfo;
       updateData.status = status || order.status;
 
       if (startDate) {
@@ -205,6 +206,7 @@ export async function PUT(
         endDate: order.endDate,
         note: order.note,
         internalNote: order.internalNote,
+        accountInfo: order.accountInfo,
         customPrice: order.customPrice,
         importPrice: order.importPrice,
         amountPaid: order.amountPaid,
@@ -216,6 +218,7 @@ export async function PUT(
         endDate: updatedOrder.endDate,
         note: updatedOrder.note,
         internalNote: updatedOrder.internalNote,
+        accountInfo: updatedOrder.accountInfo,
         customPrice: updatedOrder.customPrice,
         importPrice: updatedOrder.importPrice,
         amountPaid: updatedOrder.amountPaid,

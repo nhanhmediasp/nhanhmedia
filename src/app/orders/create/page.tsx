@@ -186,7 +186,7 @@ function OrderCreateForm() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!productId || !variantId || !customerName || !customerPhone) {
+    if (!productId || !variantId || !customerName) {
       showToast('Vui lòng điền đầy đủ các trường thông tin bắt buộc.', 'error');
       return;
     }
@@ -264,7 +264,7 @@ function OrderCreateForm() {
         {/* Left: Product & Customer detail forms */}
         <div className="lg:col-span-2 space-y-6">
           {/* Section 1: Customer details */}
-          <Card>
+          <Card style={{ overflow: 'visible' }}>
             <CardHeader className="flex flex-row items-center justify-between py-5">
               <CardTitle className="flex items-center gap-2">
                 <span className="w-7 h-7 rounded-lg flex items-center justify-center"
@@ -404,40 +404,41 @@ function OrderCreateForm() {
               {/* ─── NEW MODE ─── */}
               {customerMode === 'new' && (
                 <div className="space-y-5">
-                  <div className="relative">
-                    <Input
-                      label="Số điện thoại khách hàng *"
-                      placeholder="Nhập số điện thoại..."
-                      value={customerPhone}
-                      onChange={e => setCustomerPhone(e.target.value)}
-                      required
-                    />
-                    {matchingCustomer && (
-                      <div className="mt-2 p-3 rounded-xl flex items-center justify-between text-xs animate-fade-in"
-                        style={{ background: '#f7eafa', border: '1px solid rgba(161,69,171,0.20)' }}>
-                        <div className="flex items-center gap-1.5 font-semibold" style={{ color: '#a145ab' }}>
-                          <Sparkles className="w-4 h-4 animate-bounce" />
-                          <span>Phát hiện khách cũ: <strong>{matchingCustomer.name}</strong></span>
-                        </div>
-                        <button type="button" onClick={handleAutofillCustomer}
-                          className="text-white px-2.5 py-1.5 rounded-lg text-[10px] font-extrabold cursor-pointer"
-                          style={{ background: '#a145ab' }}>
-                          Dùng thông tin cũ
-                        </button>
-                      </div>
-                    )}
-                  </div>
-
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                     <Input label="Họ tên khách hàng *" placeholder="Ví dụ: Nguyễn Văn A"
                       value={customerName} onChange={e => setCustomerName(e.target.value)} required />
-                    <Input label="Link Facebook khách hàng" placeholder="https://facebook.com/user"
-                      value={customerFacebook} onChange={e => setCustomerFacebook(e.target.value)} />
+                    <div className="relative">
+                      <Input
+                        label="Số điện thoại khách hàng"
+                        placeholder="Nhập số điện thoại..."
+                        value={customerPhone}
+                        onChange={e => setCustomerPhone(e.target.value)}
+                      />
+                      {matchingCustomer && (
+                        <div className="mt-2 p-3 rounded-xl flex items-center justify-between text-xs animate-fade-in"
+                          style={{ background: '#f7eafa', border: '1px solid rgba(161,69,171,0.20)' }}>
+                          <div className="flex items-center gap-1.5 font-semibold" style={{ color: '#a145ab' }}>
+                            <Sparkles className="w-4 h-4 animate-bounce" />
+                            <span>Phát hiện khách cũ: <strong>{matchingCustomer.name}</strong></span>
+                          </div>
+                          <button type="button" onClick={handleAutofillCustomer}
+                            className="text-white px-2.5 py-1.5 rounded-lg text-[10px] font-extrabold cursor-pointer"
+                            style={{ background: '#a145ab' }}>
+                            Dùng thông tin cũ
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                    <Input label="Link Facebook khách hàng" placeholder="https://facebook.com/user"
+                      value={customerFacebook} onChange={e => setCustomerFacebook(e.target.value)} />
                     <Input label="Số điện thoại Zalo" placeholder="Ví dụ: 0977111222"
                       value={customerZalo} onChange={e => setCustomerZalo(e.target.value)} />
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                     <Input label="Email khách hàng" type="email" placeholder="customer@gmail.com"
                       value={customerEmail} onChange={e => setCustomerEmail(e.target.value)} />
                   </div>

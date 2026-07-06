@@ -16,6 +16,7 @@ import {
   Camera,
   Copy,
 } from 'lucide-react';
+import OrderPaymentQr from '@/components/OrderPaymentQr';
 
 interface Customer {
   id: string;
@@ -542,6 +543,18 @@ export default function UserOrderDetailPage({ params }: { params: Promise<{ id: 
                   </div>
                 </div>
               </div>
+
+              {/* Payment QR code if unpaid */}
+              {order.amountPaid < currentPrice && (
+                <div className="pt-4 border-t border-border">
+                  <OrderPaymentQr
+                    orderId={order.id}
+                    orderCode={order.orderCode}
+                    amount={currentPrice - order.amountPaid}
+                    onPaymentSuccess={fetchOrderDetail}
+                  />
+                </div>
+              )}
 
               {/* Payment Info & Actions */}
               <div className="pt-4 border-t border-border space-y-4">

@@ -25,6 +25,7 @@ import {
   Copy,
 } from 'lucide-react';
 import { SupplierAvatar } from '@/components/SupplierAvatar';
+import OrderPaymentQr from '@/components/OrderPaymentQr';
 
 interface Customer {
   id: string;
@@ -93,6 +94,7 @@ interface Order {
   endDate: string;
   note: string | null;
   internalNote: string | null;
+  accountInfo: string | null;
   createdAt: string;
   refundAmount: number | null;
   refundedAt: string | null;
@@ -123,6 +125,26 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
   const [suppliers, setSuppliers] = useState<{ id: string; name: string; contactUrl: string | null; icon?: string | null }[]>([]);
   const [supplierId, setSupplierId] = useState('');
   const [updatingSupplier, setUpdatingSupplier] = useState(false);
+
+  // Start Date editing
+  const [isEditingStartDate, setIsEditingStartDate] = useState(false);
+  const [startDateInput, setStartDateInput] = useState('');
+  const [savingStartDate, setSavingStartDate] = useState(false);
+
+  // End Date editing
+  const [isEditingEndDate, setIsEditingEndDate] = useState(false);
+  const [endDateInput, setEndDateInput] = useState('');
+  const [savingEndDate, setSavingEndDate] = useState(false);
+
+  // Custom Price editing
+  const [isEditingCustomPrice, setIsEditingCustomPrice] = useState(false);
+  const [customPriceInput, setCustomPriceInput] = useState('');
+  const [savingCustomPrice, setSavingCustomPrice] = useState(false);
+
+  // Account Info editing
+  const [isEditingAccountInfo, setIsEditingAccountInfo] = useState(false);
+  const [accountInfoInput, setAccountInfoInput] = useState('');
+  const [savingAccountInfo, setSavingAccountInfo] = useState(false);
 
   // Renewal Modal State
   const [isRenewOpen, setIsRenewOpen] = useState(false);
@@ -346,6 +368,100 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
       showToast('Lỗi kết nối máy chủ.', 'error');
     } finally {
       setUpdatingPayment(false);
+    }
+  };
+
+  const handleSaveStartDate = async () => {
+    if (!startDateInput) return;
+    setSavingStartDate(true);
+    try {
+      const res = await fetch(`/api/orders/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ startDate: startDateInput }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        showToast('Đã cập nhật ngày bắt đầu!', 'success');
+        setOrder(data.order);
+        setIsEditingStartDate(false);
+      } else {
+        showToast(data.error || 'Cập nhật thất bại.', 'error');
+      }
+    } catch {
+      showToast('Lỗi kết nối máy chủ.', 'error');
+    } finally {
+      setSavingStartDate(false);
+    }
+  };
+
+  const handleSaveEndDate = async () => {
+    if (!endDateInput) return;
+    setSavingEndDate(true);
+    try {
+      const res = await fetch(`/api/orders/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ endDate: endDateInput }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        showToast('Đã cập nhật ngày hết hạn!', 'success');
+        setOrder(data.order);
+        setIsEditingEndDate(false);
+      } else {
+        showToast(data.error || 'Cập nhật thất bại.', 'error');
+      }
+    } catch {
+      showToast('Lỗi kết nối máy chủ.', 'error');
+    } finally {
+      setSavingEndDate(false);
+    }
+  };
+
+  const handleSaveCustomPrice = async () => {
+    setSavingCustomPrice(true);
+    try {
+      const res = await fetch(`/api/orders/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ customPrice: customPriceInput === '' ? null : parseFloat(customPriceInput) }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        showToast('Đã cập nhật tổng tiền thanh toán!', 'success');
+        setOrder(data.order);
+        setIsEditingCustomPrice(false);
+      } else {
+        showToast(data.error || 'Cập nhật thất bại.', 'error');
+      }
+    } catch {
+      showToast('Lỗi kết nối máy chủ.', 'error');
+    } finally {
+      setSavingCustomPrice(false);
+    }
+  };
+
+  const handleSaveAccountInfo = async () => {
+    setSavingAccountInfo(true);
+    try {
+      const res = await fetch(`/api/orders/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accountInfo: accountInfoInput === '' ? null : accountInfoInput }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        showToast('Đã cập nhật thông tin tài khoản!', 'success');
+        setOrder(data.order);
+        setIsEditingAccountInfo(false);
+      } else {
+        showToast(data.error || 'Cập nhật thất bại.', 'error');
+      }
+    } catch {
+      showToast('Lỗi kết nối máy chủ.', 'error');
+    } finally {
+      setSavingAccountInfo(false);
     }
   };
 
@@ -773,18 +889,103 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
                   <div className="font-bold text-foreground text-base">{order.variant.name}</div>
                 </div>
                 <div className="space-y-1">
-                  <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Ngày Bắt đầu:</span>
-                  <div className="font-bold text-foreground flex items-center gap-1.5 text-sm">
-                    <Calendar className="w-4.5 h-4.5 text-slate-400" />
-                    <span>{formatDate(order.startDate)}</span>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Ngày Bắt đầu:</span>
+                    {!isEditingStartDate ? (
+                      <button
+                        type="button"
+                        onClick={() => { setStartDateInput(order.startDate.substring(0, 10)); setIsEditingStartDate(true); }}
+                        className="p-1 rounded-lg hover:bg-muted text-muted-foreground hover:text-primary transition-colors cursor-pointer"
+                        title="Sửa ngày bắt đầu"
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
+                    ) : (
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={handleSaveStartDate}
+                          disabled={savingStartDate}
+                          className="p-1 rounded-lg bg-green-500/10 hover:bg-green-500/20 text-green-600 transition-colors cursor-pointer"
+                          title="Lưu"
+                        >
+                          {savingStartDate ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setIsEditingStartDate(false)}
+                          className="p-1 rounded-lg hover:bg-muted text-muted-foreground hover:text-rose-500 transition-colors cursor-pointer"
+                          title="Hủy"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    )}
                   </div>
+                  {isEditingStartDate ? (
+                    <input
+                      type="date"
+                      value={startDateInput}
+                      onChange={e => setStartDateInput(e.target.value)}
+                      className="w-full px-3 py-1.5 text-xs rounded-xl border focus:outline-none transition-all"
+                      style={{ border: '1.5px solid rgba(161,69,171,0.35)', background: '#fdf4ff', color: '#1e293b' }}
+                    />
+                  ) : (
+                    <div className="font-bold text-foreground flex items-center gap-1.5 text-sm">
+                      <Calendar className="w-4.5 h-4.5 text-slate-400" />
+                      <span>{formatDate(order.startDate)}</span>
+                    </div>
+                  )}
                 </div>
+
                 <div className="space-y-1">
-                  <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Ngày Hết hạn:</span>
-                  <div className="font-extrabold text-rose-500 flex items-center gap-1.5 text-sm">
-                    <Calendar className="w-4.5 h-4.5" />
-                    <span>{formatDate(order.endDate)}</span>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Ngày Hết hạn:</span>
+                    {!isEditingEndDate ? (
+                      <button
+                        type="button"
+                        onClick={() => { setEndDateInput(order.endDate.substring(0, 10)); setIsEditingEndDate(true); }}
+                        className="p-1 rounded-lg hover:bg-muted text-muted-foreground hover:text-primary transition-colors cursor-pointer"
+                        title="Sửa ngày hết hạn"
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
+                    ) : (
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={handleSaveEndDate}
+                          disabled={savingEndDate}
+                          className="p-1 rounded-lg bg-green-500/10 hover:bg-green-500/20 text-green-600 transition-colors cursor-pointer"
+                          title="Lưu"
+                        >
+                          {savingEndDate ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setIsEditingEndDate(false)}
+                          className="p-1 rounded-lg hover:bg-muted text-muted-foreground hover:text-rose-500 transition-colors cursor-pointer"
+                          title="Hủy"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    )}
                   </div>
+                  {isEditingEndDate ? (
+                    <input
+                      type="date"
+                      value={endDateInput}
+                      onChange={e => setEndDateInput(e.target.value)}
+                      className="w-full px-3 py-1.5 text-xs rounded-xl border focus:outline-none transition-all"
+                      style={{ border: '1.5px solid rgba(161,69,171,0.35)', background: '#fdf4ff', color: '#1e293b' }}
+                    />
+                  ) : (
+                    <div className="font-extrabold text-rose-500 flex items-center gap-1.5 text-sm">
+                      <Calendar className="w-4.5 h-4.5" />
+                      <span>{formatDate(order.endDate)}</span>
+                    </div>
+                  )}
                 </div>
                 <div className="space-y-1">
                   <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Người tạo đơn:</span>
@@ -821,6 +1022,18 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
                   disabled={updatingStatus}
                 />
               </div>
+
+              {/* Payment QR code if unpaid */}
+              {order.amountPaid < currentPrice && (
+                <div className="pt-4 border-t border-border">
+                  <OrderPaymentQr
+                    orderId={order.id}
+                    orderCode={order.orderCode}
+                    amount={currentPrice - order.amountPaid}
+                    onPaymentSuccess={fetchOrderDetail}
+                  />
+                </div>
+              )}
 
               {/* Payment Info & Actions */}
               <div className="pt-4 border-t border-border space-y-4">
@@ -915,6 +1128,87 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
                   </div>
                 )}
               </div>
+            </CardContent>
+          </Card>
+
+          {/* Account Credentials Info */}
+          <Card>
+            <CardHeader className="py-4 flex flex-row items-center justify-between">
+              <CardTitle className="flex items-center gap-2">
+                <FileText className="w-5 h-5 text-primary" />
+                <span>Thông tin tài khoản dịch vụ</span>
+              </CardTitle>
+              <div className="flex items-center gap-2">
+                {order.accountInfo && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      navigator.clipboard.writeText(order.accountInfo || '');
+                      showToast('Đã sao chép thông tin tài khoản!', 'success');
+                    }}
+                    className="flex items-center gap-1 cursor-pointer text-xs h-8"
+                    title="Sao chép toàn bộ"
+                  >
+                    <Copy className="w-3.5 h-3.5" />
+                    <span>Sao chép</span>
+                  </Button>
+                )}
+                {!isEditingAccountInfo ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => { setAccountInfoInput(order.accountInfo || ''); setIsEditingAccountInfo(true); }}
+                    className="flex items-center gap-1 cursor-pointer text-xs h-8"
+                  >
+                    <Pencil className="w-3.5 h-3.5" />
+                    <span>Sửa</span>
+                  </Button>
+                ) : (
+                  <div className="flex items-center gap-1.5">
+                    <Button
+                      type="button"
+                      variant="primary"
+                      size="sm"
+                      onClick={handleSaveAccountInfo}
+                      disabled={savingAccountInfo}
+                      className="cursor-pointer text-xs h-8"
+                    >
+                      {savingAccountInfo ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Lưu'}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setIsEditingAccountInfo(false)}
+                      className="cursor-pointer text-xs h-8"
+                    >
+                      Hủy
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </CardHeader>
+            <CardContent>
+              {isEditingAccountInfo ? (
+                <textarea
+                  placeholder="Nhập thông tin tài khoản (ví dụ: email|pass, cookie, profile...)..."
+                  value={accountInfoInput}
+                  onChange={e => setAccountInfoInput(e.target.value)}
+                  rows={4}
+                  className="w-full p-3 text-xs font-mono rounded-xl border bg-card focus:outline-none focus:border-primary border-border/80"
+                />
+              ) : order.accountInfo ? (
+                <div className="bg-slate-50 dark:bg-zinc-900/60 p-4 rounded-xl border border-border/80 relative">
+                  <pre className="text-xs text-foreground font-mono whitespace-pre-wrap break-all leading-relaxed">
+                    {order.accountInfo}
+                  </pre>
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground italic text-center py-2">Chưa cập nhật thông tin tài khoản cho đơn hàng này.</p>
+              )}
             </CardContent>
           </Card>
 
@@ -1110,10 +1404,59 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
             </CardHeader>
             <CardContent className="space-y-5">
               <div className="space-y-1">
-                <span className="text-xs font-semibold text-muted-foreground uppercase">Tổng tiền thanh toán:</span>
-                <div className="text-xl font-extrabold text-primary">{formatVND(currentPrice)}</div>
-                {order.customPrice !== null && (
-                  <div className="text-[10px] text-amber-500 font-bold">Giá điều chỉnh thủ công bởi Admin</div>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-muted-foreground uppercase">Tổng tiền thanh toán:</span>
+                  {!isEditingCustomPrice ? (
+                    <button
+                      type="button"
+                      onClick={() => { setCustomPriceInput(String(order.customPrice ?? order.price)); setIsEditingCustomPrice(true); }}
+                      className="p-1 rounded-lg hover:bg-muted text-muted-foreground hover:text-primary transition-colors cursor-pointer"
+                      title="Sửa tổng tiền thanh toán"
+                    >
+                      <Pencil className="w-3.5 h-3.5" />
+                    </button>
+                  ) : (
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={handleSaveCustomPrice}
+                        disabled={savingCustomPrice}
+                        className="p-1 rounded-lg bg-green-500/10 hover:bg-green-500/20 text-green-600 transition-colors cursor-pointer"
+                        title="Lưu"
+                      >
+                        {savingCustomPrice ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setIsEditingCustomPrice(false)}
+                        className="p-1 rounded-lg hover:bg-muted text-muted-foreground hover:text-rose-500 transition-colors cursor-pointer"
+                        title="Hủy"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+                {isEditingCustomPrice ? (
+                  <input
+                    type="number"
+                    min="0"
+                    step="1000"
+                    value={customPriceInput}
+                    onChange={e => setCustomPriceInput(e.target.value)}
+                    placeholder="Nhập tổng tiền (VND)..."
+                    autoFocus
+                    className="w-full px-3 py-2 text-sm rounded-xl border focus:outline-none transition-all"
+                    style={{ border: '1.5px solid rgba(161,69,171,0.35)', background: '#fdf4ff', color: '#1e293b' }}
+                    onKeyDown={e => { if (e.key === 'Enter') handleSaveCustomPrice(); if (e.key === 'Escape') setIsEditingCustomPrice(false); }}
+                  />
+                ) : (
+                  <>
+                    <div className="text-xl font-extrabold text-primary">{formatVND(currentPrice)}</div>
+                    {order.customPrice !== null && (
+                      <div className="text-[10px] text-amber-500 font-bold">Giá điều chỉnh thủ công bởi Admin</div>
+                    )}
+                  </>
                 )}
               </div>
 

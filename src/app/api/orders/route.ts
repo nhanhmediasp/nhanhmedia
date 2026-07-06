@@ -88,10 +88,10 @@ export async function GET(req: Request) {
       orderBy: { createdAt: 'desc' },
     });
 
-    // Hide importPrice from non-admin users
+    // Hide importPrice and accountInfo from non-admin users
     if (!isAdmin) {
       const sanitized = orders.map((o) => {
-        const { importPrice, ...rest } = o as any;
+        const { importPrice, accountInfo, ...rest } = o as any;
         return rest;
       });
       return NextResponse.json({ orders: sanitized });
@@ -125,11 +125,12 @@ export async function POST(req: Request) {
       startDate,
       note,
       internalNote,
+      accountInfo,
       customPrice,   // Only admin can customize this
       importPrice,   // Only admin can set import price
     } = body;
 
-    if (!productId || !variantId || !customerName || !customerPhone || !startDate) {
+    if (!productId || !variantId || !customerName || !startDate) {
       return NextResponse.json({ error: 'Thiếu các thông tin bắt buộc.' }, { status: 400 });
     }
 
@@ -156,15 +157,18 @@ export async function POST(req: Request) {
     const finalImportPrice = isAdmin && importPrice !== undefined && importPrice !== '' ? parseFloat(importPrice) : null;
 
     // 2. Resolve Customer
-    let customer = await prisma.customer.findUnique({
-      where: { phone: customerPhone.trim() },
-    });
+    let customer = null;
+    if (customerPhone && customerPhone.trim()) {
+      customer = await prisma.customer.findUnique({
+        where: { phone: customerPhone.trim() },
+      });
+    }
 
     if (!customer) {
       customer = await prisma.customer.create({
         data: {
           name: customerName.trim(),
-          phone: customerPhone.trim(),
+          phone: customerPhone && customerPhone.trim() ? customerPhone.trim() : null,
           facebook: customerFacebook ? customerFacebook.trim() : null,
           zalo: customerZalo ? customerZalo.trim() : null,
           email: customerEmail ? customerEmail.trim() : null,
@@ -194,6 +198,7 @@ export async function POST(req: Request) {
         endDate: parsedEndDate,
         note: note ? note.trim() : null,
         internalNote: internalNote ? internalNote.trim() : null,
+        accountInfo: isAdmin && accountInfo ? accountInfo.trim() : null,
       },
       include: {
         customer: true,
@@ -284,38 +289,109 @@ export async function PATCH(req: Request) {
       return NextResponse.json({ error: 'Chỉ quản trị viên mới có quyền thực hiện thao tác này.' }, { status: 403 });
     }
 
-    const { ids, status } = await req.json();
+    const { ids, status, amountPaid, paymentPercentage } = await req.json();
     if (!Array.isArray(ids) || ids.length === 0) {
       return NextResponse.json({ error: 'Danh sách ID không hợp lệ.' }, { status: 400 });
     }
 
-    const allowedStatuses = ['new', 'processing', 'running', 'expired_soon', 'expired', 'cancelled', 'refunded'];
-    if (!status || !allowedStatuses.includes(status)) {
-      return NextResponse.json({ error: 'Trạng thái mới không hợp lệ.' }, { status: 400 });
+    // 1. Handle payment percentage if provided
+    if (paymentPercentage !== undefined && paymentPercentage !== null) {
+      const percentage = parseFloat(paymentPercentage);
+      if (isNaN(percentage) || percentage < 0 || percentage > 1) {
+        return NextResponse.json({ error: 'Tỷ lệ thanh toán không hợp lệ.' }, { status: 400 });
+      }
+
+      // Fetch individual prices
+      const ordersToUpdate = await prisma.order.findMany({
+        where: { id: { in: ids } },
+        select: { id: true, price: true, customPrice: true, orderCode: true, status: true },
+      });
+
+      // Update in a transaction
+      await prisma.$transaction(
+        ordersToUpdate.map((o) => {
+          const price = o.customPrice !== null ? o.customPrice : o.price;
+          const targetAmountPaid = price * percentage;
+          return prisma.order.update({
+            where: { id: o.id },
+            data: { amountPaid: targetAmountPaid },
+          });
+        })
+      );
+
+      // Create Audit Log
+      await createAuditLog({
+        actor: {
+          id: userId,
+          name: 'Admin',
+          role: 'admin',
+          email: '',
+        },
+        action: 'UPDATE_ORDERS_PAYMENT_PERCENTAGE_BULK',
+        actionLabel: 'Sửa hàng loạt thanh toán theo %',
+        module: 'orders',
+        description: `Đã cập nhật số tiền nhận cho ${ordersToUpdate.length} đơn hàng về mức ${percentage * 100}%.`,
+        newValues: { ids, percentage },
+        status: 'success',
+      });
+
+      // Update status if also provided
+      if (status) {
+        const allowedStatuses = ['new', 'processing', 'running', 'expired_soon', 'expired', 'cancelled', 'refunded'];
+        if (allowedStatuses.includes(status)) {
+          await prisma.order.updateMany({
+            where: { id: { in: ids } },
+            data: { status },
+          });
+        }
+      }
+
+      return NextResponse.json({ success: true, count: ordersToUpdate.length });
     }
 
-    // Update orders status bulk
+    // 2. Standard bulk update
+    const updateData: any = {};
+
+    if (status) {
+      const allowedStatuses = ['new', 'processing', 'running', 'expired_soon', 'expired', 'cancelled', 'refunded'];
+      if (!allowedStatuses.includes(status)) {
+        return NextResponse.json({ error: 'Trạng thái mới không hợp lệ.' }, { status: 400 });
+      }
+      updateData.status = status;
+    }
+
+    if (amountPaid !== undefined && amountPaid !== null && amountPaid !== '') {
+      const parsedAmount = parseFloat(amountPaid);
+      if (isNaN(parsedAmount) || parsedAmount < 0) {
+        return NextResponse.json({ error: 'Số tiền nhận không hợp lệ.' }, { status: 400 });
+      }
+      updateData.amountPaid = parsedAmount;
+    }
+
+    if (Object.keys(updateData).length === 0) {
+      return NextResponse.json({ error: 'Không có thông tin thay đổi.' }, { status: 400 });
+    }
+
+    // Update orders bulk
     const updateCount = await prisma.order.updateMany({
       where: {
         id: { in: ids },
       },
-      data: {
-        status,
-      },
+      data: updateData,
     });
 
     await createAuditLog({
       action: 'UPDATE_ORDERS_STATUS_BULK',
-      actionLabel: 'Cập nhật trạng thái hàng loạt',
+      actionLabel: 'Cập nhật đơn hàng hàng loạt',
       module: 'orders',
       entityType: 'Order',
-      description: `Đã cập nhật trạng thái hàng loạt ${updateCount.count} đơn hàng thành "${status}".`,
+      description: `Đã cập nhật hàng loạt ${updateCount.count} đơn hàng: ${JSON.stringify(updateData)}.`,
       request: req,
       status: 'success'
     });
 
     return NextResponse.json({
-      message: `Đã cập nhật trạng thái thành công cho ${updateCount.count} đơn hàng!`,
+      message: `Đã cập nhật thành công cho ${updateCount.count} đơn hàng!`,
       count: updateCount.count,
     });
   } catch (error: any) {
