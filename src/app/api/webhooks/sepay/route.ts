@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { extractOrderCodeFromContent } from '@/lib/sepay';
 import { createAuditLog } from '@/lib/audit';
+import crypto from 'crypto';
 
 export const runtime = 'nodejs';
 
@@ -20,23 +21,61 @@ function safeCompare(a: string, b: string) {
 
 export async function POST(req: Request) {
   try {
-    // 1. Verify Authorization Header
-    const authHeader = req.headers.get('authorization') || '';
     const settings = await prisma.websiteSettings.findUnique({ where: { id: 'default' } });
+    const webhookSecret = settings?.sepayWebhookSecret;
     const sepayApiKey = settings?.sepayApiKey || process.env.SEPAY_API_KEY;
 
-    if (!sepayApiKey) {
-      console.error('SEPAY_API_KEY is not configured in database or environment variables.');
-      return NextResponse.json({ error: 'Cấu hình cổng thanh toán chưa hoàn tất.' }, { status: 500 });
+    let payload;
+
+    // 1. Verify Request: either via HMAC-SHA256 signature or Authorization API Key
+    if (webhookSecret) {
+      const signatureHeader = req.headers.get('x-sepay-signature') || '';
+      const timestampHeader = req.headers.get('x-sepay-timestamp') || '';
+
+      if (!signatureHeader || !timestampHeader) {
+        return NextResponse.json({ error: 'Không tìm thấy chữ ký bảo mật.' }, { status: 400 });
+      }
+
+      // Check Replay attack (must be within 5 minutes)
+      const now = Math.floor(Date.now() / 1000);
+      const requestTime = parseInt(timestampHeader, 10);
+      if (isNaN(requestTime) || Math.abs(now - requestTime) > 300) {
+        return NextResponse.json({ error: 'Yêu cầu hết hạn bảo mật (Replay Attack check).' }, { status: 400 });
+      }
+
+      // Read raw body as text for signature calculation
+      const rawBodyText = await req.text();
+      
+      const computedSignature = crypto
+        .createHmac('sha256', webhookSecret)
+        .update(`${timestampHeader}.${rawBodyText}`)
+        .digest('hex');
+
+      const cleanSignature = signatureHeader.startsWith('sha256=')
+        ? signatureHeader.substring(7)
+        : signatureHeader;
+
+      if (!safeCompare(cleanSignature, computedSignature)) {
+        return NextResponse.json({ error: 'Chữ ký bảo mật không khớp.' }, { status: 401 });
+      }
+
+      payload = JSON.parse(rawBodyText);
+    } else {
+      // Standard API Key Verification
+      const authHeader = req.headers.get('authorization') || '';
+      if (!sepayApiKey) {
+        console.error('SEPAY_API_KEY is not configured in database or environment variables.');
+        return NextResponse.json({ error: 'Cấu hình cổng thanh toán chưa hoàn tất.' }, { status: 500 });
+      }
+
+      const expectedAuth = `Apikey ${sepayApiKey}`;
+      if (!safeCompare(authHeader, expectedAuth)) {
+        return NextResponse.json({ error: 'Không có quyền truy cập.' }, { status: 401 });
+      }
+
+      payload = await req.json();
     }
 
-    const expectedAuth = `Apikey ${sepayApiKey}`;
-    if (!safeCompare(authHeader, expectedAuth)) {
-      return NextResponse.json({ error: 'Không có quyền truy cập.' }, { status: 401 });
-    }
-
-    // 2. Parse Body
-    const payload = await req.json();
     const {
       id: sepayId,
       transferType,

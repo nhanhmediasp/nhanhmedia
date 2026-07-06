@@ -326,6 +326,7 @@ model WebsiteSettings {
   sepayBankCode         String?  @map("sepay_bank_code")
   sepayAccountName      String?  @map("sepay_account_name")
   sepayApiKey           String?  @map("sepay_api_key")
+  sepayWebhookSecret    String?  @map("sepay_webhook_secret")
   createdAt             DateTime @default(now()) @map("created_at")
   updatedAt             DateTime @updatedAt @map("updated_at")
 

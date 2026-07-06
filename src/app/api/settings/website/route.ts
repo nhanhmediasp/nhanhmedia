@@ -48,6 +48,7 @@ export async function PUT(req: Request) {
       sepayBankCode,
       sepayAccountName,
       sepayApiKey,
+      sepayWebhookSecret,
     } = body;
 
     const oldSettings = await prisma.websiteSettings.findUnique({ where: { id: 'default' } });
@@ -73,6 +74,7 @@ export async function PUT(req: Request) {
         sepayBankCode: sepayBankCode || null,
         sepayAccountName: sepayAccountName || null,
         sepayApiKey: sepayApiKey || null,
+        sepayWebhookSecret: sepayWebhookSecret || null,
       },
       update: {
         siteName: siteName !== undefined ? siteName : undefined,
@@ -92,6 +94,7 @@ export async function PUT(req: Request) {
         sepayBankCode: sepayBankCode !== undefined ? sepayBankCode : undefined,
         sepayAccountName: sepayAccountName !== undefined ? sepayAccountName : undefined,
         sepayApiKey: sepayApiKey !== undefined ? sepayApiKey : undefined,
+        sepayWebhookSecret: sepayWebhookSecret !== undefined ? sepayWebhookSecret : undefined,
       }
     });
 

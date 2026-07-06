@@ -61,6 +61,7 @@ export default function WebsiteSettingsPage() {
   const [sepayBankCode, setSepayBankCode] = useState('');
   const [sepayAccountName, setSepayAccountName] = useState('');
   const [sepayApiKey, setSepayApiKey] = useState('');
+  const [sepayWebhookSecret, setSepayWebhookSecret] = useState('');
 
   // Origin for dynamic webhook link
   const [origin, setOrigin] = useState('');
@@ -90,6 +91,7 @@ export default function WebsiteSettingsPage() {
         setSepayBankCode(s.sepayBankCode || '');
         setSepayAccountName(s.sepayAccountName || '');
         setSepayApiKey(s.sepayApiKey || '');
+        setSepayWebhookSecret(s.sepayWebhookSecret || '');
       } else {
         showToast('Không thể tải cài đặt website.', 'error');
       }
@@ -133,6 +135,7 @@ export default function WebsiteSettingsPage() {
           sepayBankCode,
           sepayAccountName,
           sepayApiKey,
+          sepayWebhookSecret,
         }),
       });
       const data = await res.json();
@@ -569,6 +572,14 @@ export default function WebsiteSettingsPage() {
                     placeholder="Nhập API Key liên kết SePay..."
                     value={sepayApiKey}
                     onChange={(e) => setSepayApiKey(e.target.value)}
+                  />
+
+                  <Input
+                    label="SePay Webhook Secret Key (cho cấu hình HMAC-SHA256)"
+                    type="password"
+                    placeholder="Nhập Secret Key tạo từ SePay..."
+                    value={sepayWebhookSecret}
+                    onChange={(e) => setSepayWebhookSecret(e.target.value)}
                   />
                 </CardContent>
               </Card>
