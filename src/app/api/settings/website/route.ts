@@ -44,6 +44,10 @@ export async function PUT(req: Request) {
       loginMaxAttempts,
       loginLockEnabled,
       loginLockDurationMins,
+      sepayAccountNumber,
+      sepayBankCode,
+      sepayAccountName,
+      sepayApiKey,
     } = body;
 
     const oldSettings = await prisma.websiteSettings.findUnique({ where: { id: 'default' } });
@@ -65,6 +69,10 @@ export async function PUT(req: Request) {
         loginMaxAttempts: loginMaxAttempts !== undefined ? parseInt(loginMaxAttempts) : 5,
         loginLockEnabled: typeof loginLockEnabled === 'boolean' ? loginLockEnabled : true,
         loginLockDurationMins: loginLockDurationMins !== undefined ? parseInt(loginLockDurationMins) : 15,
+        sepayAccountNumber: sepayAccountNumber || null,
+        sepayBankCode: sepayBankCode || null,
+        sepayAccountName: sepayAccountName || null,
+        sepayApiKey: sepayApiKey || null,
       },
       update: {
         siteName: siteName !== undefined ? siteName : undefined,
@@ -80,6 +88,10 @@ export async function PUT(req: Request) {
         loginMaxAttempts: loginMaxAttempts !== undefined ? parseInt(loginMaxAttempts) : undefined,
         loginLockEnabled: typeof loginLockEnabled === 'boolean' ? loginLockEnabled : undefined,
         loginLockDurationMins: loginLockDurationMins !== undefined ? parseInt(loginLockDurationMins) : undefined,
+        sepayAccountNumber: sepayAccountNumber !== undefined ? sepayAccountNumber : undefined,
+        sepayBankCode: sepayBankCode !== undefined ? sepayBankCode : undefined,
+        sepayAccountName: sepayAccountName !== undefined ? sepayAccountName : undefined,
+        sepayApiKey: sepayApiKey !== undefined ? sepayApiKey : undefined,
       }
     });
 

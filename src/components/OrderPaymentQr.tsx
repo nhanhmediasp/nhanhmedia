@@ -22,11 +22,31 @@ export default function OrderPaymentQr({
   const [isPolling, setIsPolling] = useState(true);
   const [isPaid, setIsPaid] = useState(false);
 
-  const bankNumber = process.env.NEXT_PUBLIC_SEPAY_ACCOUNT_NUMBER || '1015165449';
-  const bankName = process.env.NEXT_PUBLIC_SEPAY_BANK_CODE || 'Vietcombank';
-  const accountName = process.env.NEXT_PUBLIC_SEPAY_ACCOUNT_NAME || 'NGUYEN THE VU';
+  const [bankNumber, setBankNumber] = useState(process.env.NEXT_PUBLIC_SEPAY_ACCOUNT_NUMBER || '1015165449');
+  const [bankName, setBankName] = useState(process.env.NEXT_PUBLIC_SEPAY_BANK_CODE || 'Vietcombank');
+  const [accountName, setAccountName] = useState(process.env.NEXT_PUBLIC_SEPAY_ACCOUNT_NAME || 'NGUYEN THE VU');
+
   const paymentContent = getPaymentContent(orderCode);
-  const qrUrl = buildQrUrl({ amount, content: paymentContent });
+  const qrUrl = `https://qr.sepay.vn/img?acc=${bankNumber}&bank=${bankName}&amount=${amount}&des=${encodeURIComponent(paymentContent)}`;
+
+  useEffect(() => {
+    const loadSettings = async () => {
+      try {
+        const res = await fetch('/api/public/settings');
+        if (res.ok) {
+          const data = await res.json();
+          if (data.settings) {
+            if (data.settings.sepayAccountNumber) setBankNumber(data.settings.sepayAccountNumber);
+            if (data.settings.sepayBankCode) setBankName(data.settings.sepayBankCode);
+            if (data.settings.sepayAccountName) setAccountName(data.settings.sepayAccountName);
+          }
+        }
+      } catch (err) {
+        console.error('Lỗi khi tải cấu hình thanh toán QR:', err);
+      }
+    };
+    loadSettings();
+  }, []);
 
   useEffect(() => {
     if (!isPolling) return;

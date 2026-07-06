@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { Button, Card, CardHeader, CardTitle, CardContent, Input, showToast, PageHeader, MediaPicker } from '@/components/ui';
-import { Globe, Image, Shield, Save, Mail, Settings, Share2, Upload } from 'lucide-react';
+import { Globe, Image, Shield, Save, Mail, Settings, Share2, Upload, CreditCard, ExternalLink, Copy, Check } from 'lucide-react';
 
 interface WebsiteSettings {
   id: string;
@@ -22,7 +22,7 @@ interface WebsiteSettings {
   loginLockDurationMins: number;
 }
 
-type Tab = 'info' | 'images' | 'security';
+type Tab = 'info' | 'images' | 'security' | 'sepay';
 
 export default function WebsiteSettingsPage() {
   const [activeTab, setActiveTab] = useState<Tab>('info');
@@ -56,13 +56,23 @@ export default function WebsiteSettingsPage() {
   const [loginMaxAttempts, setLoginMaxAttempts] = useState(5);
   const [loginLockDurationMins, setLoginLockDurationMins] = useState(15);
 
+  // SePay Integration
+  const [sepayAccountNumber, setSepayAccountNumber] = useState('');
+  const [sepayBankCode, setSepayBankCode] = useState('');
+  const [sepayAccountName, setSepayAccountName] = useState('');
+  const [sepayApiKey, setSepayApiKey] = useState('');
+
+  // Origin for dynamic webhook link
+  const [origin, setOrigin] = useState('');
+  const [copiedWebhook, setCopiedWebhook] = useState(false);
+
   const fetchSettings = async () => {
     setLoading(true);
     try {
       const res = await fetch('/api/settings/website');
       if (res.ok) {
         const data = await res.json();
-        const s: WebsiteSettings = data.settings;
+        const s: any = data.settings;
         setSiteName(s.siteName || '');
         setSiteDescription(s.siteDescription || '');
         setAdminEmail(s.adminEmail || '');
@@ -76,6 +86,10 @@ export default function WebsiteSettingsPage() {
         setLoginLockEnabled(s.loginLockEnabled);
         setLoginMaxAttempts(s.loginMaxAttempts);
         setLoginLockDurationMins(s.loginLockDurationMins);
+        setSepayAccountNumber(s.sepayAccountNumber || '');
+        setSepayBankCode(s.sepayBankCode || '');
+        setSepayAccountName(s.sepayAccountName || '');
+        setSepayApiKey(s.sepayApiKey || '');
       } else {
         showToast('Không thể tải cài đặt website.', 'error');
       }
@@ -88,6 +102,9 @@ export default function WebsiteSettingsPage() {
 
   useEffect(() => {
     fetchSettings();
+    if (typeof window !== 'undefined') {
+      setOrigin(window.location.origin);
+    }
   }, []);
 
   // handleUpload removed as MediaPicker handles uploads directly
@@ -112,6 +129,10 @@ export default function WebsiteSettingsPage() {
           loginLockEnabled,
           loginMaxAttempts,
           loginLockDurationMins,
+          sepayAccountNumber,
+          sepayBankCode,
+          sepayAccountName,
+          sepayApiKey,
         }),
       });
       const data = await res.json();
@@ -131,6 +152,7 @@ export default function WebsiteSettingsPage() {
     { id: 'info', label: 'Thông tin Website', icon: <Globe className="w-4 h-4" /> },
     { id: 'images', label: 'Logo & Favicon', icon: <Image className="w-4 h-4" /> },
     { id: 'security', label: 'Bảo mật đăng nhập', icon: <Shield className="w-4 h-4" /> },
+    { id: 'sepay', label: 'Cấu hình SePay', icon: <CreditCard className="w-4 h-4" /> },
   ];
 
   return (
@@ -504,6 +526,121 @@ export default function WebsiteSettingsPage() {
                       </div>
                     </>
                   )}
+                </CardContent>
+              </Card>
+            </div>
+          )}
+
+          {/* Tab: Cấu hình SePay */}
+          {activeTab === 'sepay' && (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <Card style={{ overflow: 'visible' }}>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <CreditCard className="w-4 h-4 text-primary" />
+                    Cấu hình Tài khoản nhận tiền QR
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-5">
+                  <Input
+                    label="Số tài khoản (sepayAccountNumber)"
+                    placeholder="Ví dụ: 1015165449"
+                    value={sepayAccountNumber}
+                    onChange={(e) => setSepayAccountNumber(e.target.value)}
+                  />
+                  
+                  <Input
+                    label="Ngân hàng nhận tiền (sepayBankCode)"
+                    placeholder="Ví dụ: Vietcombank"
+                    value={sepayBankCode}
+                    onChange={(e) => setSepayBankCode(e.target.value)}
+                  />
+
+                  <Input
+                    label="Chủ tài khoản (sepayAccountName)"
+                    placeholder="Ví dụ: NGUYEN THE VU"
+                    value={sepayAccountName}
+                    onChange={(e) => setSepayAccountName(e.target.value.toUpperCase())}
+                  />
+
+                  <Input
+                    label="SePay Webhook Token / API Key"
+                    type="password"
+                    placeholder="Nhập API Key liên kết SePay..."
+                    value={sepayApiKey}
+                    onChange={(e) => setSepayApiKey(e.target.value)}
+                  />
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <ExternalLink className="w-4 h-4 text-primary" />
+                    Liên kết & Tích hợp nhanh
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-5">
+                  <div className="p-4 rounded-xl border border-border bg-slate-50 dark:bg-zinc-900/60 space-y-2.5">
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs font-black text-muted-foreground uppercase tracking-wide">URL nhận Webhook</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigator.clipboard.writeText(`${origin}/api/webhooks/sepay`);
+                          setCopiedWebhook(true);
+                          showToast('Đã sao chép URL webhook!', 'success');
+                          setTimeout(() => setCopiedWebhook(false), 2000);
+                        }}
+                        className="text-primary hover:text-primary-hover flex items-center gap-1.5 text-xs font-bold cursor-pointer"
+                      >
+                        {copiedWebhook ? (
+                          <>
+                            <Check className="w-3.5 h-3.5 text-green-500" />
+                            <span>Đã sao chép</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="w-3.5 h-3.5" />
+                            <span>Sao chép</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                    <div className="p-2.5 bg-white dark:bg-zinc-800 rounded-lg border border-border/80 font-mono text-[11px] break-all select-all font-bold text-slate-700 dark:text-slate-300">
+                      {origin}/api/webhooks/sepay
+                    </div>
+                    <p className="text-[11px] text-muted-foreground leading-relaxed mt-1">
+                      Copy đường dẫn này dán vào ô <strong>"URL nhận webhook"</strong> trên giao diện SePay của bạn.
+                    </p>
+                  </div>
+
+                  <div className="p-4 rounded-xl border border-primary/10 bg-primary/5 space-y-3">
+                    <h4 className="text-sm font-extrabold text-primary">Cần cấu hình SePay?</h4>
+                    <p className="text-xs text-muted-foreground leading-relaxed">
+                      Bạn có thể mở giao diện quản lý tài khoản SePay trực tiếp để cài đặt cổng, liên kết ngân hàng và lấy Token API Key.
+                    </p>
+                    <div className="flex flex-wrap gap-2.5 pt-1">
+                      <a
+                        href="https://me.sepay.vn"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 px-4 py-2 bg-primary text-white text-xs font-bold rounded-xl shadow-md hover:bg-primary-hover hover:scale-[1.02] active:scale-[0.98] transition-all"
+                      >
+                        Vào SePay Dashboard
+                        <ExternalLink className="w-3.5 h-3.5" />
+                      </a>
+                      
+                      <a
+                        href="https://developer.sepay.vn/vi/sepay-webhooks/tich-hop-webhook"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 px-3 py-2 bg-white dark:bg-zinc-800 text-slate-700 dark:text-slate-300 border hover:bg-muted text-xs font-bold rounded-xl transition-all"
+                      >
+                        Tài liệu tích hợp
+                      </a>
+                    </div>
+                  </div>
                 </CardContent>
               </Card>
             </div>

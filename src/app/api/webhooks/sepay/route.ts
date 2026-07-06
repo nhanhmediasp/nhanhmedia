@@ -22,10 +22,11 @@ export async function POST(req: Request) {
   try {
     // 1. Verify Authorization Header
     const authHeader = req.headers.get('authorization') || '';
-    const sepayApiKey = process.env.SEPAY_API_KEY;
+    const settings = await prisma.websiteSettings.findUnique({ where: { id: 'default' } });
+    const sepayApiKey = settings?.sepayApiKey || process.env.SEPAY_API_KEY;
 
     if (!sepayApiKey) {
-      console.error('SEPAY_API_KEY is not configured in environment variables.');
+      console.error('SEPAY_API_KEY is not configured in database or environment variables.');
       return NextResponse.json({ error: 'Cấu hình cổng thanh toán chưa hoàn tất.' }, { status: 500 });
     }
 

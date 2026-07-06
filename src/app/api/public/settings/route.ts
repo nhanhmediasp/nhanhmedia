@@ -16,6 +16,9 @@ export async function GET() {
         facebookUrl: true,
         zaloUrl: true,
         telegramUrl: true,
+        sepayAccountNumber: true,
+        sepayBankCode: true,
+        sepayAccountName: true,
       }
     });
 
@@ -42,6 +45,9 @@ export async function GET() {
           facebookUrl: true,
           zaloUrl: true,
           telegramUrl: true,
+          sepayAccountNumber: true,
+          sepayBankCode: true,
+          sepayAccountName: true,
         }
       });
       settings = newSettings;
