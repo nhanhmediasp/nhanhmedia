@@ -41,6 +41,7 @@ interface PaymentTransaction {
   gateway: string | null;
   transactionAt: string;
   matched: boolean;
+  status: string;
   order?: {
     orderCode: string;
     customer: {
@@ -313,17 +314,41 @@ export default function AdminPaymentsReportPage() {
                         </div>
                       </td>
                       <td className="py-3.5 px-4 text-center">
-                        {tx.matched ? (
-                          <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-lg bg-green-150 text-green-700 dark:bg-green-950/30 dark:text-green-400">
-                            <CheckCircle2 className="w-3 h-3" />
-                            Đã khớp đơn
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-lg bg-amber-100 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400">
-                            <XCircle className="w-3 h-3" />
-                            Chưa khớp
-                          </span>
-                        )}
+                        <select
+                          value={tx.status || 'success'}
+                          onChange={async (e) => {
+                            const newStatus = e.target.value;
+                            try {
+                              const res = await fetch('/api/admin/payments', {
+                                method: 'PATCH',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ id: tx.id, status: newStatus }),
+                              });
+                              if (res.ok) {
+                                showToast('Cập nhật trạng thái giao dịch thành công!', 'success');
+                                fetchReportData();
+                              } else {
+                                const data = await res.json();
+                                showToast(data.error || 'Lỗi khi cập nhật.', 'error');
+                              }
+                            } catch {
+                              showToast('Lỗi kết nối máy chủ.', 'error');
+                            }
+                          }}
+                          className={`text-[10px] font-bold rounded-lg px-2.5 py-1 focus:outline-none cursor-pointer border ${
+                            tx.status === 'refunded'
+                              ? 'bg-rose-950/20 text-rose-400 border-rose-900/30'
+                              : tx.status === 'failed'
+                              ? 'bg-slate-800 text-slate-400 border-slate-700'
+                              : tx.matched
+                              ? 'bg-green-950/20 text-green-400 border-green-900/30'
+                              : 'bg-amber-950/20 text-amber-400 border-amber-900/30'
+                          }`}
+                        >
+                          <option value="success" className="bg-slate-900 text-green-400">Đã khớp đơn</option>
+                          <option value="refunded" className="bg-slate-900 text-rose-400">Đã hoàn tiền</option>
+                          <option value="failed" className="bg-slate-900 text-slate-400">Thất bại</option>
+                        </select>
                       </td>
                     </tr>
                   ))}

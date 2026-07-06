@@ -21,6 +21,7 @@ export default function OrderPaymentQr({
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [isPolling, setIsPolling] = useState(true);
   const [isPaid, setIsPaid] = useState(false);
+  const [copyingImage, setCopyingImage] = useState(false);
 
   const [bankNumber, setBankNumber] = useState(process.env.NEXT_PUBLIC_SEPAY_ACCOUNT_NUMBER || '1015165449');
   const [bankName, setBankName] = useState(process.env.NEXT_PUBLIC_SEPAY_BANK_CODE || 'Vietcombank');
@@ -28,6 +29,59 @@ export default function OrderPaymentQr({
 
   const paymentContent = getPaymentContent(orderCode);
   const qrUrl = `https://qr.sepay.vn/img?acc=${bankNumber}&bank=${bankName}&amount=${amount}&des=${encodeURIComponent(paymentContent)}`;
+
+  const handleCopyQRImage = async () => {
+    setCopyingImage(true);
+    try {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.src = `/api/public/qr-proxy?url=${encodeURIComponent(qrUrl)}`;
+      
+      img.onload = () => {
+        try {
+          const canvas = document.createElement('canvas');
+          canvas.width = img.width;
+          canvas.height = img.height;
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            ctx.drawImage(img, 0, 0);
+            canvas.toBlob(async (blob) => {
+              if (blob) {
+                try {
+                  await navigator.clipboard.write([
+                    new ClipboardItem({ 'image/png': blob })
+                  ]);
+                  showToast('Đã sao chép ảnh QR vào bộ nhớ tạm!', 'success');
+                } catch (err) {
+                  console.error('Clipboard write error:', err);
+                  showToast('Không thể sao chép ảnh vào clipboard. Hãy lưu thủ công.', 'error');
+                }
+              } else {
+                showToast('Không thể tạo tệp ảnh.', 'error');
+              }
+              setCopyingImage(false);
+            }, 'image/png');
+          } else {
+            showToast('Không thể tạo Canvas.', 'error');
+            setCopyingImage(false);
+          }
+        } catch (e) {
+          console.error(e);
+          showToast('Lỗi xử lý sao chép ảnh.', 'error');
+          setCopyingImage(false);
+        }
+      };
+
+      img.onerror = () => {
+        showToast('Lỗi tải ảnh từ cổng QR.', 'error');
+        setCopyingImage(false);
+      };
+    } catch (e) {
+      console.error(e);
+      showToast('Lỗi xử lý.', 'error');
+      setCopyingImage(false);
+    }
+  };
 
   useEffect(() => {
     const loadSettings = async () => {
@@ -89,18 +143,25 @@ export default function OrderPaymentQr({
   if (isPaid) {
     return (
       <div 
-        className="rounded-2xl p-6 border text-center space-y-4 animate-fade-in"
+        className="rounded-2xl p-6 border text-center space-y-4 animate-fade-in relative overflow-hidden backdrop-blur-sm shadow-xl"
         style={{
           background: 'linear-gradient(135deg, #f0fdf4, #dcfce7)',
           borderColor: '#bbf7d0',
         }}
       >
-        <div className="w-12 h-12 rounded-full bg-emerald-500 text-white flex items-center justify-center mx-auto shadow-md">
-          <ShieldCheck className="w-6 h-6" />
+        {/* Animated decorative shapes */}
+        <div className="absolute top-0 right-0 w-20 h-20 bg-emerald-300/20 rounded-full blur-xl -mr-6 -mt-6 pointer-events-none" />
+        <div className="absolute bottom-0 left-0 w-24 h-24 bg-emerald-300/10 rounded-full blur-xl -ml-6 -mb-6 pointer-events-none" />
+
+        <div className="w-14 h-14 rounded-full bg-emerald-500 text-white flex items-center justify-center mx-auto shadow-lg shadow-emerald-500/20 border-4 border-white/60 animate-bounce">
+          <ShieldCheck className="w-7 h-7" />
         </div>
-        <div>
-          <h3 className="text-base font-extrabold text-emerald-800">ĐÃ THANH TOÁN THÀNH CÔNG</h3>
-          <p className="text-xs text-emerald-600 mt-1 font-medium">Hệ thống đã nhận được tiền chuyển khoản tự động.</p>
+        <div className="space-y-1 relative z-10">
+          <h3 className="text-base font-black text-emerald-800 tracking-wide uppercase">ĐÃ THANH TOÁN THÀNH CÔNG</h3>
+          <p className="text-xs text-emerald-600 font-medium">Hệ thống đã nhận được đầy đủ tiền chuyển khoản tự động.</p>
+        </div>
+        <div className="inline-flex text-[10px] bg-emerald-500/10 border border-emerald-500/20 rounded-full px-4 py-1 text-emerald-700 font-bold uppercase tracking-wider select-none animate-pulse">
+          Đơn hàng đã thanh toán 100%
         </div>
       </div>
     );
@@ -115,7 +176,7 @@ export default function OrderPaymentQr({
       
       <div className="p-5 flex flex-col md:flex-row gap-6 items-center">
         {/* QR Code Column */}
-        <div className="flex flex-col items-center gap-2 shrink-0">
+        <div className="flex flex-col items-center gap-2 shrink-0 w-full md:w-auto">
           <div className="bg-white p-3.5 rounded-xl border border-slate-100 shadow-sm relative group overflow-hidden">
             <img 
               src={qrUrl} 
@@ -125,8 +186,28 @@ export default function OrderPaymentQr({
             {/* Ambient pulse */}
             <div className="absolute inset-0 border-2 border-primary/20 rounded-xl pointer-events-none animate-pulse" />
           </div>
-          <span className="text-[10px] text-muted-foreground font-semibold flex items-center gap-1">
-            <Loader2 className="w-3 h-3 animate-spin text-primary" />
+          
+          <button
+            type="button"
+            disabled={copyingImage}
+            onClick={handleCopyQRImage}
+            className="w-full max-w-[176px] h-8 bg-slate-800 hover:bg-slate-700 active:scale-95 disabled:opacity-50 text-white font-bold text-[10px] rounded-lg flex items-center justify-center gap-1.5 transition-all shadow-sm border border-slate-700 cursor-pointer"
+          >
+            {copyingImage ? (
+              <>
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                <span>Đang xử lý...</span>
+              </>
+            ) : (
+              <>
+                <Copy className="w-3.5 h-3.5" />
+                <span>Sao chép ảnh QR</span>
+              </>
+            )}
+          </button>
+
+          <span className="text-[9px] text-muted-foreground font-semibold flex items-center gap-1 mt-1">
+            <Loader2 className="w-2.5 h-2.5 animate-spin text-primary" />
             Tự động xác nhận sau khi chuyển
           </span>
         </div>

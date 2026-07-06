@@ -497,6 +497,7 @@ model PaymentTransaction {
   gateway       String?                              // tên ngân hàng
   transactionAt DateTime @map("transaction_at")
   matched       Boolean  @default(false)            // đã khớp được đơn chưa
+  status        String   @default("success")        // success | refunded | failed
   raw           Json                                 // lưu nguyên payload để đối soát
   createdAt     DateTime @default(now()) @map("created_at")
 

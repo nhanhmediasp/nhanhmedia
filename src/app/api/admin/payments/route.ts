@@ -116,3 +116,37 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: 'Lỗi khi tải báo cáo thanh toán.' }, { status: 500 });
   }
 }
+
+export async function PATCH(req: Request) {
+  try {
+    const role = req.headers.get('x-user-role');
+    if (role !== 'admin') {
+      return NextResponse.json({ error: 'Không có quyền truy cập.' }, { status: 403 });
+    }
+
+    const body = await req.json();
+    const { id, status } = body;
+
+    if (!id || !status) {
+      return NextResponse.json({ error: 'Thiếu thông tin yêu cầu.' }, { status: 400 });
+    }
+
+    const allowedStatuses = ['success', 'refunded', 'failed'];
+    if (!allowedStatuses.includes(status)) {
+      return NextResponse.json({ error: 'Trạng thái không hợp lệ.' }, { status: 400 });
+    }
+
+    const updatedTx = await prisma.paymentTransaction.update({
+      where: { id },
+      data: { status }
+    });
+
+    return NextResponse.json({
+      message: 'Cập nhật trạng thái giao dịch thành công!',
+      transaction: updatedTx
+    });
+  } catch (error: any) {
+    console.error('Update payment transaction error:', error);
+    return NextResponse.json({ error: `Lỗi khi cập nhật trạng thái: ${error?.message || error}` }, { status: 500 });
+  }
+}

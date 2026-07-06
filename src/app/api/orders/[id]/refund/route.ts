@@ -61,15 +61,23 @@ export async function POST(
     const usedValue = usedDays * pricePerDay;
     const refundAmount = Math.max(0, Math.round((order.amountPaid ?? 0) - usedValue));
 
-    // 3. Update order in database
-    const updatedOrder = await prisma.order.update({
-      where: { id },
-      data: {
-        status: 'refunded',
-        refundAmount,
-        refundedAt: new Date(),
-      },
-    });
+    // 3. Update order and transactions in database
+    const [updatedOrder] = await prisma.$transaction([
+      prisma.order.update({
+        where: { id },
+        data: {
+          status: 'refunded',
+          refundAmount,
+          refundedAt: new Date(),
+        },
+      }),
+      prisma.paymentTransaction.updateMany({
+        where: { orderId: id },
+        data: {
+          status: 'refunded',
+        },
+      }),
+    ]);
 
     return NextResponse.json({
       message: 'Xử lý bảo hành / hoàn tiền thành công!',
