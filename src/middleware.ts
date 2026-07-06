@@ -37,6 +37,7 @@ export async function middleware(req: NextRequest) {
     pathname === '/api/auth/reset-password' ||
     pathname.startsWith('/api/cron') || // Cron job has its own token protection
     pathname.startsWith('/api/public/') || // Public settings API
+    pathname.startsWith('/api/webhooks/') || // Webhooks like SePay have their own API key / signature verification
     pathname.includes('.') || // Static files like favicon.ico, logo.png
     pathname === '/favicon.ico'
   ) {
