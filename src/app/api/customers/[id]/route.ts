@@ -42,9 +42,40 @@ export async function GET(
     }
 
     const orderCount = customer.orders.length;
-    const totalSpent = customer.orders.reduce((sum, order) => {
-      return sum + (order.customPrice !== null ? order.customPrice : order.price);
-    }, 0);
+    let totalSpent = 0;
+    let totalPaid = 0;
+    let totalDebt = 0;
+    let cancelledCount = 0;
+    let refundedCount = 0;
+
+    customer.orders.forEach((o) => {
+      const orderPrice = o.customPrice !== null ? o.customPrice : o.price;
+      totalSpent += orderPrice;
+      totalPaid += o.amountPaid;
+      totalDebt += Math.max(0, orderPrice - o.amountPaid);
+      if (o.status === 'cancelled') {
+        cancelledCount++;
+      }
+      if (o.refundAmount && o.refundAmount > 0) {
+        refundedCount++;
+      }
+    });
+
+    // auto rating logic
+    let rating = 4;
+    const cancelRate = orderCount > 0 ? (cancelledCount / orderCount) : 0;
+    if (cancelRate > 0.2) rating -= 1;
+    if (totalDebt > 0) rating -= 1;
+    if (totalPaid > 20000000) rating += 1;
+    rating = Math.max(1, Math.min(5, rating));
+
+    // vipStatus
+    let vipStatus = 'standard';
+    if (totalPaid > 20000000) {
+      vipStatus = 'vip';
+    } else if (totalPaid > 5000000) {
+      vipStatus = 'loyal';
+    }
 
     const formattedCustomer = {
       id: customer.id,
@@ -54,11 +85,20 @@ export async function GET(
       zalo: customer.zalo,
       email: customer.email,
       note: customer.note,
+      source: customer.source,
+      manualRating: customer.manualRating,
+      internalNotes: customer.internalNotes,
       createdAt: customer.createdAt,
       createdByUserId: customer.createdByUserId,
       createdByUser: customer.createdByUser,
       orderCount,
       totalSpent,
+      totalPaid,
+      totalDebt,
+      cancelledCount,
+      refundedCount,
+      autoRating: rating,
+      vipStatus,
       orders: customer.orders,
     };
 
@@ -82,7 +122,7 @@ export async function PUT(
       return NextResponse.json({ error: 'Không xác định được người dùng.' }, { status: 401 });
     }
 
-    const { name, phone, facebook, zalo, email, note } = await req.json();
+    const { name, phone, facebook, zalo, email, note, source, manualRating, internalNotes } = await req.json();
 
     if (!name || !phone) {
       return NextResponse.json({ error: 'Họ tên và số điện thoại là bắt buộc.' }, { status: 400 });
@@ -118,7 +158,10 @@ export async function PUT(
       facebook: customer.facebook,
       zalo: customer.zalo,
       email: customer.email,
-      note: customer.note
+      note: customer.note,
+      source: customer.source,
+      manualRating: customer.manualRating,
+      internalNotes: customer.internalNotes,
     };
 
     const updatedCustomer = await prisma.customer.update({
@@ -130,6 +173,9 @@ export async function PUT(
         zalo: zalo ? zalo.trim() : null,
         email: email ? email.trim() : null,
         note: note ? note.trim() : null,
+        source: source ? source.trim() : null,
+        manualRating: manualRating ? Number(manualRating) : null,
+        internalNotes: internalNotes ? internalNotes.trim() : null,
       },
     });
 
@@ -140,7 +186,10 @@ export async function PUT(
       facebook: updatedCustomer.facebook,
       zalo: updatedCustomer.zalo,
       email: updatedCustomer.email,
-      note: updatedCustomer.note
+      note: updatedCustomer.note,
+      source: updatedCustomer.source,
+      manualRating: updatedCustomer.manualRating,
+      internalNotes: updatedCustomer.internalNotes,
     };
 
     await createAuditLog({

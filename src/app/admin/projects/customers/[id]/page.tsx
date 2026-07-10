@@ -25,8 +25,17 @@ interface ProjectCustomer {
   facebook: string | null;
   note: string | null;
   avatarUrl: string | null;
+  source: string | null;
+  manualRating: number | null;
+  internalNotes: string | null;
   createdAt: string;
   projects: Project[];
+  totalSpent: number;
+  totalBudget: number;
+  totalPaid: number;
+  totalDebt: number;
+  autoRating: number;
+  vipStatus: string;
 }
 
 export default function ProjectCustomerDetailPage() {
@@ -46,6 +55,9 @@ export default function ProjectCustomerDetailPage() {
   const [editFacebook, setEditFacebook] = useState('');
   const [editNote, setEditNote] = useState('');
   const [editAvatarUrl, setEditAvatarUrl] = useState('');
+  const [editSource, setEditSource] = useState('');
+  const [editManualRating, setEditManualRating] = useState('');
+  const [editInternalNotes, setEditInternalNotes] = useState('');
   const [mediaPickerOpen, setMediaPickerOpen] = useState(false);
   const [updating, setUpdating] = useState(false);
 
@@ -65,6 +77,9 @@ export default function ProjectCustomerDetailPage() {
           setEditFacebook(data.customer.facebook || '');
           setEditNote(data.customer.note || '');
           setEditAvatarUrl(data.customer.avatarUrl || '');
+          setEditSource(data.customer.source || '');
+          setEditManualRating(data.customer.manualRating ? String(data.customer.manualRating) : '');
+          setEditInternalNotes(data.customer.internalNotes || '');
         }
       } else {
         showToast('Không thể tải thông tin khách hàng dự án.', 'error');
@@ -103,6 +118,9 @@ export default function ProjectCustomerDetailPage() {
           facebook: editFacebook,
           note: editNote,
           avatarUrl: editAvatarUrl,
+          source: editSource || null,
+          manualRating: editManualRating ? Number(editManualRating) : null,
+          internalNotes: editInternalNotes || null,
         }),
       });
       const data = await res.json();
@@ -158,10 +176,12 @@ export default function ProjectCustomerDetailPage() {
   // Calculate statistics
   const totalProjects = customer.projects.length;
   const runningProjects = customer.projects.filter(p => p.status === 'running').length;
-  const totalInvestment = customer.projects.reduce((sum, p) => sum + p.totalCost, 0);
+  const totalBudgetVal = customer.totalBudget || 0;
   const avgProgress = totalProjects > 0
     ? Math.round(customer.projects.reduce((sum, p) => sum + p.progress, 0) / totalProjects)
     : 0;
+
+  const effectiveRating = customer.manualRating || customer.autoRating || 4;
 
   return (
     <div className="p-6 max-w-[1400px] mx-auto space-y-6">
@@ -185,9 +205,13 @@ export default function ProjectCustomerDetailPage() {
               </div>
             )}
             <div>
-              <h1 className="text-xl sm:text-2xl font-black text-slate-800 tracking-tight flex items-center gap-1.5 leading-none">
-                {customer.name}
-              </h1>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h1 className="text-xl sm:text-2xl font-black text-slate-800 tracking-tight leading-none">
+                  {customer.name}
+                </h1>
+                {customer.vipStatus === 'vip' && <Badge variant="success" className="font-black scale-90">VIP 💎</Badge>}
+                {customer.vipStatus === 'loyal' && <Badge variant="primary" className="font-extrabold scale-90">Thân thiết</Badge>}
+              </div>
               <p className="text-xs font-semibold text-slate-400 mt-1">Hồ sơ chi tiết và phân tích thống kê dự án của khách hàng.</p>
             </div>
           </div>
@@ -218,7 +242,7 @@ export default function ProjectCustomerDetailPage() {
               <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 block">Đang triển khai</span>
               <span className="text-2xl font-black text-slate-700 block">{runningProjects}</span>
             </div>
-            <div className="w-12 h-12 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-500 shrink-0">
+            <div className="w-12 h-12 rounded-xl bg-emerald-55 Flex items-center justify-center text-emerald-500 shrink-0">
               <Activity className="w-6 h-6" />
             </div>
           </CardContent>
@@ -227,8 +251,8 @@ export default function ProjectCustomerDetailPage() {
         <Card className="border-l-4 border-l-rose-500">
           <CardContent className="p-5 flex items-center justify-between">
             <div className="space-y-1">
-              <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 block">Tổng chi phí dự án</span>
-              <span className="text-xl font-black text-rose-600 block">{formatVND(totalInvestment)}</span>
+              <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 block">Tổng ngân sách dự án</span>
+              <span className="text-xl font-black text-rose-600 block">{formatVND(totalBudgetVal)}</span>
             </div>
             <div className="w-12 h-12 rounded-xl bg-rose-50 flex items-center justify-center text-rose-500 shrink-0">
               <DollarSign className="w-6 h-6" />
@@ -256,7 +280,7 @@ export default function ProjectCustomerDetailPage() {
           <CardContent className="p-6 space-y-6">
             <h3 className="font-extrabold text-slate-800 text-sm border-b border-slate-100 pb-3 flex items-center gap-2">
               <User className="w-4 h-4 text-primary" />
-              Thông tin liên hệ
+              Thông tin liên hệ & Đánh giá
             </h3>
             <div className="space-y-4.5 text-sm">
               <div className="space-y-1">
@@ -266,6 +290,52 @@ export default function ProjectCustomerDetailPage() {
               <div className="space-y-1">
                 <span className="text-xs text-slate-400 block font-bold uppercase tracking-wider">Số điện thoại</span>
                 <span className="font-extrabold text-slate-700">{customer.phone || 'Chưa cập nhật'}</span>
+              </div>
+              {customer.source && (
+                <div className="space-y-1">
+                  <span className="text-xs text-slate-400 block font-bold uppercase tracking-wider">Nguồn khách hàng</span>
+                  <span className="px-1.5 py-0.5 text-xs font-bold uppercase rounded bg-indigo-50 text-indigo-600 border border-indigo-100 inline-block mt-0.5">
+                    {customer.source}
+                  </span>
+                </div>
+              )}
+              <div className="space-y-1">
+                <span className="text-xs text-slate-400 block font-bold uppercase tracking-wider">Độ uy tín</span>
+                <div className="flex items-center gap-0.5 mt-0.5">
+                  {[...Array(5)].map((_, i) => {
+                    const starVal = i + 1;
+                    return (
+                      <span
+                        key={i}
+                        className={`text-base ${
+                          starVal <= effectiveRating ? 'text-amber-400 font-extrabold' : 'text-slate-200'
+                        }`}
+                      >
+                        ★
+                      </span>
+                    );
+                  })}
+                  <span className="text-[10px] text-slate-400 font-bold ml-1">
+                    ({customer.manualRating ? 'Admin' : 'Tự động'})
+                  </span>
+                </div>
+              </div>
+              <div className="space-y-1">
+                <span className="text-xs text-slate-400 block font-bold uppercase tracking-wider">Tài chính dự án</span>
+                <div className="space-y-1 bg-slate-50/70 p-3 rounded-xl border border-slate-100 text-xs">
+                  <div className="flex justify-between">
+                    <span className="text-slate-400 font-bold">Ngân sách hợp đồng:</span>
+                    <span className="font-bold text-slate-700">{formatVND(customer.totalBudget || 0)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-400 font-bold">Thực tế đã thanh toán:</span>
+                    <span className="font-bold text-emerald-600">{formatVND(customer.totalPaid || 0)}</span>
+                  </div>
+                  <div className="flex justify-between border-t border-slate-200/60 pt-1.5 mt-1.5">
+                    <span className="text-rose-500 font-black">Nợ hợp đồng 💸:</span>
+                    <span className="font-black text-rose-600">{formatVND(customer.totalDebt || 0)}</span>
+                  </div>
+                </div>
               </div>
               <div className="space-y-1">
                 <span className="text-xs text-slate-400 block font-bold uppercase tracking-wider">Email</span>
@@ -293,8 +363,16 @@ export default function ProjectCustomerDetailPage() {
                   )}
                 </span>
               </div>
+              {customer.internalNotes && (
+                <div className="space-y-1">
+                  <span className="text-xs font-bold text-rose-500 uppercase block">Ghi chú uy tín nội bộ</span>
+                  <p className="text-rose-600 bg-rose-500/5 border border-rose-100 p-3 rounded-xl leading-relaxed text-xs">
+                    {customer.internalNotes}
+                  </p>
+                </div>
+              )}
               <div className="space-y-1">
-                <span className="text-xs text-slate-400 block font-bold uppercase tracking-wider">Ghi chú cá nhân</span>
+                <span className="text-xs text-slate-400 block font-bold uppercase tracking-wider">Ghi chú chung</span>
                 <p className="text-slate-650 bg-slate-50/70 p-3 rounded-xl border border-slate-100 leading-relaxed text-xs">
                   {customer.note || 'Không có ghi chú nào.'}
                 </p>
@@ -468,12 +546,54 @@ export default function ProjectCustomerDetailPage() {
                     onChange={(e) => setEditFacebook(e.target.value)}
                   />
                 </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-2">
+                      Nguồn khách hàng
+                    </label>
+                    <select
+                      value={editSource}
+                      onChange={(e) => setEditSource(e.target.value)}
+                      className="w-full flex h-10 items-center justify-between rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
+                    >
+                      <option value="">Chọn nguồn khách</option>
+                      <option value="Zalo">Zalo</option>
+                      <option value="Facebook">Facebook</option>
+                      <option value="Website">Website</option>
+                      <option value="Referral">Giới thiệu</option>
+                      <option value="Other">Khác</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-2">
+                      Đánh giá uy tín (Admin)
+                    </label>
+                    <select
+                      value={editManualRating}
+                      onChange={(e) => setEditManualRating(e.target.value)}
+                      className="w-full flex h-10 items-center justify-between rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
+                    >
+                      <option value="">Đánh giá tự động</option>
+                      <option value="1">1 Sao ★ (Rất kém)</option>
+                      <option value="2">2 Sao ★★ (Kém)</option>
+                      <option value="3">3 Sao ★★★ (Trung bình)</option>
+                      <option value="4">4 Sao ★★★★ (Tốt)</option>
+                      <option value="5">5 Sao ★★★★★ (Tuyệt vời)</option>
+                    </select>
+                  </div>
+                </div>
+                <Input
+                  label="Ghi chú uy tín nội bộ"
+                  placeholder="Ví dụ: Thanh toán nhanh, hay kì kèo..."
+                  value={editInternalNotes}
+                  onChange={(e) => setEditInternalNotes(e.target.value)}
+                />
                 <Textarea
-                  label="Ghi chú"
+                  label="Ghi chú chung"
                   placeholder="Ghi chú thêm..."
                   value={editNote}
                   onChange={(e) => setEditNote(e.target.value)}
-                  rows={3}
+                  rows={2}
                 />
               </div>
               <div className="px-6 py-4 bg-slate-50 border-t border-slate-150 flex justify-end gap-3 rounded-b-2xl">

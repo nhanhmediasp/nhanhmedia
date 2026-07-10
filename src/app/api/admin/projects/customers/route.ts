@@ -25,11 +25,37 @@ export async function GET(req: Request) {
 
     const formattedCustomers = customers.map((c) => {
       let totalSpent = 0;
+      let totalBudget = 0;
+      let totalPaid = 0;
+      let completedProjects = 0;
+
       c.projects.forEach((proj) => {
         const webCosts = proj.websiteCosts.reduce((sum, item) => sum + item.amount, 0);
         const toolCosts = proj.toolCosts.reduce((sum, item) => sum + item.cost, 0);
         totalSpent += (webCosts + toolCosts);
+        totalBudget += proj.budget || 0;
+        totalPaid += proj.amountReceived || 0;
+        if (proj.status === 'completed') {
+          completedProjects++;
+        }
       });
+
+      const totalDebt = Math.max(0, totalBudget - totalPaid);
+
+      // auto rating logic
+      let rating = 4;
+      if (totalDebt > 0) rating -= 1;
+      if (totalDebt > 0 && completedProjects > 0) rating -= 1; // Completed but unpaid debt
+      if (totalPaid > 50000000) rating += 1;
+      rating = Math.max(1, Math.min(5, rating));
+
+      // vipStatus
+      let vipStatus = 'standard';
+      if (totalPaid > 50000000) {
+        vipStatus = 'vip';
+      } else if (totalPaid > 15000000) {
+        vipStatus = 'loyal';
+      }
 
       const formattedProjects = c.projects.map((p) => ({
         id: p.id,
@@ -48,9 +74,17 @@ export async function GET(req: Request) {
         facebook: c.facebook,
         note: c.note,
         avatarUrl: c.avatarUrl,
+        source: c.source,
+        manualRating: c.manualRating,
+        internalNotes: c.internalNotes,
         createdAt: c.createdAt,
         projects: formattedProjects,
         totalSpent,
+        totalBudget,
+        totalPaid,
+        totalDebt,
+        autoRating: rating,
+        vipStatus,
         _count: c._count,
       };
     });
@@ -70,7 +104,7 @@ export async function POST(req: Request) {
 
   try {
     const body = await req.json();
-    const { name, phone, zalo, facebook, email, note, avatarUrl } = body;
+    const { name, phone, zalo, facebook, email, note, avatarUrl, source, manualRating, internalNotes } = body;
 
     if (!name || !name.trim()) {
       return NextResponse.json({ error: 'Tên khách hàng là bắt buộc.' }, { status: 400 });
@@ -85,6 +119,9 @@ export async function POST(req: Request) {
         email: email ? email.trim() : null,
         note: note ? note.trim() : null,
         avatarUrl: avatarUrl ? avatarUrl.trim() : null,
+        source: source ? source.trim() : null,
+        manualRating: manualRating ? Number(manualRating) : null,
+        internalNotes: internalNotes ? internalNotes.trim() : null,
       },
     });
 

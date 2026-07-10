@@ -50,6 +50,7 @@ export async function GET(req: Request) {
         status: p.status,
         progress,
         totalCost,
+        budget: p.budget,
         categoryId: p.categoryId,
         category: p.category,
         customerId: p.customerId,

@@ -52,8 +52,15 @@ interface Supplier {
   name: string;
   contactUrl: string | null;
   icon: string | null;
+  manualRating: number | null;
+  internalNotes: string | null;
   createdAt: string;
   orders: Order[];
+  totalRevenue?: number;
+  totalCost?: number;
+  cancelledCount?: number;
+  totalRefundAmount?: number;
+  autoRating?: number;
 }
 
 export default function AdminSupplierDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -85,14 +92,20 @@ export default function AdminSupplierDetailPage({ params }: { params: Promise<{ 
   }, [id]);
 
   const stats = useMemo(() => {
-    if (!supplier || !supplier.orders) return { count: 0, revenue: 0, cost: 0, profit: 0 };
+    if (!supplier || !supplier.orders) return { count: 0, revenue: 0, cost: 0, profit: 0, cancelled: 0, refundedAmount: 0 };
     let revenue = 0;
     let cost = 0;
+    let cancelled = 0;
+    let refundedAmount = 0;
 
     supplier.orders.forEach((o) => {
       const sellPrice = o.customPrice !== null ? o.customPrice : o.price;
       revenue += sellPrice;
       cost += o.importPrice || 0;
+      if (o.status === 'cancelled') {
+        cancelled++;
+      }
+      refundedAmount += o.refundAmount || 0;
     });
 
     return {
@@ -100,6 +113,8 @@ export default function AdminSupplierDetailPage({ params }: { params: Promise<{ 
       revenue,
       cost,
       profit: revenue - cost,
+      cancelled,
+      refundedAmount,
     };
   }, [supplier]);
 
@@ -123,6 +138,8 @@ export default function AdminSupplierDetailPage({ params }: { params: Promise<{ 
 
   if (!supplier) return null;
 
+  const effectiveRating = supplier.manualRating || supplier.autoRating || 4;
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -134,25 +151,54 @@ export default function AdminSupplierDetailPage({ params }: { params: Promise<{ 
           </Button>
         </Link>
         <SupplierAvatar iconName={supplier.icon} size="lg" />
-        <div>
-          <div className="flex items-center gap-2">
+        <div className="flex-1">
+          <div className="flex items-center gap-2 flex-wrap">
             <h1 className="text-2xl font-black tracking-tight" style={{ color: '#1e293b' }}>
               Nguồn hàng: {supplier.name}
             </h1>
             <Badge variant="primary" className="ml-1">Tag</Badge>
+            {stats.cancelled > 2 && <Badge variant="danger" className="scale-90 font-black animate-pulse">Tỷ lệ hủy cao ⚠️</Badge>}
           </div>
+          {/* Rating stars */}
+          <div className="flex items-center gap-1.5 mt-1">
+            <div className="flex items-center gap-0.5">
+              {[...Array(5)].map((_, i) => {
+                const starVal = i + 1;
+                return (
+                  <span
+                    key={i}
+                    className={`text-sm ${
+                      starVal <= effectiveRating ? 'text-amber-400 font-extrabold' : 'text-slate-200'
+                    }`}
+                  >
+                    ★
+                  </span>
+                );
+              })}
+            </div>
+            <span className="text-xs text-slate-400 font-semibold">
+              ({supplier.manualRating ? 'Đánh giá bởi Admin' : 'Tính toán tự động'})
+            </span>
+          </div>
+
+          {supplier.internalNotes && (
+            <div className="mt-2 bg-slate-50 dark:bg-zinc-800/40 border border-slate-200/80 p-3 rounded-xl max-w-xl text-xs text-slate-500 italic">
+              Ghi chú uy tín: "{supplier.internalNotes}"
+            </div>
+          )}
+
           {supplier.contactUrl ? (
             <a
               href={supplier.contactUrl.startsWith('http') ? supplier.contactUrl : `https://${supplier.contactUrl}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-xs text-primary hover:underline font-semibold mt-1 inline-flex items-center gap-1"
+              className="text-xs text-primary hover:underline font-semibold mt-2.5 inline-flex items-center gap-1"
             >
               <span>Liên hệ: {supplier.contactUrl}</span>
               <ExternalLink className="w-3.5 h-3.5" />
             </a>
           ) : (
-            <p className="text-sm font-medium mt-0.5" style={{ color: '#a1acb8' }}>
+            <p className="text-sm font-medium mt-1" style={{ color: '#a1acb8' }}>
               Không có link liên hệ.
             </p>
           )}
@@ -164,7 +210,7 @@ export default function AdminSupplierDetailPage({ params }: { params: Promise<{ 
         <StatCard
           title="Tổng đơn hàng"
           value={`${stats.count} đơn`}
-          description="Sử dụng nguồn này"
+          description={stats.cancelled > 0 ? `Bị hủy ${stats.cancelled} đơn` : "Hoạt động tốt"}
           icon={<FileText className="w-5 h-5" />}
           iconColor="primary"
         />

@@ -133,7 +133,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
 
   const [project, setProject] = useState<Project | null>(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'kanban' | 'website' | 'tools' | 'customer' | 'requirements' | 'budget' | 'activity'>('kanban');
+  const [activeTab, setActiveTab] = useState<'kanban' | 'website' | 'tools' | 'customer' | 'requirements' | 'budget' | 'activity' | 'worklogs'>('kanban');
 
   // Budget states
   const [isEditingBudget, setIsEditingBudget] = useState(false);
@@ -202,9 +202,20 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
   const [logTotalPages, setLogTotalPages] = useState(1);
 
   // General Deletes
-  const [deleteType, setDeleteType] = useState<'column' | 'task' | 'webcost' | 'tool' | null>(null);
+  const [deleteType, setDeleteType] = useState<'column' | 'task' | 'webcost' | 'tool' | 'worklog' | null>(null);
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
+
+  // Work Logs states
+  const [workLogs, setWorkLogs] = useState<any[]>([]);
+  const [workLogFilter, setWorkLogFilter] = useState('30days');
+  const [loadingWorkLogs, setLoadingWorkLogs] = useState(false);
+  const [isWorkLogModalOpen, setIsWorkLogModalOpen] = useState(false);
+  const [logTitle, setLogTitle] = useState('');
+  const [logHours, setLogHours] = useState('');
+  const [logDate, setLogDate] = useState(new Date().toISOString().split('T')[0]);
+  const [logCustomerId, setLogCustomerId] = useState('');
+  const [projectCustomers, setProjectCustomers] = useState<any[]>([]);
 
   const fetchProjectDetail = async () => {
     try {
@@ -382,6 +393,75 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
     } finally {
       setDeletingNote(false);
       setDeleteNoteId(null);
+    }
+  };
+
+  // ==========================================
+  // WORK LOGS ACTIONS
+  // ==========================================
+  const fetchWorkLogs = async () => {
+    setLoadingWorkLogs(true);
+    try {
+      const res = await fetch(`/api/admin/projects/${projectId}/work-logs?range=${workLogFilter}`);
+      if (res.ok) {
+        const data = await res.json();
+        setWorkLogs(data.workLogs || []);
+      }
+    } catch (err) {
+      console.error('Fetch work logs error:', err);
+    } finally {
+      setLoadingWorkLogs(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'worklogs') {
+      fetchWorkLogs();
+    }
+  }, [activeTab, workLogFilter]);
+
+  const handleOpenAddWorkLog = async () => {
+    setLogTitle('');
+    setLogHours('');
+    setLogDate(new Date().toISOString().split('T')[0]);
+    setLogCustomerId('');
+    setIsWorkLogModalOpen(true);
+    
+    // Fetch customers
+    try {
+      const res = await fetch('/api/admin/customers');
+      if (res.ok) {
+        const data = await res.json();
+        setProjectCustomers(data.customers || []);
+      }
+    } catch (e) {}
+  };
+
+  const handleWorkLogSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!logTitle || !logHours || !logDate) return;
+
+    try {
+      const res = await fetch(`/api/admin/projects/${projectId}/work-logs`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: logTitle,
+          hours: logHours,
+          date: logDate,
+          customerId: logCustomerId,
+        }),
+      });
+
+      if (res.ok) {
+        showToast('Thêm thời gian làm việc thành công!', 'success');
+        setIsWorkLogModalOpen(false);
+        fetchWorkLogs();
+      } else {
+        showToast('Có lỗi xảy ra.', 'error');
+      }
+    } catch {
+      showToast('Lỗi kết nối.', 'error');
     }
   };
 
@@ -614,7 +694,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
   // ==========================================
   // DELETE TRIGGERS & ACTIONS
   // ==========================================
-  const triggerDelete = (type: 'column' | 'task' | 'webcost' | 'tool', id: string) => {
+  const triggerDelete = (type: 'column' | 'task' | 'webcost' | 'tool' | 'worklog', id: string) => {
     setDeleteType(type);
     setDeleteTargetId(id);
   };
@@ -633,6 +713,8 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
         url = `/api/admin/projects/${projectId}/website-costs/${deleteTargetId}`;
       } else if (deleteType === 'tool') {
         url = `/api/admin/projects/${projectId}/tool-costs/${deleteTargetId}`;
+      } else if (deleteType === 'worklog') {
+        url = `/api/admin/projects/${projectId}/work-logs/${deleteTargetId}`;
       }
 
       const res = await fetch(url, { method: 'DELETE' });
@@ -640,7 +722,11 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
         showToast('Xóa dữ liệu thành công!', 'success');
         setDeleteType(null);
         setDeleteTargetId(null);
-        fetchProjectDetail();
+        if (deleteType === 'worklog') {
+          fetchWorkLogs();
+        } else {
+          fetchProjectDetail();
+        }
       } else {
         showToast('Lỗi khi xóa dữ liệu.', 'error');
       }
@@ -1126,6 +1212,17 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
           <Wallet className="w-4.5 h-4.5" />
           Ngân sách
         </button>
+        <button
+          onClick={() => setActiveTab('worklogs')}
+          className={`px-5 py-3 font-bold text-sm border-b-2 transition-all flex items-center gap-2 whitespace-nowrap cursor-pointer ${
+            activeTab === 'worklogs'
+              ? 'border-primary text-primary bg-primary/5 rounded-t-xl'
+              : 'border-transparent text-slate-500 hover:text-slate-700'
+          }`}
+        >
+          <Clock className="w-4.5 h-4.5" />
+          Nhật ký làm việc
+        </button>
       </div>
 
       {/* TAB CONTENT: BUDGET */}
@@ -1224,6 +1321,93 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
               )}
             </CardContent>
           </Card>
+        </div>
+      )}
+
+      {/* TAB CONTENT: WORK LOGS */}
+      {activeTab === 'worklogs' && (
+        <div className="space-y-6 animate-fade-in-up">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <h2 className="text-sm font-bold text-slate-700 flex items-center gap-2">
+              <Clock className="w-5 h-5 text-indigo-500" />
+              Bảng kê khai thời gian làm việc (To-do)
+            </h2>
+            <div className="flex items-center gap-3">
+              <select
+                value={workLogFilter}
+                onChange={(e) => setWorkLogFilter(e.target.value)}
+                className="flex h-9 w-40 items-center justify-between rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
+              >
+                <option value="all">Tất cả</option>
+                <option value="7days">7 ngày qua</option>
+                <option value="30days">30 ngày qua</option>
+                <option value="lastMonth">1 tháng trước</option>
+              </select>
+              <Button variant="primary" size="sm" onClick={handleOpenAddWorkLog} className="flex items-center gap-1 text-xs py-2 px-3">
+                <Plus className="w-4 h-4" />
+                Ghi nhận giờ làm
+              </Button>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="bg-slate-50 text-[10px] font-bold text-slate-500 uppercase border-b border-slate-200 tracking-wider">
+                  <th className="px-6 py-4">Công việc đã làm</th>
+                  <th className="px-6 py-4">Thời gian (Giờ)</th>
+                  <th className="px-6 py-4">Ngày làm</th>
+                  <th className="px-6 py-4">Nguồn khách hàng</th>
+                  <th className="px-6 py-4 text-right">Thao tác</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 text-xs">
+                {loadingWorkLogs ? (
+                  <tr>
+                    <td colSpan={5} className="py-12 text-center text-slate-400">Đang tải nhật ký...</td>
+                  </tr>
+                ) : workLogs.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="py-12 text-center text-slate-400 italic">Chưa có nhật ký thời gian nào.</td>
+                  </tr>
+                ) : (
+                  workLogs.map((log) => (
+                    <tr key={log.id} className="hover:bg-slate-50/50 transition-colors">
+                      <td className="px-6 py-4 font-bold text-slate-800">{log.title}</td>
+                      <td className="px-6 py-4 font-extrabold text-slate-800">{log.hours} giờ</td>
+                      <td className="px-6 py-4 text-slate-500">{formatDate(log.date)}</td>
+                      <td className="px-6 py-4 text-slate-500">
+                        {log.customer ? (
+                          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-blue-50 text-blue-700 text-[11px] font-bold border border-blue-100">
+                            {log.customer.name}
+                          </span>
+                        ) : '—'}
+                      </td>
+                      <td className="px-6 py-4 text-right">
+                        <button
+                          onClick={() => triggerDelete('worklog', log.id)}
+                          className="p-1 rounded text-rose-500 hover:bg-rose-50 hover:text-rose-700 transition-colors cursor-pointer"
+                          title="Xóa"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+              {workLogs.length > 0 && (
+                <tfoot>
+                  <tr className="bg-slate-50/50 border-t-2 border-slate-200 font-extrabold text-xs">
+                    <td className="px-6 py-4 text-slate-600">Tổng giờ làm tích lũy:</td>
+                    <td colSpan={4} className="px-6 py-4 text-indigo-600 text-sm font-black">
+                      {workLogs.reduce((sum, item) => sum + Number(item.hours), 0)} giờ
+                    </td>
+                  </tr>
+                </tfoot>
+              )}
+            </table>
+          </div>
         </div>
       )}
 
@@ -2337,6 +2521,80 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
         onConfirm={handleDeleteNote}
         isLoading={deletingNote}
       />
+
+      {/* WORK LOG CREATE/EDIT MODAL */}
+      {isWorkLogModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+          <div className="w-full max-w-lg bg-white rounded-2xl shadow-xl overflow-hidden animate-scale-in">
+            <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
+              <h3 className="font-extrabold text-slate-800 text-base">
+                Ghi nhận thời gian làm việc (To-do) ⏱️
+              </h3>
+              <button
+                type="button"
+                onClick={() => setIsWorkLogModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600 font-bold text-lg focus:outline-none cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+            <form onSubmit={handleWorkLogSubmit}>
+              <div className="px-6 py-6 space-y-4 max-h-[60vh] overflow-y-auto">
+                <Input
+                  label="Công việc đã làm *"
+                  placeholder="Ví dụ: Thiết kế Banner, Viết API đăng nhập..."
+                  value={logTitle}
+                  onChange={(e) => setLogTitle(e.target.value)}
+                  required
+                />
+                <div className="grid grid-cols-2 gap-4">
+                  <Input
+                    label="Số giờ làm *"
+                    type="number"
+                    step="0.5"
+                    min="0.5"
+                    placeholder="Ví dụ: 2.5"
+                    value={logHours}
+                    onChange={(e) => setLogHours(e.target.value)}
+                    required
+                  />
+                  <Input
+                    label="Ngày làm *"
+                    type="date"
+                    value={logDate}
+                    onChange={(e) => setLogDate(e.target.value)}
+                    required
+                  />
+                </div>
+                <div>
+                  <Select
+                    label="Nguồn khách hàng (Không bắt buộc)"
+                    value={logCustomerId}
+                    onChange={(e) => setLogCustomerId(e.target.value)}
+                    options={[
+                      { value: '', label: 'Không liên kết' },
+                      ...projectCustomers.map((c) => ({ value: c.id, label: c.name })),
+                    ]}
+                  />
+                </div>
+              </div>
+              <div className="px-6 py-4 bg-slate-50 border-t border-slate-150 flex justify-end gap-3 rounded-b-2xl">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setIsWorkLogModalOpen(false)}
+                >
+                  Hủy bỏ
+                </Button>
+                <Button type="submit" variant="primary" size="sm" className="cursor-pointer">
+                  Lưu lại
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

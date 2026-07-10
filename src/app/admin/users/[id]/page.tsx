@@ -143,7 +143,7 @@ export default function AdminUserDetailPage({ params }: { params: Promise<{ id: 
     (o) =>
       o.orderCode.toLowerCase().includes(searchTerm.toLowerCase()) ||
       o.customer.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      o.customer.phone.includes(searchTerm) ||
+      (o.customer.phone || '').includes(searchTerm) ||
       o.product.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
 

@@ -43,6 +43,8 @@ interface Supplier {
   name: string;
   contactUrl: string | null;
   icon: string | null;
+  manualRating: number | null;
+  internalNotes: string | null;
   createdAt: string;
   _count: {
     orders: number;
@@ -50,6 +52,9 @@ interface Supplier {
   totalRevenue: number;
   totalCost: number;
   totalProfit: number;
+  cancelledCount: number;
+  totalRefundAmount: number;
+  autoRating: number;
 }
 
 const IconPicker = ({ selectedIcon, onChange }: { selectedIcon: string; onChange: (icon: string) => void }) => {
@@ -93,11 +98,16 @@ export default function AdminSuppliersPage() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
 
+  // Filter State
+  const [reputationFilter, setReputationFilter] = useState('');
+
   // Create Modal State
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [newSupplierName, setNewSupplierName] = useState('');
   const [newSupplierUrl, setNewSupplierUrl]   = useState('');
   const [newSupplierIcon, setNewSupplierIcon] = useState('Tag');
+  const [newManualRating, setNewManualRating] = useState('');
+  const [newInternalNotes, setNewInternalNotes] = useState('');
   const [creating, setCreating] = useState(false);
 
   // Edit Modal State
@@ -105,6 +115,8 @@ export default function AdminSuppliersPage() {
   const [editSupplierName, setEditSupplierName] = useState('');
   const [editSupplierUrl, setEditSupplierUrl]   = useState('');
   const [editSupplierIcon, setEditSupplierIcon] = useState('Tag');
+  const [editManualRating, setEditManualRating] = useState('');
+  const [editInternalNotes, setEditInternalNotes] = useState('');
   const [updating, setUpdating] = useState(false);
 
   // Delete State
@@ -161,6 +173,8 @@ export default function AdminSuppliersPage() {
           name: newSupplierName,
           contactUrl: newSupplierUrl,
           icon: newSupplierIcon,
+          manualRating: newManualRating ? Number(newManualRating) : null,
+          internalNotes: newInternalNotes || null,
         }),
       });
       const data = await res.json();
@@ -170,6 +184,8 @@ export default function AdminSuppliersPage() {
         setNewSupplierName('');
         setNewSupplierUrl('');
         setNewSupplierIcon('Tag');
+        setNewManualRating('');
+        setNewInternalNotes('');
         fetchSuppliers();
       } else {
         showToast(data.error || 'Lỗi khi tạo nguồn hàng.', 'error');
@@ -186,6 +202,8 @@ export default function AdminSuppliersPage() {
     setEditSupplierName(s.name);
     setEditSupplierUrl(s.contactUrl || '');
     setEditSupplierIcon(s.icon || 'Tag');
+    setEditManualRating(s.manualRating ? String(s.manualRating) : '');
+    setEditInternalNotes(s.internalNotes || '');
   };
 
   const handleUpdateSupplier = async (e: React.FormEvent) => {
@@ -204,6 +222,8 @@ export default function AdminSuppliersPage() {
           name: editSupplierName,
           contactUrl: editSupplierUrl,
           icon: editSupplierIcon,
+          manualRating: editManualRating ? Number(editManualRating) : null,
+          internalNotes: editInternalNotes || null,
         }),
       });
       const data = await res.json();
@@ -250,10 +270,22 @@ export default function AdminSuppliersPage() {
   };
 
   // Filter suppliers
-  const filteredSuppliers = suppliers.filter(s =>
-    s.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (s.contactUrl && s.contactUrl.toLowerCase().includes(searchTerm.toLowerCase()))
-  );
+  const filteredSuppliers = suppliers.filter(s => {
+    const matchesSearch = s.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (s.contactUrl && s.contactUrl.toLowerCase().includes(searchTerm.toLowerCase()));
+
+    let matchesReputation = true;
+    const effectiveRating = s.manualRating || s.autoRating || 4;
+    if (reputationFilter === 'good') {
+      matchesReputation = effectiveRating >= 4;
+    } else if (reputationFilter === 'warning') {
+      matchesReputation = effectiveRating <= 3;
+    } else if (reputationFilter === 'issue') {
+      matchesReputation = s.cancelledCount > 2;
+    }
+
+    return matchesSearch && matchesReputation;
+  });
 
   // Sort suppliers
   const sortedSuppliers = [...filteredSuppliers].sort((a, b) => {
@@ -281,7 +313,7 @@ export default function AdminSuppliersPage() {
       {/* Header */}
       <PageHeader
         title="Quản lý Nguồn hàng (Tag)"
-        description="Quản lý thẻ phân loại nguồn hàng, đối tác, CTV cung cấp tài nguyên."
+        description="Quản lý thẻ phân loại nguồn hàng, đối tác, đánh giá uy tín chất lượng dịch vụ."
       >
         <Button onClick={() => setIsCreateOpen(true)} className="flex items-center gap-2 cursor-pointer">
           <Plus className="w-4 h-4" />
@@ -289,20 +321,34 @@ export default function AdminSuppliersPage() {
         </Button>
       </PageHeader>
 
-      {/* Search Input */}
+      {/* Search Input and Filters */}
       <Card>
         <CardContent className="py-4">
-          <div className="relative">
-            <span className="absolute left-3 top-3.5 text-slate-400">
-              <Search className="w-4.5 h-4.5" />
-            </span>
-            <input
-              type="text"
-              placeholder="Tìm kiếm nguồn hàng theo tên hoặc liên kết..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2.5 text-sm bg-input border border-border rounded-xl text-foreground placeholder-slate-400 focus:outline-none focus:border-primary focus:ring-2 focus:ring-ring transition-all duration-200"
-            />
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="md:col-span-3 relative">
+              <span className="absolute left-3 top-3.5 text-slate-400">
+                <Search className="w-4.5 h-4.5" />
+              </span>
+              <input
+                type="text"
+                placeholder="Tìm kiếm nguồn hàng theo tên hoặc liên kết..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-10 pr-4 py-2.5 text-sm bg-input border border-border rounded-xl text-foreground placeholder-slate-400 focus:outline-none focus:border-primary focus:ring-2 focus:ring-ring transition-all duration-200"
+              />
+            </div>
+            <div>
+              <select
+                value={reputationFilter}
+                onChange={(e) => setReputationFilter(e.target.value)}
+                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all bg-white text-slate-700 cursor-pointer"
+              >
+                <option value="">Lọc theo Uy tín</option>
+                <option value="good">{"Uy tín cao (>= 4 Sao) ⭐"}</option>
+                <option value="warning">{"Cần lưu ý (<= 3 Sao) ⚠️"}</option>
+                <option value="issue">Tỷ lệ hủy đơn cao 🚫</option>
+              </select>
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -325,6 +371,7 @@ export default function AdminSuppliersPage() {
                 <tr className="border-b border-border bg-muted/40 text-muted-foreground font-semibold">
                   <th className="px-4 py-5 w-[48px] text-center text-xs">STT</th>
                   <SortableHeader label="Nguồn hàng (Tag)" field="name" currentField={sortField} currentDirection={sortDirection} onSort={handleSort} />
+                  <th className="px-6 py-5">Đánh giá Uy tín</th>
                   <th className="px-6 py-5">Liên kết liên hệ</th>
                   <SortableHeader label="Vốn nhập gốc" field="totalCost" currentField={sortField} currentDirection={sortDirection} onSort={handleSort} className="text-right" />
                   <SortableHeader label="Lợi nhuận ròng" field="totalProfit" currentField={sortField} currentDirection={sortDirection} onSort={handleSort} className="text-right" />
@@ -334,77 +381,112 @@ export default function AdminSuppliersPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-border bg-card">
-                {sortedSuppliers.map((s, idx) => (
-                  <tr key={s.id} className="hover:bg-muted/20 transition-colors">
-                    <td className="px-4 py-5 text-center text-xs font-bold text-slate-400">{idx + 1}</td>
-                    <td className="px-6 py-5">
-                      <div className="flex items-center gap-2">
-                        <SupplierAvatar iconName={s.icon} />
-                        <Link href={`/admin/suppliers/${s.id}`} className="font-bold text-slate-800 dark:text-slate-200 hover:text-primary transition-colors">
-                          {s.name}
-                        </Link>
-                      </div>
-                    </td>
-                    <td className="px-6 py-5">
-                      {s.contactUrl ? (
-                        <a
-                          href={s.contactUrl.startsWith('http') ? s.contactUrl : `https://${s.contactUrl}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1 text-xs text-primary hover:underline font-bold bg-primary/10 px-2.5 py-1 rounded-xl transition-all duration-150"
-                        >
-                          <span>{s.contactUrl}</span>
-                          <ExternalLink className="w-3 h-3" />
-                        </a>
-                      ) : (
-                        <span className="text-xs text-muted-foreground italic">-</span>
-                      )}
-                    </td>
-                    <td className="px-6 py-5 text-right font-semibold text-rose-500 text-xs">
-                      {formatVND(s.totalCost || 0)}
-                    </td>
-                    <td className="px-6 py-5 text-right font-bold text-emerald-600 text-xs">
-                      {formatVND(s.totalProfit || 0)}
-                    </td>
-                    <td className="px-6 py-5 text-center font-bold text-slate-800 dark:text-slate-200">
-                      <Badge variant={s._count.orders > 0 ? 'success' : 'secondary'} className="px-2.5 py-1 text-xs font-black">
-                        {s._count.orders} đơn
-                      </Badge>
-                    </td>
-                    <td className="px-6 py-5 text-center text-xs text-muted-foreground">
-                      <div className="flex items-center justify-center gap-1.5">
-                        <Calendar className="w-3.5 h-3.5" />
-                        <span>{formatDate(s.createdAt)}</span>
-                      </div>
-                    </td>
-                    <td className="px-6 py-5">
-                      <div className="flex items-center justify-center gap-2">
-                        <Link href={`/admin/suppliers/${s.id}`}>
-                          <button
-                            className="p-1.5 text-slate-500 hover:text-primary rounded-lg hover:bg-slate-100 dark:hover:bg-zinc-800 cursor-pointer"
-                            title="Xem chi tiết các đơn hàng"
+                {sortedSuppliers.map((s, idx) => {
+                  const effectiveRating = s.manualRating || s.autoRating || 4;
+                  return (
+                    <tr key={s.id} className="hover:bg-muted/20 transition-colors">
+                      <td className="px-4 py-5 text-center text-xs font-bold text-slate-400">{idx + 1}</td>
+                      <td className="px-6 py-5">
+                        <div className="flex items-center gap-2">
+                          <SupplierAvatar iconName={s.icon} />
+                          <div>
+                            <Link href={`/admin/suppliers/${s.id}`} className="font-bold text-slate-800 dark:text-slate-200 hover:text-primary transition-colors">
+                              {s.name}
+                            </Link>
+                            {s.cancelledCount > 0 && (
+                              <div className="text-[10px] text-rose-500 font-semibold mt-0.5">
+                                Hủy {s.cancelledCount} đơn | Hoàn {formatVND(s.totalRefundAmount || 0)}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-6 py-5 space-y-1">
+                        <div className="flex items-center gap-0.5">
+                          {[...Array(5)].map((_, i) => {
+                            const starVal = i + 1;
+                            return (
+                              <span
+                                key={i}
+                                className={`text-sm ${
+                                  starVal <= effectiveRating ? 'text-amber-400 font-extrabold' : 'text-slate-200'
+                                }`}
+                              >
+                                ★
+                              </span>
+                            );
+                          })}
+                          <span className="text-[10px] text-slate-400 font-bold ml-1">
+                            ({s.manualRating ? 'Admin' : 'Tự động'})
+                          </span>
+                        </div>
+                        {s.internalNotes && (
+                          <div className="text-[10px] text-slate-400 italic line-clamp-1 max-w-[150px]" title={s.internalNotes}>
+                            "{s.internalNotes}"
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-6 py-5">
+                        {s.contactUrl ? (
+                          <a
+                            href={s.contactUrl.startsWith('http') ? s.contactUrl : `https://${s.contactUrl}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 text-xs text-primary hover:underline font-bold bg-primary/10 px-2.5 py-1 rounded-xl transition-all duration-150"
                           >
-                            <Eye className="w-3.5 h-3.5" />
+                            <span>{s.contactUrl}</span>
+                            <ExternalLink className="w-3 h-3" />
+                          </a>
+                        ) : (
+                          <span className="text-xs text-muted-foreground italic">-</span>
+                        )}
+                      </td>
+                      <td className="px-6 py-5 text-right font-semibold text-rose-500 text-xs">
+                        {formatVND(s.totalCost || 0)}
+                      </td>
+                      <td className="px-6 py-5 text-right font-bold text-emerald-600 text-xs">
+                        {formatVND(s.totalProfit || 0)}
+                      </td>
+                      <td className="px-6 py-5 text-center font-bold text-slate-800 dark:text-slate-200">
+                        <Badge variant={s._count.orders > 0 ? 'success' : 'secondary'} className="px-2.5 py-1 text-xs font-black">
+                          {s._count.orders} đơn
+                        </Badge>
+                      </td>
+                      <td className="px-6 py-5 text-center text-xs text-muted-foreground">
+                        <div className="flex items-center justify-center gap-1.5">
+                          <Calendar className="w-3.5 h-3.5" />
+                          <span>{formatDate(s.createdAt)}</span>
+                        </div>
+                      </td>
+                      <td className="px-6 py-5">
+                        <div className="flex items-center justify-center gap-2">
+                          <Link href={`/admin/suppliers/${s.id}`}>
+                            <button
+                              className="p-1.5 text-slate-500 hover:text-primary rounded-lg hover:bg-slate-100 dark:hover:bg-zinc-800 cursor-pointer"
+                              title="Xem chi tiết các đơn hàng"
+                            >
+                              <Eye className="w-3.5 h-3.5" />
+                            </button>
+                          </Link>
+                          <button
+                            onClick={() => handleOpenEdit(s)}
+                            className="p-1.5 text-slate-500 hover:text-amber-500 rounded-lg hover:bg-slate-100 dark:hover:bg-zinc-800 cursor-pointer"
+                            title="Sửa nguồn hàng"
+                          >
+                            <Edit2 className="w-3.5 h-3.5" />
                           </button>
-                        </Link>
-                        <button
-                          onClick={() => handleOpenEdit(s)}
-                          className="p-1.5 text-slate-500 hover:text-amber-500 rounded-lg hover:bg-amber-50 dark:hover:bg-amber-950/20 cursor-pointer"
-                          title="Sửa nguồn hàng"
-                        >
-                          <Edit2 className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          onClick={() => setDeleteId(s.id)}
-                          className="p-1.5 text-slate-500 hover:text-rose-500 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/20 cursor-pointer"
-                          title="Xóa nguồn hàng"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                          <button
+                            onClick={() => setDeleteId(s.id)}
+                            className="p-1.5 text-slate-500 hover:text-rose-500 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/20 cursor-pointer"
+                            title="Xóa nguồn hàng"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -413,7 +495,7 @@ export default function AdminSuppliersPage() {
 
       {/* Create Modal */}
       {isCreateOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/10 animate-fade-in">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/10 backdrop-blur-sm animate-fade-in">
           <div className="bg-card border border-border w-full max-w-md rounded-2xl shadow-[0_25px_80px_rgba(0,0,0,0.28)] overflow-hidden animate-fade-in">
             <div className="px-6 py-5 border-b border-border">
               <h3 className="text-base font-bold text-foreground">
@@ -422,7 +504,7 @@ export default function AdminSuppliersPage() {
             </div>
             
             <form onSubmit={handleCreateSupplier}>
-              <div className="p-6 space-y-4">
+              <div className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
                 <Input
                   label="Tên nguồn hàng *"
                   placeholder="Ví dụ: Nguồn hàng chính, CTV Thảo..."
@@ -430,12 +512,45 @@ export default function AdminSuppliersPage() {
                   onChange={e => setNewSupplierName(e.target.value)}
                   required
                 />
-                 <Input
+                <Input
                   label="Link liên hệ / URL"
                   placeholder="Ví dụ: https://zalo.me/username..."
                   value={newSupplierUrl}
                   onChange={e => setNewSupplierUrl(e.target.value)}
                 />
+                
+                <div className="grid grid-cols-1 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-2">
+                      Đánh giá uy tín (Admin)
+                    </label>
+                    <select
+                      value={newManualRating}
+                      onChange={(e) => setNewManualRating(e.target.value)}
+                      className="w-full flex h-10 items-center justify-between rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
+                    >
+                      <option value="">Đánh giá tự động</option>
+                      <option value="1">1 Sao ★ (Rất kém)</option>
+                      <option value="2">2 Sao ★★ (Kém)</option>
+                      <option value="3">3 Sao ★★★ (Trung bình)</option>
+                      <option value="4">4 Sao ★★★★ (Tốt)</option>
+                      <option value="5">5 Sao ★★★★★ (Tuyệt vời)</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-2">
+                    Ghi chú uy tín nội bộ
+                  </label>
+                  <textarea
+                    placeholder="Ví dụ: Hỗ trợ nhanh, hoàn tiền đúng hạn..."
+                    value={newInternalNotes}
+                    onChange={e => setNewInternalNotes(e.target.value)}
+                    className="w-full px-3 py-2 text-sm border border-slate-200 bg-white rounded-xl placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-primary/20 h-20 resize-none"
+                  />
+                </div>
+
                 <IconPicker selectedIcon={newSupplierIcon} onChange={setNewSupplierIcon} />
               </div>
 
@@ -454,7 +569,7 @@ export default function AdminSuppliersPage() {
 
       {/* Edit Modal */}
       {editingSupplier && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/10 animate-fade-in">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/10 backdrop-blur-sm animate-fade-in">
           <div className="bg-card border border-border w-full max-w-md rounded-2xl shadow-[0_25px_80px_rgba(0,0,0,0.28)] overflow-hidden animate-fade-in">
             <div className="px-6 py-5 border-b border-border">
               <h3 className="text-base font-bold text-foreground">
@@ -463,7 +578,7 @@ export default function AdminSuppliersPage() {
             </div>
             
             <form onSubmit={handleUpdateSupplier}>
-              <div className="p-6 space-y-4">
+              <div className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
                 <Input
                   label="Tên nguồn hàng *"
                   placeholder="Ví dụ: Nguồn hàng chính, CTV Thảo..."
@@ -471,12 +586,45 @@ export default function AdminSuppliersPage() {
                   onChange={e => setEditSupplierName(e.target.value)}
                   required
                 />
-                  <Input
-                   label="Link liên hệ / URL"
-                   placeholder="Ví dụ: https://zalo.me/username..."
-                   value={editSupplierUrl}
-                   onChange={e => setEditSupplierUrl(e.target.value)}
-                 />
+                <Input
+                  label="Link liên hệ / URL"
+                  placeholder="Ví dụ: https://zalo.me/username..."
+                  value={editSupplierUrl}
+                  onChange={e => setEditSupplierUrl(e.target.value)}
+                />
+
+                <div className="grid grid-cols-1 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-2">
+                      Đánh giá uy tín (Admin)
+                    </label>
+                    <select
+                      value={editManualRating}
+                      onChange={(e) => setEditManualRating(e.target.value)}
+                      className="w-full flex h-10 items-center justify-between rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
+                    >
+                      <option value="">Đánh giá tự động</option>
+                      <option value="1">1 Sao ★ (Rất kém)</option>
+                      <option value="2">2 Sao ★★ (Kém)</option>
+                      <option value="3">3 Sao ★★★ (Trung bình)</option>
+                      <option value="4">4 Sao ★★★★ (Tốt)</option>
+                      <option value="5">5 Sao ★★★★★ (Tuyệt vời)</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-2">
+                    Ghi chú uy tín nội bộ
+                  </label>
+                  <textarea
+                    placeholder="Ví dụ: Hỗ trợ nhanh, hoàn tiền đúng hạn..."
+                    value={editInternalNotes}
+                    onChange={e => setEditInternalNotes(e.target.value)}
+                    className="w-full px-3 py-2 text-sm border border-slate-200 bg-white rounded-xl placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-primary/20 h-20 resize-none"
+                  />
+                </div>
+
                 <IconPicker selectedIcon={editSupplierIcon} onChange={setEditSupplierIcon} />
               </div>
 

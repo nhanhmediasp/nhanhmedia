@@ -8,7 +8,7 @@ import { Search, Plus, Edit2, UserCheck, Phone, ArrowUpDown, ArrowUp, ArrowDown,
 interface Customer {
   id: string;
   name: string;
-  phone: string;
+  phone: string | null;
   facebook: string | null;
   zalo: string | null;
   email: string | null;
@@ -119,7 +119,7 @@ export default function UserCustomersPage() {
   const openEditModal = (c: Customer) => {
     setEditId(c.id);
     setName(c.name);
-    setPhone(c.phone);
+    setPhone(c.phone || '');
     setFacebook(c.facebook || '');
     setZalo(c.zalo || '');
     setEmail(c.email || '');
@@ -178,7 +178,7 @@ export default function UserCustomersPage() {
   const filteredCustomers = customers.filter((c) => {
     const matchesSearch =
       c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      c.phone.includes(searchTerm) ||
+      (c.phone || '').includes(searchTerm) ||
       (c.email && c.email.toLowerCase().includes(searchTerm.toLowerCase()));
 
     let matchesPurchase = true;

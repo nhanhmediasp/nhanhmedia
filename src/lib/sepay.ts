@@ -14,10 +14,37 @@ export function buildQrUrl({ amount, content }: { amount: number; content: strin
 
 /**
  * Format order code to transfer description (alphanumeric only, uppercase)
- * Example: NM260706-1234 -> NM2607061234
+ * Example: NHANH260706-1234 -> DONG QUY AN COM 5H2G8 NHANH2607061234
  */
 export function getPaymentContent(orderCode: string): string {
-  return orderCode.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+  const funds = [
+    'lop 12', 'an com', 'tra sua', 'lien hoan', 'gia dinh', 'nhom ban',
+    'sinh nhat', 'du lich', 'bong da', 'tu thien', 'clb', 'game',
+    'di choi', 'hoc tap', 'phuot', 'offline', 'mua sam', 'nuoc ngot'
+  ];
+  const randFund = funds[Math.floor(Math.random() * funds.length)];
+  
+  const cleanCode = orderCode.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+  let prefixChar = 'N';
+  let digitsStr = '';
+  
+  if (cleanCode.startsWith('NHANH')) {
+    prefixChar = 'N';
+    digitsStr = cleanCode.substring(5);
+  } else if (cleanCode.startsWith('NM')) {
+    prefixChar = 'M';
+    digitsStr = cleanCode.substring(2);
+  } else {
+    return `DONG QUY ${randFund.toUpperCase()} ${cleanCode}`;
+  }
+
+  const digitsNum = parseInt(digitsStr, 10);
+  if (isNaN(digitsNum)) {
+    return `DONG QUY ${randFund.toUpperCase()} ${cleanCode}`;
+  }
+
+  const encodedToken = prefixChar + digitsNum.toString(36).toUpperCase();
+  return `DONG QUY ${randFund.toUpperCase()} ${encodedToken}`;
 }
 
 /**
@@ -28,30 +55,48 @@ export function getPaymentContent(orderCode: string): string {
 export function extractOrderCodeFromContent(content: string | null | undefined): string | null {
   if (!content) return null;
   
-  // 1. Try matching NHANH followed by 10 digits (without hyphen)
+  // 1. Check for cleartext patterns first (backward compatibility)
   const matchNhanhNoHyphen = content.match(/NHANH\d{10}/i);
   if (matchNhanhNoHyphen) {
     const code = matchNhanhNoHyphen[0].toUpperCase();
-    return `${code.substring(0, 11)}-${code.substring(11)}`; // NHANH (5) + YYMMDD (6) = 11
+    return `${code.substring(0, 11)}-${code.substring(11)}`;
   }
 
-  // 2. Try matching NHANH order code with hyphen
   const matchNhanhWithHyphen = content.match(/NHANH\d{6}-\d{4}/i);
   if (matchNhanhWithHyphen) {
     return matchNhanhWithHyphen[0].toUpperCase();
   }
 
-  // 3. Legacy: Try matching NM followed by 10 digits (without hyphen)
   const matchNmNoHyphen = content.match(/NM\d{10}/i);
   if (matchNmNoHyphen) {
     const code = matchNmNoHyphen[0].toUpperCase();
-    return `${code.substring(0, 8)}-${code.substring(8)}`; // NM (2) + YYMMDD (6) = 8
+    return `${code.substring(0, 8)}-${code.substring(8)}`;
   }
 
-  // 4. Legacy: Try matching NM order code with hyphen
   const matchNmWithHyphen = content.match(/NM\d{6}-\d{4}/i);
   if (matchNmWithHyphen) {
     return matchNmWithHyphen[0].toUpperCase();
+  }
+
+  // 2. Scan and decode Base36 tokens
+  const words = content.toUpperCase().replace(/[^A-Z0-9\s]/g, ' ').split(/\s+/);
+  for (let i = words.length - 1; i >= 0; i--) {
+    const word = words[i];
+    if (word.length >= 7 && word.length <= 9) {
+      const prefix = word[0];
+      if (prefix === 'N' || prefix === 'M') {
+        const base36Part = word.substring(1);
+        const num = parseInt(base36Part, 36);
+        if (!isNaN(num) && num >= 2000000000 && num <= 3999999999) {
+          const digitsStr = num.toString().padStart(10, '0');
+          if (prefix === 'N') {
+            return `NHANH${digitsStr.substring(0, 6)}-${digitsStr.substring(6)}`;
+          } else {
+            return `NM${digitsStr.substring(0, 6)}-${digitsStr.substring(6)}`;
+          }
+        }
+      }
+    }
   }
 
   return null;

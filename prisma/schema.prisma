@@ -41,6 +41,9 @@ model Customer {
   email            String?
   createdByUserId  String   @map("created_by_user_id")
   note             String?
+  source           String?  // zalo, facebook, website, referral, other
+  manualRating     Int?     @map("manual_rating")
+  internalNotes    String?  @map("internal_notes")
   createdAt        DateTime @default(now()) @map("created_at")
   updatedAt        DateTime @updatedAt @map("updated_at")
 
@@ -294,14 +297,16 @@ model AuditLog {
   @@map("audit_logs")
 }
 model Supplier {
-  id         String   @id @default(uuid())
-  name       String   @unique
-  contactUrl String?  @map("contact_url")
-  icon       String?
-  createdAt  DateTime @default(now()) @map("created_at")
-  updatedAt  DateTime @updatedAt @map("updated_at")
+  id            String   @id @default(uuid())
+  name          String   @unique
+  contactUrl    String?  @map("contact_url")
+  icon          String?
+  manualRating  Int?     @map("manual_rating")
+  internalNotes String?  @map("internal_notes")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
 
-  orders     Order[]
+  orders        Order[]
 
   @@index([createdAt])
   @@map("suppliers")
@@ -370,6 +375,7 @@ model Project {
   websiteCosts WebsiteCost[]
   toolCosts    ToolCost[]
   requirementNotes ProjectRequirementNote[]
+  workLogs     ProjectWorkLog[]
 
   @@map("projects")
 }
@@ -464,9 +470,13 @@ model ProjectCustomer {
   email     String?
   note      String?
   avatarUrl String?   @map("avatar_url")
+  source    String?   // zalo, facebook, website, referral, other
+  manualRating Int?   @map("manual_rating")
+  internalNotes String? @map("internal_notes")
   createdAt DateTime  @default(now()) @map("created_at")
   updatedAt DateTime  @updatedAt @map("updated_at")
   projects  Project[]
+  workLogs  ProjectWorkLog[]
 
   @@map("project_customers")
 }
@@ -507,4 +517,23 @@ model PaymentTransaction {
   @@index([orderId])
   @@index([matched])
   @@map("payment_transactions")
+}
+
+model ProjectWorkLog {
+  id         String   @id @default(uuid())
+  projectId  String   @map("project_id")
+  customerId String?  @map("customer_id")
+  title      String
+  hours      Float
+  date       DateTime
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  project    Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  customer   ProjectCustomer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+
+  @@index([projectId])
+  @@index([customerId])
+  @@index([date])
+  @@map("project_work_logs")
 }

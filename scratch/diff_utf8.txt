@@ -1,0 +1,1664 @@
+﻿diff --git a/src/app/admin/projects/[id]/page.tsx b/src/app/admin/projects/[id]/page.tsx
+index 5829e5b..cdb4e90 100644
+--- a/src/app/admin/projects/[id]/page.tsx
++++ b/src/app/admin/projects/[id]/page.tsx
+@@ -133,7 +133,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
+ 
+   const [project, setProject] = useState<Project | null>(null);
+   const [loading, setLoading] = useState(true);
+-  const [activeTab, setActiveTab] = useState<'kanban' | 'website' | 'tools' | 'customer' | 'requirements' | 'budget' | 'activity'>('kanban');
++  const [activeTab, setActiveTab] = useState<'kanban' | 'website' | 'tools' | 'worklogs' | 'customer' | 'budget'>('kanban');
+ 
+   // Budget states
+   const [isEditingBudget, setIsEditingBudget] = useState(false);
+@@ -202,10 +202,21 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
+   const [logTotalPages, setLogTotalPages] = useState(1);
+ 
+   // General Deletes
+-  const [deleteType, setDeleteType] = useState<'column' | 'task' | 'webcost' | 'tool' | null>(null);
++  const [deleteType, setDeleteType] = useState<'column' | 'task' | 'webcost' | 'tool' | 'worklog' | null>(null);
+   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
+   const [deleting, setDeleting] = useState(false);
+ 
++  // Work Logs states
++  const [workLogs, setWorkLogs] = useState<any[]>([]);
++  const [workLogFilter, setWorkLogFilter] = useState('30days');
++  const [loadingWorkLogs, setLoadingWorkLogs] = useState(false);
++  const [isWorkLogModalOpen, setIsWorkLogModalOpen] = useState(false);
++  const [logTitle, setLogTitle] = useState('');
++  const [logHours, setLogHours] = useState('');
++  const [logDate, setLogDate] = useState(new Date().toISOString().split('T')[0]);
++  const [logCustomerId, setLogCustomerId] = useState('');
++  const [projectCustomers, setProjectCustomers] = useState<any[]>([]);
++
+   const fetchProjectDetail = async () => {
+     try {
+       setLoading(true);
+@@ -303,9 +314,6 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
+     }
+   };
+ 
+-  // ==========================================
+-  // REQUIREMENT TIMELINE NOTES ACTIONS
+-  // ==========================================
+   const fetchRequirementNotes = async () => {
+     setLoadingNotes(true);
+     try {
+@@ -385,6 +393,75 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
+     }
+   };
+ 
++  // ==========================================
++  // WORK LOGS ACTIONS
++  // ==========================================
++  const fetchWorkLogs = async () => {
++    setLoadingWorkLogs(true);
++    try {
++      const res = await fetch(`/api/admin/projects/${projectId}/work-logs?range=${workLogFilter}`);
++      if (res.ok) {
++        const data = await res.json();
++        setWorkLogs(data.workLogs || []);
++      }
++    } catch (err) {
++      console.error('Fetch work logs error:', err);
++    } finally {
++      setLoadingWorkLogs(false);
++    }
++  };
++
++  useEffect(() => {
++    if (activeTab === 'worklogs') {
++      fetchWorkLogs();
++    }
++  }, [activeTab, workLogFilter]);
++
++  const handleOpenAddWorkLog = async () => {
++    setLogTitle('');
++    setLogHours('');
++    setLogDate(new Date().toISOString().split('T')[0]);
++    setLogCustomerId('');
++    setIsWorkLogModalOpen(true);
++    
++    // Fetch customers
++    try {
++      const res = await fetch('/api/admin/customers');
++      if (res.ok) {
++        const data = await res.json();
++        setProjectCustomers(data.customers || []);
++      }
++    } catch (e) {}
++  };
++
++  const handleWorkLogSubmit = async (e: React.FormEvent) => {
++    e.preventDefault();
++    if (!logTitle || !logHours || !logDate) return;
++
++    try {
++      const res = await fetch(`/api/admin/projects/${projectId}/work-logs`, {
++        method: 'POST',
++        headers: { 'Content-Type': 'application/json' },
++        body: JSON.stringify({
++          title: logTitle,
++          hours: logHours,
++          date: logDate,
++          customerId: logCustomerId,
++        }),
++      });
++
++      if (res.ok) {
++        showToast('Th├¬m thß╗¥i gian l├ám viß╗çc th├ánh c├┤ng!', 'success');
++        setIsWorkLogModalOpen(false);
++        fetchWorkLogs();
++      } else {
++        showToast('C├│ lß╗ùi xß║úy ra.', 'error');
++      }
++    } catch {
++      showToast('Lß╗ùi kß║┐t nß╗æi.', 'error');
++    }
++  };
++
+   // ==========================================
+   // COLUMN ACTIONS
+   // ==========================================
+@@ -614,7 +691,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
+   // ==========================================
+   // DELETE TRIGGERS & ACTIONS
+   // ==========================================
+-  const triggerDelete = (type: 'column' | 'task' | 'webcost' | 'tool', id: string) => {
++  const triggerDelete = (type: 'column' | 'task' | 'webcost' | 'tool' | 'worklog', id: string) => {
+     setDeleteType(type);
+     setDeleteTargetId(id);
+   };
+@@ -633,6 +710,8 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
+         url = `/api/admin/projects/${projectId}/website-costs/${deleteTargetId}`;
+       } else if (deleteType === 'tool') {
+         url = `/api/admin/projects/${projectId}/tool-costs/${deleteTargetId}`;
++      } else if (deleteType === 'worklog') {
++        url = `/api/admin/projects/${projectId}/work-logs/${deleteTargetId}`;
+       }
+ 
+       const res = await fetch(url, { method: 'DELETE' });
+@@ -640,7 +719,11 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
+         showToast('X├│a dß╗» liß╗çu th├ánh c├┤ng!', 'success');
+         setDeleteType(null);
+         setDeleteTargetId(null);
+-        fetchProjectDetail();
++        if (deleteType === 'worklog') {
++            fetchWorkLogs();
++        } else {
++            fetchProjectDetail();
++        }
+       } else {
+         showToast('Lß╗ùi khi x├│a dß╗» liß╗çu.', 'error');
+       }
+@@ -668,7 +751,6 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
+     const taskId = e.dataTransfer.getData('text/plain') || draggedTaskId;
+     if (!taskId || !project) return;
+ 
+-    // Find the task inside current project columns
+     let foundTask: Task | null = null;
+     let sourceColId = '';
+     project.columns.forEach((col) => {
+@@ -684,7 +766,6 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
+       return;
+     }
+ 
+-    // Pessimistic update: Reorder tasks locally for instant visual feedback
+     const updatedCols = project.columns.map((col) => {
+       if (col.id === sourceColId) {
+         return {
+@@ -705,9 +786,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
+ 
+     setProject({ ...project, columns: updatedCols });
+ 
+-    // Call API to save in DB
+     try {
+-      // Get all task IDs in destination column to save positions
+       const destCol = updatedCols.find((col) => col.id === destColumnId);
+       const taskIds = destCol ? destCol.tasks.map((t) => t.id) : [];
+ 
+@@ -724,9 +803,8 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
+ 
+       if (!res.ok) {
+         showToast('Kh├┤ng l╞░u ─æ╞░ß╗úc vß╗ï tr├¡ c├┤ng viß╗çc mß╗¢i.', 'error');
+-        fetchProjectDetail(); // Revert
++        fetchProjectDetail();
+       } else {
+-        // Update stats progress dynamically
+         fetchProjectDetail();
+       }
+     } catch {
+@@ -758,7 +836,6 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
+       return;
+     }
+ 
+-    // local optimistic updates
+     const sourceCol = project.columns.find((c) => c.id === sourceColId);
+     const destCol = project.columns.find((c) => c.id === destColumnId);
+     if (!sourceCol || !destCol) return;
+@@ -766,16 +843,13 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
+     let sourceTasks = [...sourceCol.tasks];
+     let destTasks = sourceColId === destColumnId ? sourceTasks : [...destCol.tasks];
+ 
+-    // Remove from source
+     sourceTasks = sourceTasks.filter((t) => t.id !== taskId);
+ 
+-    // Insert into dest
+     const targetIdx = destTasks.findIndex((t) => t.id === targetTaskId);
+     const taskObj = foundTask as Task;
+     const updatedTask = { ...taskObj, columnId: destColumnId };
+ 
+     if (sourceColId === destColumnId) {
+-      // Re-order in same column
+       const cleanTasks = destTasks.filter((t) => t.id !== taskId);
+       cleanTasks.splice(targetIdx, 0, updatedTask);
+       destTasks = cleanTasks;
+@@ -795,7 +869,6 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
+ 
+     setProject({ ...project, columns: updatedCols });
+ 
+-    // Call API
+     try {
+       const taskIds = destTasks.map((t) => t.id);
+       const res = await fetch(`/api/admin/projects/${projectId}/tasks`, {
+@@ -823,9 +896,6 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
+     }
+   };
+ 
+-  // ==========================================
+-  // FORMATTING & HELPERS
+-  // ==========================================
+   const formatVND = (num: number) => {
+     return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(num);
+   };
+@@ -848,7 +918,6 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
+     }
+   };
+ 
+-  // renewal days left calculator
+   const getRenewalDaysLeft = (renewalStr: string | null) => {
+     if (!renewalStr) return null;
+     const now = new Date();
+@@ -897,7 +966,6 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
+ 
+   if (!project) return null;
+ 
+-  // Dynamic calculations for project
+   const totalTasks = project.columns.reduce((sum, col) => sum + col.tasks.length, 0);
+   const completedTasks = (() => {
+     const doneCol = project.columns.find((col) => {
+@@ -912,12 +980,9 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
+   const totalToolCost = project.toolCosts.reduce((sum, item) => sum + item.cost, 0);
+   const totalProjectCost = totalWebsiteCost + totalToolCost;
+ 
+-  // Software tools quy ─æß╗òi chi ph├¡
+-  // Monthly equivalent
+   const toolCostMonthly = project.toolCosts.reduce((sum, tc) => {
+     if (tc.billingCycle === 'month') return sum + tc.cost;
+     if (tc.billingCycle === 'year') return sum + tc.cost / 12;
+-    // one-time cost is ignored for recurring monthly comparison, or divided by 12. Let's do simple recurring.
+     return sum;
+   }, 0);
+ 
+@@ -927,7 +992,6 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
+     return sum;
+   }, 0);
+ 
+-  // Website cost category breakdown for visual display
+   const webCostTypes = ['thiß║┐t kß║┐', 'hosting', 'domain', 'lß║¡p tr├¼nh', 'kh├íc'];
+   const webCostBreakdown = webCostTypes.map((type) => {
+     const sum = project.websiteCosts.filter((wc) => wc.type === type).reduce((s, wc) => s + wc.amount, 0);
+@@ -937,7 +1001,6 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
+ 
+   return (
+     <div className="p-6 max-w-[1600px] mx-auto space-y-6">
+-      {/* Breadcrumb back */}
+       <div className="flex items-center justify-between">
+         <Link href="/admin/projects" className="inline-flex items-center gap-1.5 text-xs font-bold text-primary hover:underline">
+           <ArrowLeft className="w-4 h-4" />
+@@ -948,7 +1011,6 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
+         </div>
+       </div>
+ 
+-      {/* Project info card */}
+       <Card className="relative overflow-hidden">
+         <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-violet-500 to-primary" />
+         <CardContent className="p-7 space-y-6">
+@@ -976,17 +1038,6 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
+                     {project.customer.name}
+                   </span>
+                 )}
+-                {project.websiteUrl && (
+-                  <a
+-                    href={project.websiteUrl.startsWith('http') ? project.websiteUrl : `https://${project.websiteUrl}`}
+-                    target="_blank"
+-                    rel="noopener noreferrer"
+-                    className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded bg-teal-50 text-teal-700 border border-teal-100 text-xs font-bold hover:bg-teal-100 transition-colors"
+-                  >
+-                    <ExternalLink className="w-3.5 h-3.5 text-teal-650" />
+-                    <span>Website trß╗▒c tiß║┐p</span>
+-                  </a>
+-                )}
+               </div>
+               <p className="text-sm text-slate-500 max-w-3xl leading-relaxed">{project.description || 'Ch╞░a c├│ m├┤ tß║ú chi tiß║┐t cho dß╗▒ ├ín n├áy.'}</p>
+             </div>
+@@ -1002,21 +1053,9 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
+                 <span className="block font-bold text-[9px] uppercase tracking-wider text-slate-400">Tß╗òng chi ph├¡ dß╗▒ ├ín</span>
+                 <span className="block text-sm font-black text-rose-600">{formatVND(totalProjectCost)}</span>
+               </div>
+-              {project.customer && (
+-                <>
+-                  <div className="w-px h-8 bg-slate-200" />
+-                  <div className="space-y-1">
+-                    <span className="block font-bold text-[9px] uppercase tracking-wider text-slate-400">Kh├ích h├áng</span>
+-                    <span className="block font-extrabold text-slate-700">
+-                      {project.customer.name}
+-                    </span>
+-                  </div>
+-                </>
+-              )}
+             </div>
+           </div>
+ 
+-          {/* Progress bar */}
+           <div className="space-y-1.5 pt-3 border-t border-slate-100">
+             <div className="flex justify-between text-xs font-bold">
+               <span className="text-slate-550 flex items-center gap-1.5">
+@@ -1034,1307 +1073,70 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
+                 }}
+               />
+             </div>
+-
+-            {/* Budget quick-summary below progress bar */}
+-            {(project.budget > 0 || project.amountReceived > 0) && (
+-              <div className="flex flex-wrap gap-4 pt-2 text-xs">
+-                <span className="flex items-center gap-1.5 font-bold text-slate-500">
+-                  <BadgeDollarSign className="w-3.5 h-3.5 text-violet-500" />
+-                  Ng├ón s├ích: <span className="text-violet-700 font-extrabold">{formatVND(project.budget)}</span>
+-                </span>
+-                <span className="text-slate-300">|</span>
+-                <span className="flex items-center gap-1.5 font-bold text-slate-500">
+-                  <TrendingUp className="w-3.5 h-3.5 text-green-500" />
+-                  ─É├ú nhß║¡n: <span className="text-green-600 font-extrabold">{formatVND(project.amountReceived)}</span>
+-                  {project.budget > 0 && (
+-                    <span className="ml-1 px-1.5 py-0.5 rounded-full bg-green-100 text-green-700 font-extrabold text-[10px]">
+-                      {Math.round((project.amountReceived / project.budget) * 100)}%
+-                    </span>
+-                  )}
+-                </span>
+-                {project.budget > 0 && project.amountReceived < project.budget && (
+-                  <>
+-                    <span className="text-slate-300">|</span>
+-                    <span className="flex items-center gap-1.5 font-bold text-slate-500">
+-                      <Wallet className="w-3.5 h-3.5 text-amber-500" />
+-                      C├▓n lß║íi: <span className="text-amber-600 font-extrabold">{formatVND(project.budget - project.amountReceived)}</span>
+-                    </span>
+-                  </>
+-                )}
+-              </div>
+-            )}
+           </div>
+         </CardContent>
+       </Card>
+ 
+-      {/* Tabs Menu */}
+       <div className="flex border-b border-slate-200 gap-1.5 overflow-x-auto shrink-0">
+         <button
+           onClick={() => setActiveTab('kanban')}
+           className={`px-5 py-3 font-bold text-sm border-b-2 transition-all flex items-center gap-2 whitespace-nowrap cursor-pointer ${
+-            activeTab === 'kanban'
+-              ? 'border-primary text-primary bg-primary/5 rounded-t-xl'
+-              : 'border-transparent text-slate-500 hover:text-slate-700'
++            activeTab === 'kanban' ? 'border-primary text-primary bg-primary/5 rounded-t-xl' : 'border-transparent text-slate-500 hover:text-slate-700'
+           }`}
+         >
+-          <Layout className="w-4.5 h-4.5" />
+-          Tiß║┐n ─æß╗Ö c├┤ng viß╗çc (Kanban)
++          <Layout className="w-4.5 h-4.5" /> Kanban
+         </button>
+         <button
+           onClick={() => setActiveTab('website')}
+           className={`px-5 py-3 font-bold text-sm border-b-2 transition-all flex items-center gap-2 whitespace-nowrap cursor-pointer ${
+-            activeTab === 'website'
+-              ? 'border-primary text-primary bg-primary/5 rounded-t-xl'
+-              : 'border-transparent text-slate-500 hover:text-slate-700'
++            activeTab === 'website' ? 'border-primary text-primary bg-primary/5 rounded-t-xl' : 'border-transparent text-slate-500 hover:text-slate-700'
+           }`}
+         >
+-          <FileText className="w-4.5 h-4.5" />
+-          Chi ph├¡ l├ám Website ({formatVND(totalWebsiteCost)})
++          <FileText className="w-4.5 h-4.5" /> Website ({formatVND(totalWebsiteCost)})
+         </button>
+         <button
+           onClick={() => setActiveTab('tools')}
+           className={`px-5 py-3 font-bold text-sm border-b-2 transition-all flex items-center gap-2 whitespace-nowrap cursor-pointer ${
+-            activeTab === 'tools'
+-              ? 'border-primary text-primary bg-primary/5 rounded-t-xl'
+-              : 'border-transparent text-slate-500 hover:text-slate-700'
++            activeTab === 'tools' ? 'border-primary text-primary bg-primary/5 rounded-t-xl' : 'border-transparent text-slate-500 hover:text-slate-700'
++          }`}
++        >
++          <Clock className="w-4.5 h-4.5" /> C├┤ng cß╗Ñ ({formatVND(totalToolCost)})
++        </button>
++        <button
++          onClick={() => setActiveTab('worklogs')}
++          className={`px-5 py-3 font-bold text-sm border-b-2 transition-all flex items-center gap-2 whitespace-nowrap cursor-pointer ${
++            activeTab === 'worklogs' ? 'border-primary text-primary bg-primary/5 rounded-t-xl' : 'border-transparent text-slate-500 hover:text-slate-700'
+           }`}
+         >
+-          <Clock className="w-4.5 h-4.5" />
+-          Chi ph├¡ C├┤ng cß╗Ñ hß╗ù trß╗ú ({formatVND(totalToolCost)})
++          <Clock className="w-4.5 h-4.5" /> Nhß║¡t k├╜ l├ám viß╗çc
+         </button>
+-        {project.customer && (
+-          <button
+-            onClick={() => setActiveTab('customer')}
+-            className={`px-5 py-3 font-bold text-sm border-b-2 transition-all flex items-center gap-2 whitespace-nowrap cursor-pointer ${
+-              activeTab === 'customer'
+-                ? 'border-primary text-primary bg-primary/5 rounded-t-xl'
+-                : 'border-transparent text-slate-500 hover:text-slate-700'
+-            }`}
+-          >
+-            <User className="w-4.5 h-4.5" />
+-            Kh├ích h├áng
+-          </button>
+-        )}
+         <button
+           onClick={() => setActiveTab('budget')}
+           className={`px-5 py-3 font-bold text-sm border-b-2 transition-all flex items-center gap-2 whitespace-nowrap cursor-pointer ${
+-            activeTab === 'budget'
+-              ? 'border-primary text-primary bg-primary/5 rounded-t-xl'
+-              : 'border-transparent text-slate-500 hover:text-slate-700'
++            activeTab === 'budget' ? 'border-primary text-primary bg-primary/5 rounded-t-xl' : 'border-transparent text-slate-500 hover:text-slate-700'
+           }`}
+         >
+-          <Wallet className="w-4.5 h-4.5" />
+-          Ng├ón s├ích
++          <Wallet className="w-4.5 h-4.5" /> Ng├ón s├ích
+         </button>
+       </div>
+ 
+-      {/* TAB CONTENT: BUDGET */}
+-      {activeTab === 'budget' && (
+-        <div className="space-y-5">
+-          <Card>
+-            <CardHeader className="border-b border-slate-100 pb-4 flex flex-row items-center justify-between">
+-              <CardTitle className="text-base font-extrabold text-slate-800 flex items-center gap-2">
+-                <Wallet className="w-5 h-5 text-violet-500" />
+-                Quß║ún l├╜ Ng├ón s├ích Dß╗▒ ├ín
+-              </CardTitle>
+-              {!isEditingBudget ? (
+-                <Button variant="outline" size="sm" onClick={handleOpenEditBudget} className="flex items-center gap-1.5 cursor-pointer">
+-                  <Pencil className="w-3.5 h-3.5 mr-1" />Chß╗ënh sß╗¡a
+-                </Button>
+-              ) : (
+-                <div className="flex items-center gap-2">
+-                  <Button variant="outline" size="sm" onClick={() => setIsEditingBudget(false)} disabled={savingBudget} className="cursor-pointer">
+-                    Hß╗ºy
+-                  </Button>
+-                  <Button variant="primary" size="sm" onClick={handleSaveBudget} loading={savingBudget} className="cursor-pointer">
+-                    L╞░u lß║íi
+-                  </Button>
+-                </div>
+-              )}
+-            </CardHeader>
+-            <CardContent className="p-6 space-y-6">
+-              {!isEditingBudget ? (
+-                <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+-                  <div className="rounded-2xl border border-violet-200 bg-violet-50/60 p-5 flex flex-col gap-2">
+-                    <div className="flex items-center gap-2 text-violet-600 font-extrabold text-xs uppercase tracking-wider">
+-                      <BadgeDollarSign className="w-4 h-4" />Ng├ón s├ích dß╗▒ ├ín
+-                    </div>
+-                    <div className="text-2xl font-black text-violet-700">{formatVND(project.budget)}</div>
+-                    <p className="text-[11px] text-violet-500">Tß╗òng gi├í trß╗ï hß╗úp ─æß╗ông / ng├ón s├ích ─æ╞░ß╗úc ph├ón bß╗ò</p>
+-                  </div>
+-                  <div className="rounded-2xl border border-green-200 bg-green-50/60 p-5 flex flex-col gap-2">
+-                    <div className="flex items-center gap-2 text-green-600 font-extrabold text-xs uppercase tracking-wider">
+-                      <TrendingUp className="w-4 h-4" />─É├ú nhß║¡n thanh to├ín
+-                    </div>
+-                    <div className="text-2xl font-black text-green-700">{formatVND(project.amountReceived)}</div>
+-                    {project.budget > 0 && (
+-                      <div className="flex items-center gap-2">
+-                        <div className="flex-1 h-1.5 bg-green-100 rounded-full overflow-hidden">
+-                          <div className="h-full bg-green-500 rounded-full" style={{ width: `${Math.min(100, Math.round((project.amountReceived / project.budget) * 100))}%` }} />
+-                        </div>
+-                        <span className="text-[11px] font-extrabold text-green-600">{Math.round((project.amountReceived / project.budget) * 100)}%</span>
+-                      </div>
+-                    )}
+-                  </div>
+-                  <div className={`rounded-2xl border p-5 flex flex-col gap-2 ${project.amountReceived >= project.budget && project.budget > 0 ? 'border-green-200 bg-green-50/40' : 'border-amber-200 bg-amber-50/60'}`}>
+-                    <div className={`flex items-center gap-2 font-extrabold text-xs uppercase tracking-wider ${project.amountReceived >= project.budget && project.budget > 0 ? 'text-green-600' : 'text-amber-600'}`}>
+-                      <Wallet className="w-4 h-4" />{project.amountReceived >= project.budget && project.budget > 0 ? '─É├ú thanh to├ín ─æß╗º Γ£ô' : 'C├▓n lß║íi ch╞░a nhß║¡n'}
+-                    </div>
+-                    <div className={`text-2xl font-black ${project.amountReceived >= project.budget && project.budget > 0 ? 'text-green-600' : 'text-amber-600'}`}>
+-                      {formatVND(Math.max(0, project.budget - project.amountReceived))}
+-                    </div>
+-                    <p className="text-[11px] text-slate-500">
+-                      {project.budget > 0 ? `${Math.max(0, 100 - Math.round((project.amountReceived / project.budget) * 100))}% ng├ón s├ích ch╞░a ─æ╞░ß╗úc thanh to├ín` : 'Ch╞░a thiß║┐t lß║¡p ng├ón s├ích'}
+-                    </p>
+-                  </div>
+-                </div>
+-              ) : (
+-                <div className="space-y-5 max-w-xl">
+-                  <div>
+-                    <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-2">Ng├ón s├ích dß╗▒ ├ín (VN─É)</label>
+-                    <Input placeholder="VD: 5000000" value={budgetInput} onChange={(e) => setBudgetInput(e.target.value)} type="number" min="0" />
+-                    <p className="text-[11px] text-slate-400 mt-1.5">Tß╗òng gi├í trß╗ï hß╗úp ─æß╗ông hoß║╖c ng├ón s├ích dß╗▒ ├ín</p>
+-                  </div>
+-                  <div>
+-                    <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-2">Sß╗æ tiß╗ün ─æ├ú nhß║¡n (VN─É)</label>
+-                    <Input placeholder="VD: 2500000" value={amountReceivedInput} onChange={(e) => setAmountReceivedInput(e.target.value)} type="number" min="0" />
+-                    <div className="flex flex-wrap gap-2 mt-2.5">
+-                      <span className="text-[11px] text-slate-400 font-semibold self-center">─Éß║╖t nhanh:</span>
+-                      {[0, 25, 50, 70, 100].map((pct) => (
+-                        <button
+-                          key={pct}
+-                          type="button"
+-                          onClick={() => setQuickAmountReceived(pct)}
+-                          disabled={project.budget <= 0}
+-                          className={`px-3 py-1 text-[11px] font-extrabold rounded-full border cursor-pointer transition-all ${
+-                            project.budget > 0 && Math.round((parseFloat(amountReceivedInput || '0') / project.budget) * 100) === pct
+-                              ? 'bg-primary text-white border-primary'
+-                              : 'bg-white border-slate-200 text-slate-600 hover:border-primary hover:text-primary'
+-                          }`}
+-                        >
+-                          {pct}%
+-                        </button>
+-                      ))}
+-                    </div>
+-                    {project.budget <= 0 && (
+-                      <p className="text-[11px] text-amber-500 mt-1.5">ΓÜá∩╕Å Nhß║¡p ng├ón s├ích tr╞░ß╗¢c ─æß╗â d├╣ng n├║t tß╗╖ lß╗ç %</p>
+-                    )}
+-                  </div>
+-                </div>
+-              )}
+-            </CardContent>
+-          </Card>
+-        </div>
+-      )}
+-
+-      
+-
+-      {/* TAB CONTENT: CUSTOMER INFO */}
+-      {activeTab === 'customer' && project.customer && (
+-        <Card className="max-w-2xl">
+-          <CardHeader className="border-b border-slate-100 pb-3 flex flex-row items-center justify-between">
+-            <CardTitle className="text-base font-extrabold text-slate-800 flex items-center gap-2">
+-              <User className="w-5 h-5 text-primary" />
+-              Th├┤ng tin chi tiß║┐t Kh├ích h├áng
+-            </CardTitle>
+-            <Link href={`/admin/customers`}>
+-              <Button variant="outline" size="sm">
+-                ─Éß║┐n quß║ún l├╜ kh├ích h├áng
+-              </Button>
+-            </Link>
+-          </CardHeader>
+-          <CardContent className="p-6 space-y-4">
+-            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4 text-sm">
+-              <div className="space-y-1">
+-                <span className="text-xs text-slate-400 block font-bold uppercase tracking-wider">Hß╗ì v├á t├¬n</span>
+-                <span className="font-extrabold text-slate-700">{project.customer.name}</span>
+-              </div>
+-              <div className="space-y-1">
+-                <span className="text-xs text-slate-400 block font-bold uppercase tracking-wider">Sß╗æ ─æiß╗çn thoß║íi</span>
+-                <span className="font-extrabold text-slate-700">{project.customer.phone}</span>
+-              </div>
+-              <div className="space-y-1">
+-                <span className="text-xs text-slate-400 block font-bold uppercase tracking-wider">Email</span>
+-                <span className="font-extrabold text-slate-700">{project.customer.email || 'Ch╞░a cß║¡p nhß║¡t'}</span>
+-              </div>
+-              <div className="space-y-1">
+-                <span className="text-xs text-slate-400 block font-bold uppercase tracking-wider">Zalo</span>
+-                <span className="font-extrabold text-slate-700">{project.customer.zalo || 'Ch╞░a cß║¡p nhß║¡t'}</span>
+-              </div>
+-              <div className="space-y-1">
+-                <span className="text-xs text-slate-400 block font-bold uppercase tracking-wider">Facebook Link</span>
+-                <span className="font-extrabold text-slate-700">
+-                  {project.customer.facebook ? (
+-                    <a
+-                      href={project.customer.facebook}
+-                      target="_blank"
+-                      rel="noopener noreferrer"
+-                      className="text-primary hover:underline font-semibold"
+-                    >
+-                      Mß╗ƒ li├¬n kß║┐t Facebook
+-                    </a>
+-                  ) : (
+-                    'Ch╞░a cß║¡p nhß║¡t'
+-                  )}
+-                </span>
+-              </div>
+-              <div className="space-y-1">
+-                <span className="text-xs text-slate-400 block font-bold uppercase tracking-wider">Ghi ch├║</span>
+-                <span className="font-extrabold text-slate-700">{project.customer.note || 'Kh├┤ng c├│ ghi ch├║'}</span>
+-              </div>
+-            </div>
+-          </CardContent>
+-        </Card>
+-      )}
+-
+-      
+-
+-      {/* TAB CONTENT: KANBAN PROGRESS */}
+-      {activeTab === 'kanban' && (
+-        <div className="space-y-4">
+-          <div className="flex items-center justify-between">
+-            <div className="text-xs text-slate-400 font-bold flex items-center gap-1.5">
+-              <MousePointerClick className="w-4 h-4 text-primary" />
+-              <span>K├⌐o thß║ú c├┤ng viß╗çc giß╗»a c├íc cß╗Öt ─æß╗â thay ─æß╗òi trß║íng th├íi v├á thß╗⌐ tß╗▒.</span>
+-            </div>
+-            <div className="flex items-center gap-2 shrink-0">
+-              <Button variant="outline" size="sm" onClick={handleOpenAddColumn} className="flex items-center gap-1 text-xs py-2 px-3">
+-                <PlusCircle className="w-4 h-4" />
+-                Th├¬m cß╗Öt Kanban
+-              </Button>
+-            </div>
+-          </div>
+-
+-          {/* Kanban board scrollable container */}
+-          <div className="flex gap-5 overflow-x-auto pb-4 items-start min-h-[500px]">
+-            {project.columns.map((col) => (
+-              <div
+-                key={col.id}
+-                onDragOver={handleDragOver}
+-                onDrop={(e) => handleDrop(e, col.id)}
+-                className="w-80 shrink-0 bg-slate-100/90 border border-slate-200/60 rounded-2xl flex flex-col max-h-[700px]"
+-                style={{ boxShadow: '0 4px 12px rgba(108,117,147,0.02)' }}
+-              >
+-                {/* Column header */}
+-                <div className="p-4 border-b border-slate-200 flex items-center justify-between bg-slate-50 rounded-t-2xl">
+-                  <div className="flex items-center gap-2 min-w-0">
+-                    <span className="font-extrabold text-sm text-slate-700 truncate">{col.name}</span>
+-                    <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-slate-200 text-slate-500">
+-                      {col.tasks.length}
+-                    </span>
+-                  </div>
+-                  <div className="flex items-center gap-1 shrink-0">
+-                    <button
+-                      onClick={() => handleOpenEditColumn(col)}
+-                      className="p-1 rounded text-slate-400 hover:bg-slate-200 hover:text-slate-655 transition-colors cursor-pointer"
+-                      title="Sß╗¡a t├¬n cß╗Öt"
+-                    >
+-                      <Edit2 className="w-3.5 h-3.5" />
+-                    </button>
+-                    {/* Default columns cannot be deleted to avoid empty boards, but allow if desired */}
+-                    {['cß║ºn l├ám', '─æang l├ám', 'ho├án th├ánh'].includes(col.name.toLowerCase()) ? null : (
+-                      <button
+-                        onClick={() => triggerDelete('column', col.id)}
+-                        className="p-1 rounded text-rose-455 hover:bg-rose-50 hover:text-rose-655 transition-colors cursor-pointer"
+-                        title="X├│a cß╗Öt"
+-                      >
+-                        <Trash2 className="w-3.5 h-3.5" />
+-                      </button>
+-                    )}
+-                  </div>
+-                </div>
+-
+-                {/* Column cards body */}
+-                <div className="p-3 overflow-y-auto space-y-3 flex-1 min-h-[150px]">
+-                  {col.tasks.length === 0 ? (
+-                    <div className="py-8 text-center text-[11px] text-slate-400 italic">K├⌐o thß║ú c├┤ng viß╗çc v├áo ─æ├óy</div>
+-                  ) : (
+-                    col.tasks.map((task) => (
+-                      <div
+-                        key={task.id}
+-                        draggable="true"
+-                        onDragStart={(e) => handleDragStart(e, task.id)}
+-                        onDragOver={handleDragOver}
+-                        onDrop={(e) => handleCardDrop(e, task.id, col.id)}
+-                        className="bg-white border border-slate-200 p-4 rounded-xl space-y-3 cursor-grab active:cursor-grabbing hover:border-primary/50 transition-all shadow-sm hover:shadow"
+-                      >
+-                        {/* Task priority and options */}
+-                        <div className="flex items-center justify-between">
+-                          {getPriorityBadge(task.priority)}
+-                          <div className="flex items-center gap-1">
+-                            <button
+-                              onClick={() => handleOpenEditTask(task)}
+-                              className="p-1 text-slate-400 hover:text-slate-600 hover:bg-slate-50 rounded transition-colors cursor-pointer"
+-                              title="Sß╗¡a"
+-                            >
+-                              <Edit2 className="w-3.5 h-3.5" />
+-                            </button>
+-                            <button
+-                              onClick={() => triggerDelete('task', task.id)}
+-                              className="p-1 text-rose-400 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors cursor-pointer"
+-                              title="X├│a"
+-                            >
+-                              <Trash2 className="w-3.5 h-3.5" />
+-                            </button>
+-                          </div>
+-                        </div>
+-
+-                        {/* Title */}
+-                        <div className="font-extrabold text-xs text-slate-850 leading-snug">{task.title}</div>
+-
+-                        {/* Description */}
+-                        {task.description && (
+-                          <p className="text-[11px] text-slate-455 line-clamp-2 leading-relaxed">
+-                            {task.description}
+-                          </p>
+-                        )}
+-
+-                        {/* Tags */}
+-                        {task.tags && (
+-                          <div className="flex flex-wrap gap-1">
+-                            {task.tags.split(',').map((tag, tIdx) => (
+-                              <span key={tIdx} className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-primary/10 text-primary border border-primary/10">
+-                                {tag.trim()}
+-                              </span>
+-                            ))}
+-                          </div>
+-                        )}
+-
+-                        {/* Assignee & Deadline footer */}
+-                        {(task.assignee || task.deadline) && (
+-                          <div className="flex items-center justify-between pt-2 border-t border-slate-100 text-[10px] text-slate-400">
+-                            {task.assignee ? (
+-                              <span className="font-bold flex items-center gap-1 text-slate-500">
+-                                <User className="w-3 h-3 text-slate-400" />
+-                                <span className="truncate max-w-[100px]">{task.assignee}</span>
+-                              </span>
+-                            ) : (
+-                              <span />
+-                            )}
+-                            {task.deadline && (
+-                              <span className={`font-semibold flex items-center gap-1 ${
+-                                new Date(task.deadline) < new Date() && col.name.toLowerCase() !== 'ho├án th├ánh'
+-                                  ? 'text-red-500 font-extrabold'
+-                                  : ''
+-                              }`}>
+-                                <Calendar className="w-3 h-3" />
+-                                <span>{formatDate(task.deadline)}</span>
+-                              </span>
+-                            )}
+-                          </div>
+-                        )}
+-                      </div>
+-                    ))
+-                  )}
+-                </div>
+-
+-                {/* Add task footer */}
+-                <div className="p-3 border-t border-slate-200/60 bg-slate-50/50 rounded-b-2xl">
+-                  <button
+-                    onClick={() => handleOpenAddTask(col.id)}
+-                    className="w-full py-1.5 flex items-center justify-center gap-1 text-xs font-bold text-primary border border-dashed border-primary/20 hover:border-primary/45 rounded-xl hover:bg-white transition-colors cursor-pointer"
+-                  >
+-                    <Plus className="w-4 h-4" />
+-                    Th├¬m c├┤ng viß╗çc
+-                  </button>
+-                </div>
+-              </div>
+-            ))}
+-          </div>
+-        </div>
+-      )}
+-
+-      {/* TAB CONTENT: WEBSITE COSTS */}
+-      {activeTab === 'website' && (
+-        <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+-          {/* Expenses table (2 cols) */}
+-          <div className="xl:col-span-2 space-y-4">
+-            <div className="flex justify-between items-center">
+-              <h2 className="text-sm font-bold text-slate-700">Liß╗çt k├¬ chi ph├¡ vß║¡n h├ánh & x├óy dß╗▒ng</h2>
+-              <Button variant="primary" size="sm" onClick={handleOpenAddWebCost} className="flex items-center gap-1 text-xs py-2 px-3">
+-                <Plus className="w-4 h-4" />
+-                Th├¬m khoß║ún chi
+-              </Button>
+-            </div>
+-
+-            <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
+-              <table className="w-full text-left border-collapse">
+-                <thead>
+-                  <tr className="bg-slate-50 text-[10px] font-bold text-slate-500 uppercase border-b border-slate-200 tracking-wider">
+-                    <th className="px-6 py-4">T├¬n khoß║ún chi</th>
+-                    <th className="px-6 py-4">Ph├ón loß║íi</th>
+-                    <th className="px-6 py-4">Sß╗æ tiß╗ün</th>
+-                    <th className="px-6 py-4">Ng├áy ph├ít sinh</th>
+-                    <th className="px-6 py-4">Ghi ch├║</th>
+-                    <th className="px-6 py-4 text-right">Thao t├íc</th>
+-                  </tr>
+-                </thead>
+-                <tbody className="divide-y divide-slate-100 text-xs">
+-                  {project.websiteCosts.length === 0 ? (
+-                    <tr>
+-                      <td colSpan={6} className="py-12 text-center text-slate-400 italic">Ch╞░a c├│ khoß║ún chi ph├¡ website n├áo ─æ╞░ß╗úc tß║ío.</td>
+-                    </tr>
+-                  ) : (
+-                    project.websiteCosts.map((wc) => (
+-                      <tr key={wc.id} className="hover:bg-slate-50/50 transition-colors">
+-                        <td className="px-6 py-4 font-bold text-slate-800">{wc.name}</td>
+-                        <td className="px-6 py-4">
+-                          <Badge variant="info" className="scale-90">{wc.type}</Badge>
+-                        </td>
+-                        <td className="px-6 py-4 font-extrabold text-slate-800">{formatVND(wc.amount)}</td>
+-                        <td className="px-6 py-4 text-slate-500">{formatDate(wc.date)}</td>
+-                        <td className="px-6 py-4 text-slate-500 max-w-xs truncate" title={wc.note || ''}>
+-                          {wc.note || 'ΓÇö'}
+-                        </td>
+-                        <td className="px-6 py-4 text-right">
+-                          <div className="flex items-center justify-end gap-1.5">
+-                            <button
+-                              onClick={() => handleOpenEditWebCost(wc)}
+-                              className="p-1 rounded text-slate-450 hover:bg-slate-100 hover:text-slate-700 transition-colors cursor-pointer"
+-                              title="Sß╗¡a"
+-                            >
+-                              <Edit2 className="w-3.5 h-3.5" />
+-                            </button>
+-                            <button
+-                              onClick={() => triggerDelete('webcost', wc.id)}
+-                              className="p-1 rounded text-rose-500 hover:bg-rose-50 hover:text-rose-700 transition-colors cursor-pointer"
+-                              title="X├│a"
+-                            >
+-                              <Trash2 className="w-3.5 h-3.5" />
+-                            </button>
+-                          </div>
+-                        </td>
+-                      </tr>
+-                    ))
+-                  )}
+-                </tbody>
+-                {project.websiteCosts.length > 0 && (
+-                  <tfoot>
+-                    <tr className="bg-slate-50/50 border-t-2 border-slate-200 font-extrabold text-xs">
+-                      <td colSpan={2} className="px-6 py-4 text-slate-600">Tß╗òng chi ph├¡ website:</td>
+-                      <td colSpan={4} className="px-6 py-4 text-rose-600 text-sm font-black">{formatVND(totalWebsiteCost)}</td>
+-                    </tr>
+-                  </tfoot>
+-                )}
+-              </table>
+-            </div>
+-          </div>
+-
+-          {/* Breakdown cards (1 col) */}
+-          <div className="space-y-5">
+-            <Card>
+-              <CardHeader>
+-                <CardTitle>Ph├ón bß╗ò chi ph├¡ theo loß║íi</CardTitle>
+-              </CardHeader>
+-              <CardContent className="space-y-4">
+-                {totalWebsiteCost === 0 ? (
+-                  <p className="text-xs text-slate-400 italic py-6 text-center">Ch╞░a c├│ dß╗» liß╗çu chi ph├¡ ─æß╗â ph├ón t├¡ch.</p>
+-                ) : (
+-                  webCostBreakdown.map((item, idx) => (
+-                    <div key={idx} className="space-y-1.5">
+-                      <div className="flex justify-between text-xs font-bold">
+-                        <span className="text-slate-500 uppercase tracking-wider text-[10px]">{item.type}</span>
+-                        <span className="text-slate-700">{formatVND(item.sum)} ({item.pct}%)</span>
+-                      </div>
+-                      <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+-                        <div
+-                          className="h-full rounded-full"
+-                          style={{
+-                            width: `${item.pct}%`,
+-                            background: idx === 0
+-                              ? 'linear-gradient(90deg,#a145ab,#c060c8)'
+-                              : idx === 1
+-                              ? 'linear-gradient(90deg,#3b82f6,#60a5fa)'
+-                              : idx === 2
+-                              ? 'linear-gradient(90deg,#22c55e,#4ade80)'
+-                              : idx === 3
+-                              ? 'linear-gradient(90deg,#f59e0b,#fbbf24)'
+-                              : 'linear-gradient(90deg,#64748b,#94a3b8)',
+-                          }}
+-                        />
+-                      </div>
+-                    </div>
+-                  ))
+-                )}
+-              </CardContent>
+-            </Card>
+-          </div>
+-        </div>
+-      )}
+-
+-      {/* TAB CONTENT: SOFTWARE TOOLS */}
+-      {activeTab === 'tools' && (
+-        <div className="space-y-6">
+-          <div className="flex justify-between items-center">
+-            <div className="flex items-center gap-4 text-xs">
+-              <div className="border border-slate-200 bg-slate-50 p-2.5 rounded-xl">
+-                <span className="text-slate-400 block font-bold text-[9px] uppercase tracking-wider">╞»ß╗¢c l╞░ß╗úng theo Th├íng</span>
+-                <strong className="text-slate-700 text-sm font-black">{formatVND(toolCostMonthly)}</strong>
+-              </div>
+-              <div className="border border-slate-200 bg-slate-50 p-2.5 rounded-xl">
+-                <span className="text-slate-400 block font-bold text-[9px] uppercase tracking-wider">╞»ß╗¢c l╞░ß╗úng theo N─âm</span>
+-                <strong className="text-slate-700 text-sm font-black">{formatVND(toolCostYearly)}</strong>
+-              </div>
+-            </div>
+-            <Button variant="primary" size="sm" onClick={handleOpenAddTool} className="flex items-center gap-1 text-xs py-2 px-3">
+-              <Plus className="w-4 h-4" />
+-              Th├¬m c├┤ng cß╗Ñ
+-            </Button>
+-          </div>
+-
+-          <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
+-            <table className="w-full text-left border-collapse">
+-              <thead>
+-                <tr className="bg-slate-50 text-[10px] font-bold text-slate-500 uppercase border-b border-slate-200 tracking-wider">
+-                  <th className="px-6 py-4">T├¬n c├┤ng cß╗Ñ</th>
+-                  <th className="px-6 py-4">Mß╗Ñc ─æ├¡ch</th>
+-                  <th className="px-6 py-4">G├│i c╞░ß╗¢c</th>
+-                  <th className="px-6 py-4">Chi ph├¡</th>
+-                  <th className="px-6 py-4">Chu kß╗│</th>
+-                  <th className="px-6 py-4">Ng├áy gia hß║ín tiß║┐p</th>
+-                  <th className="px-6 py-4">T├¼nh trß║íng hß║ín</th>
+-                  <th className="px-6 py-4">Ghi ch├║</th>
+-                  <th className="px-6 py-4 text-right">Thao t├íc</th>
+-                </tr>
+-              </thead>
+-              <tbody className="divide-y divide-slate-100 text-xs">
+-                {project.toolCosts.length === 0 ? (
+-                  <tr>
+-                    <td colSpan={9} className="py-12 text-center text-slate-400 italic">Ch╞░a c├│ c├┤ng cß╗Ñ hß╗ù trß╗ú n├áo ─æ╞░ß╗úc liß╗çt k├¬.</td>
+-                  </tr>
+-                ) : (
+-                  project.toolCosts.map((tc) => (
+-                    <tr key={tc.id} className="hover:bg-slate-50/50 transition-colors">
+-                      <td className="px-6 py-4 font-bold text-slate-800">{tc.name}</td>
+-                      <td className="px-6 py-4 text-slate-500">{tc.purpose || 'ΓÇö'}</td>
+-                      <td className="px-6 py-4">
+-                        <Badge variant="primary" className="scale-90">{tc.plan}</Badge>
+-                      </td>
+-                      <td className="px-6 py-4 font-extrabold text-slate-800">{formatVND(tc.cost)}</td>
+-                      <td className="px-6 py-4 text-slate-500 font-semibold uppercase tracking-wide text-[10px]">
+-                        {tc.billingCycle === 'month' ? 'Th├íng' : tc.billingCycle === 'year' ? 'N─âm' : 'Mß╗Öt lß║ºn'}
+-                      </td>
+-                      <td className="px-6 py-4 text-slate-500">{tc.nextRenewal ? formatDate(tc.nextRenewal) : 'ΓÇö'}</td>
+-                      <td className="px-6 py-4">{tc.nextRenewal ? getRenewalBadge(tc.nextRenewal) : 'ΓÇö'}</td>
+-                      <td className="px-6 py-4 max-w-xs">
+-                        {tc.note ? (
+-                          <div className="p-2.5 rounded-lg border border-slate-100 bg-slate-50/50 text-[10.5px] leading-relaxed break-words font-medium text-slate-600 whitespace-pre-wrap">
+-                            {tc.note}
+-                          </div>
+-                        ) : (
+-                          <span className="text-slate-350 italic">Ch╞░a c├│ note</span>
+-                        )}
+-                      </td>
+-                      <td className="px-6 py-4 text-right">
+-                        <div className="flex items-center justify-end gap-1.5">
+-                          <button
+-                            onClick={() => handleOpenEditTool(tc)}
+-                            className="p-1 rounded text-slate-450 hover:bg-slate-100 hover:text-slate-700 transition-colors cursor-pointer"
+-                            title="Sß╗¡a"
+-                          >
+-                            <Edit2 className="w-3.5 h-3.5" />
+-                          </button>
+-                          <button
+-                            onClick={() => triggerDelete('tool', tc.id)}
+-                            className="p-1 rounded text-rose-500 hover:bg-rose-50 hover:text-rose-700 transition-colors cursor-pointer"
+-                            title="X├│a"
+-                          >
+-                            <Trash2 className="w-3.5 h-3.5" />
+-                          </button>
+-                        </div>
+-                      </td>
+-                    </tr>
+-                  ))
+-                )}
+-              </tbody>
+-              {project.toolCosts.length > 0 && (
+-                <tfoot>
+-                  <tr className="bg-slate-50/50 border-t-2 border-slate-200 font-extrabold text-xs">
+-                    <td colSpan={3} className="px-6 py-4 text-slate-600">Tß╗òng chi ph├¡ c├┤ng cß╗Ñ hiß╗çn tß║íi:</td>
+-                    <td colSpan={6} className="px-6 py-4 text-rose-600 text-sm font-black">{formatVND(totalToolCost)}</td>
+-                  </tr>
+-                </tfoot>
+-              )}
+-            </table>
+-          </div>
+-        </div>
+-      )}
+-
+-      {/* ALWAYS VISIBLE AT THE BOTTOM: REQUIREMENTS & TIMELINE */}
+-      <Card className="mt-6">
+-        <CardHeader className="border-b border-slate-100 pb-4 flex flex-row items-center justify-between">
+-          <CardTitle className="text-base font-extrabold text-slate-800 flex items-center gap-2">
+-            <FileText className="w-5 h-5 text-primary" />
+-            Timeline Y├¬u cß║ºu & Ghi ch├║ tß╗½ Kh├ích h├áng
+-          </CardTitle>
+-          <Button
+-            variant="primary"
+-            size="sm"
+-            onClick={() => {
+-              setEditingNote(null);
+-              setNoteTitle('');
+-              setNoteContent('');
+-              setNoteLinks([{ label: '', url: '' }]);
+-              setNoteDate(new Date().toISOString().split('T')[0]);
+-              setIsNoteModalOpen(true);
+-            }}
+-            className="flex items-center gap-1 cursor-pointer"
+-          >
+-            <Plus className="w-4.5 h-4.5" />
+-            <span>Th├¬m ghi ch├║</span>
+-          </Button>
+-        </CardHeader>
+-        <CardContent className="p-6">
+-          {loadingNotes ? (
+-            <LoadingSkeleton className="h-40 w-full" />
+-          ) : requirementNotes.length === 0 ? (
+-            <EmptyState
+-              icon={FileText}
+-              title="Ch╞░a c├│ ghi ch├║ y├¬u cß║ºu n├áo"
+-              description="L╞░u lß║íi c├íc mß╗æc thß╗¥i gian kh├ích h├áng gß╗¡i y├¬u cß║ºu, phß║ún hß╗ôi hoß║╖c t├ái liß╗çu ─æß╗â dß╗à d├áng theo d├╡i."
+-              action={
+-                <Button
+-                  onClick={() => {
+-                    setEditingNote(null);
+-                    setNoteTitle('');
+-                    setNoteContent('');
+-                    setNoteLinks([{ label: '', url: '' }]);
+-                    setNoteDate(new Date().toISOString().split('T')[0]);
+-                    setIsNoteModalOpen(true);
+-                  }}
+-                >
+-                  Tß║ío ghi ch├║ ─æß║ºu ti├¬n
+-                </Button>
+-              }
+-            />
+-          ) : (
+-            <div className="relative border-l-2 border-slate-150 ml-4 pl-6 space-y-6">
+-              {requirementNotes.map((note) => (
+-                <div key={note.id} className="relative group">
+-                  <div className="absolute -left-[31px] top-1 w-4 h-4 rounded-full bg-primary border-4 border-white shadow-sm ring-1 ring-primary/20" />
+-                  <div className="bg-slate-50/50 hover:bg-slate-50 border border-slate-150/80 rounded-2xl p-5 transition-all">
+-                    <div className="flex items-center justify-between gap-3 mb-2 flex-wrap">
+-                      <div className="flex items-center gap-2.5">
+-                        <span className="text-xs font-extrabold text-slate-400 bg-slate-100 px-2 py-0.5 rounded">
+-                          {formatDate(note.date)}
+-                        </span>
+-                        <h4 className="text-sm font-black text-slate-800">{note.title}</h4>
+-                      </div>
+-                      <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+-                        <button
+-                          onClick={() => {
+-                            let parsedLinks = [{ label: '', url: '' }];
+-                            if (note.link) {
+-                              try {
+-                                const parsed = JSON.parse(note.link);
+-                                if (Array.isArray(parsed)) {
+-                                  parsedLinks = parsed;
+-                                } else {
+-                                  parsedLinks = [{ label: 'Li├¬n kß║┐t', url: note.link }];
+-                                }
+-                              } catch {
+-                                parsedLinks = [{ label: 'Li├¬n kß║┐t', url: note.link }];
+-                              }
+-                            }
+-                            setEditingNote(note);
+-                            setNoteTitle(note.title);
+-                            setNoteContent(note.content || '');
+-                            setNoteLinks(parsedLinks);
+-                            setNoteDate(note.date ? note.date.split('T')[0] : '');
+-                            setIsNoteModalOpen(true);
+-                          }}
+-                          className="p-1 text-slate-400 hover:text-primary transition-colors cursor-pointer"
+-                          title="Sß╗¡a ghi ch├║"
+-                        >
+-                          <Edit2 className="w-3.5 h-3.5" />
+-                        </button>
+-                        <button
+-                          onClick={() => setDeleteNoteId(note.id)}
+-                          className="p-1 text-slate-400 hover:text-red-500 transition-colors cursor-pointer"
+-                          title="X├│a ghi ch├║"
+-                        >
+-                          <Trash2 className="w-3.5 h-3.5" />
+-                        </button>
+-                      </div>
+-                    </div>
+-                    <p className="text-xs text-slate-650 leading-relaxed whitespace-pre-line font-medium">
+-                      {note.content || 'Kh├┤ng c├│ m├┤ tß║ú chi tiß║┐t.'}
+-                    </p>
+-                    {note.link && (() => {
+-                      let links = [];
+-                      try {
+-                        const parsed = JSON.parse(note.link);
+-                        if (Array.isArray(parsed)) {
+-                          links = parsed;
+-                        } else {
+-                          links = [{ label: 'Mß╗ƒ li├¬n kß║┐t ─æ├¡nh k├¿m', url: note.link }];
+-                        }
+-                      } catch {
+-                        links = [{ label: 'Mß╗ƒ li├¬n kß║┐t ─æ├¡nh k├¿m', url: note.link }];
+-                      }
+-                      if (links.length === 0) return null;
+-                      return (
+-                        <div className="mt-3 flex flex-wrap gap-2">
+-                          {links.map((lnk, lIdx) => (
+-                            <a
+-                              key={lIdx}
+-                              href={lnk.url}
+-                              target="_blank"
+-                              rel="noopener noreferrer"
+-                              className="inline-flex items-center gap-1.5 text-[11px] font-bold text-primary bg-primary/5 hover:bg-primary/10 border border-primary/20 px-2.5 py-1.2 rounded-lg transition-colors"
+-                            >
+-                              <ExternalLink className="w-3 h-3" />
+-                              {lnk.label || 'Mß╗ƒ li├¬n kß║┐t'}
+-                            </a>
+-                          ))}
+-                        </div>
+-                      );
+-                    })()}
+-                  </div>
+-                </div>
+-              ))}
+-            </div>
+-          )}
+-        </CardContent>
+-      </Card>
+-
+-      {/* ALWAYS VISIBLE AT THE BOTTOM: ACTIVITY LOG */}
+-      <Card className="mt-6">
+-        <CardHeader className="border-b border-slate-100 pb-4 flex flex-row items-center justify-between">
+-          <CardTitle className="text-base font-extrabold text-slate-800 flex items-center gap-2">
+-            <Activity className="w-5 h-5 text-primary" />
+-            Nhß║¡t k├╜ hoß║ít ─æß╗Öng dß╗▒ ├ín
+-          </CardTitle>
+-          <Button variant="outline" size="sm" onClick={() => fetchActivityLog(1)} loading={loadingActivity} className="cursor-pointer">
+-            Tß║úi lß║íi
+-          </Button>
+-        </CardHeader>
+-        <CardContent className="p-0">
+-          {loadingActivity ? (
+-            <div className="p-6 space-y-3">
+-              {[...Array(5)].map((_, i) => (
+-                <div key={i} className="flex gap-3 animate-pulse">
+-                  <div className="w-8 h-8 rounded-full bg-slate-100 shrink-0" />
+-                  <div className="flex-1 space-y-1.5 py-1">
+-                    <div className="h-3 bg-slate-100 rounded w-3/4" />
+-                    <div className="h-2.5 bg-slate-100 rounded w-1/2" />
+-                  </div>
+-                </div>
+-              ))}
+-            </div>
+-          ) : activityLogs.length === 0 ? (
+-            <div className="p-12 text-center">
+-              <Activity className="w-10 h-10 text-slate-200 mx-auto mb-3" />
+-              <p className="text-sm font-semibold text-slate-400">Ch╞░a c├│ hoß║ít ─æß╗Öng n├áo ─æ╞░ß╗úc ghi lß║íi</p>
+-              <p className="text-xs text-slate-300 mt-1">C├íc thao t├íc tß║ío, sß╗¡a, x├│a sß║╜ tß╗▒ ─æß╗Öng xuß║Ñt hiß╗çn ß╗ƒ ─æ├óy</p>
+-            </div>
+-          ) : (
+-            <div className="divide-y divide-slate-50">
+-              {activityLogs.map((log) => {
+-                const actionColors: Record<string, string> = {
+-                  PROJECT_CREATE: 'bg-violet-100 text-violet-600',
+-                  PROJECT_UPDATE: 'bg-blue-100 text-blue-600',
+-                  PROJECT_DELETE: 'bg-red-100 text-red-600',
+-                  TASK_CREATE: 'bg-green-100 text-green-600',
+-                  TASK_UPDATE: 'bg-sky-100 text-sky-600',
+-                  TASK_DELETE: 'bg-rose-100 text-rose-600',
+-                  TASK_MOVE: 'bg-amber-100 text-amber-600',
+-                  COLUMN_CREATE: 'bg-indigo-100 text-indigo-600',
+-                  COLUMN_UPDATE: 'bg-indigo-100 text-indigo-600',
+-                  COLUMN_DELETE: 'bg-red-100 text-red-600',
+-                  WEBSITE_COST_CREATE: 'bg-teal-100 text-teal-600',
+-                  WEBSITE_COST_UPDATE: 'bg-teal-100 text-teal-600',
+-                  WEBSITE_COST_DELETE: 'bg-rose-100 text-rose-600',
+-                  TOOL_COST_CREATE: 'bg-orange-100 text-orange-600',
+-                  TOOL_COST_UPDATE: 'bg-orange-100 text-orange-600',
+-                  TOOL_COST_DELETE: 'bg-red-100 text-red-600',
+-                  REQUIREMENT_NOTE_CREATE: 'bg-cyan-100 text-cyan-600',
+-                  REQUIREMENT_NOTE_UPDATE: 'bg-cyan-100 text-cyan-600',
+-                  REQUIREMENT_NOTE_DELETE: 'bg-rose-100 text-rose-600',
+-                };
+-                const colorClass = actionColors[log.action] || 'bg-slate-100 text-slate-600';
+-                const decodedActorName = decodeHeaderValue(log.actorName);
+-                const initials = decodedActorName
+-                  ? decodedActorName.split(' ').slice(-2).map((w: string) => w[0]).join('').toUpperCase()
+-                  : '?';
+-                return (
+-                  <div key={log.id} className="flex items-start gap-3.5 px-5 py-4 hover:bg-slate-50/70 transition-colors">
+-                    <div className="shrink-0 w-8 h-8 rounded-full bg-gradient-to-br from-violet-400 to-primary flex items-center justify-center text-white text-[11px] font-extrabold shadow-sm">
+-                      {initials}
+-                    </div>
+-                    <div className="flex-1 min-w-0">
+-                      <div className="flex flex-wrap items-center gap-2 mb-0.5">
+-                        <span className="font-extrabold text-slate-700 text-sm">{decodedActorName}</span>
+-                        <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-extrabold ${colorClass}`}>{log.actionLabel}</span>
+-                        {log.entityName && (
+-                          <span className="text-xs text-slate-500 font-semibold truncate max-w-[200px]">&ldquo;{decodeHeaderValue(log.entityName)}&rdquo;</span>
+-                        )}
+-                      </div>
+-                      <p className="text-xs text-slate-500 leading-relaxed">{decodeHeaderValue(log.description)}</p>
+-                      <p className="text-[10px] text-slate-400 mt-1 font-medium">
+-                        {new Date(log.createdAt).toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+-                      </p>
+-                    </div>
+-                    <div className={`shrink-0 mt-2 w-2 h-2 rounded-full ${log.status === 'success' ? 'bg-green-400' : 'bg-red-400'}`} title={log.status} />
+-                  </div>
+-                );
+-              })}
+-            </div>
+-          )}
+-        </CardContent>
+-        {logTotalPages > 1 && (
+-          <div className="border-t border-slate-100 px-5 py-4 flex items-center justify-between bg-slate-50/50">
+-            <span className="text-xs font-bold text-slate-450">
+-              Trang {logPage} / {logTotalPages}
+-            </span>
+-            <div className="flex items-center gap-2">
+-              <Button
+-                variant="outline"
+-                size="xs"
+-                disabled={logPage <= 1 || loadingActivity}
+-                onClick={() => fetchActivityLog(logPage - 1)}
+-                className="cursor-pointer font-bold text-xs"
+-              >
+-                Trang tr╞░ß╗¢c
+-              </Button>
+-              <Button
+-                variant="outline"
+-                size="xs"
+-                disabled={logPage >= logTotalPages || loadingActivity}
+-                onClick={() => fetchActivityLog(logPage + 1)}
+-                className="cursor-pointer font-bold text-xs"
+-              >
+-                Trang sau
+-              </Button>
+-            </div>
+-          </div>
+-        )}
+-      </Card>
+-
+-      {/* ==========================================
+-          MODALS & DIALOGS
+-      ========================================== */}
+-
+-      {/* Modal Cß╗Öt Kanban */}
+-      {isColumnModalOpen && (
+-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+-          <div className="w-full max-w-md bg-white rounded-2xl shadow-xl overflow-hidden animate-scale-in">
+-            <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
+-              <h3 className="font-extrabold text-slate-800 text-base">
+-                {editColumnId ? 'Chß╗ënh sß╗¡a t├¬n cß╗Öt ≡ƒô¥' : 'Th├¬m cß╗Öt Kanban mß╗¢i ≡ƒÜÇ'}
+-              </h3>
+-              <button onClick={() => setIsColumnModalOpen(false)} className="text-slate-400 hover:text-slate-600 font-bold text-lg focus:outline-none cursor-pointer">
+-                Γ£ò
+-              </button>
+-            </div>
+-            <form onSubmit={handleColumnSubmit}>
+-              <div className="px-6 py-6">
+-                <Input
+-                  label="T├¬n cß╗Öt *"
+-                  placeholder="V├¡ dß╗Ñ: ─Éang kiß╗âm thß╗¡, Tß║ím ho├ún..."
+-                  value={columnName}
+-                  onChange={(e) => setColumnName(e.target.value)}
+-                  required
+-                />
+-              </div>
+-              <div className="px-6 py-4 bg-slate-50 border-t border-slate-150 flex justify-end gap-3 rounded-b-2xl">
+-                <Button type="button" variant="outline" size="sm" onClick={() => setIsColumnModalOpen(false)}>
+-                  Hß╗ºy bß╗Å
+-                </Button>
+-                <Button type="submit" variant="primary" size="sm">
+-                  L╞░u lß║íi
+-                </Button>
+-              </div>
+-            </form>
+-          </div>
+-        </div>
+-      )}
+-
+-      {/* Modal C├┤ng viß╗çc */}
+-      {isTaskModalOpen && (
+-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+-          <div className="w-full max-w-lg bg-white rounded-2xl shadow-xl overflow-hidden animate-scale-in">
+-            <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
+-              <h3 className="font-extrabold text-slate-800 text-base">
+-                {editTaskId ? 'Cß║¡p nhß║¡t c├┤ng viß╗çc ≡ƒô¥' : 'Th├¬m c├┤ng viß╗çc mß╗¢i ≡ƒÜÇ'}
+-              </h3>
+-              <button onClick={() => setIsTaskModalOpen(false)} className="text-slate-400 hover:text-slate-600 font-bold text-lg focus:outline-none cursor-pointer">
+-                Γ£ò
+-              </button>
+-            </div>
+-            <form onSubmit={handleTaskSubmit}>
+-              <div className="px-6 py-6 space-y-4">
+-                <Input
+-                  label="Ti├¬u ─æß╗ü c├┤ng viß╗çc *"
+-                  placeholder="V├¡ dß╗Ñ: Thiß║┐t kß║┐ trang chß╗º"
+-                  value={taskTitle}
+-                  onChange={(e) => setTaskTitle(e.target.value)}
+-                  required
+-                />
+-                <Textarea
+-                  label="M├┤ tß║ú c├┤ng viß╗çc"
+-                  placeholder="Nhß║¡p y├¬u cß║ºu chi tiß║┐t hoß║╖c m├┤ tß║ú..."
+-                  value={taskDescription}
+-                  onChange={(e) => setTaskDescription(e.target.value)}
+-                  rows={3}
+-                />
+-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+-                  <Input
+-                    label="Ng╞░ß╗¥i phß╗Ñ tr├ích"
+-                    placeholder="T├¬n nh├ón vi├¬n..."
+-                    value={taskAssignee}
+-                    onChange={(e) => setTaskAssignee(e.target.value)}
+-                  />
+-                  <Input
+-                    label="Hß║ín ho├án th├ánh (Deadline)"
+-                    type="date"
+-                    value={taskDeadline}
+-                    onChange={(e) => setTaskDeadline(e.target.value)}
+-                  />
+-                </div>
+-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+-                  <Select
+-                    label="─Éß╗Ö ╞░u ti├¬n"
+-                    value={taskPriority}
+-                    onChange={(e) => setTaskPriority(e.target.value)}
+-                    options={[
+-                      { value: 'low', label: 'Thß║Ñp' },
+-                      { value: 'medium', label: 'Trung b├¼nh' },
+-                      { value: 'high', label: 'Cao' },
+-                    ]}
+-                  />
+-                  <Input
+-                    label="Nh├ún m├áu (Tags - ph├ón c├ích bß╗ƒi dß║Ñu phß║⌐y)"
+-                    placeholder="V├¡ dß╗Ñ: Design, Bug, UI..."
+-                    value={taskTags}
+-                    onChange={(e) => setTaskTags(e.target.value)}
+-                  />
+-                </div>
+-              </div>
+-              <div className="px-6 py-4 bg-slate-50 border-t border-slate-150 flex justify-end gap-3 rounded-b-2xl">
+-                <Button type="button" variant="outline" size="sm" onClick={() => setIsTaskModalOpen(false)}>
+-                  Hß╗ºy bß╗Å
+-                </Button>
+-                <Button type="submit" variant="primary" size="sm">
+-                  L╞░u lß║íi
+-                </Button>
+-              </div>
+-            </form>
+-          </div>
+-        </div>
+-      )}
+-
+-      {/* Modal Chi ph├¡ Website */}
+-      {isWebCostModalOpen && (
+-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+-          <div className="w-full max-w-md bg-white rounded-2xl shadow-xl overflow-hidden animate-scale-in">
+-            <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
+-              <h3 className="font-extrabold text-slate-800 text-base">
+-                {editWebCostId ? 'Sß╗¡a khoß║ún chi ph├¡ ≡ƒô¥' : 'Th├¬m khoß║ún chi ph├¡ website ≡ƒÆ░'}
+-              </h3>
+-              <button onClick={() => setIsWebCostModalOpen(false)} className="text-slate-400 hover:text-slate-600 font-bold text-lg focus:outline-none cursor-pointer">
+-                Γ£ò
+-              </button>
+-            </div>
+-            <form onSubmit={handleWebCostSubmit}>
+-              <div className="px-6 py-6 space-y-4">
+-                <Input
+-                  label="T├¬n khoß║ún chi *"
+-                  placeholder="V├¡ dß╗Ñ: Thu├¬ hosting gia hß║ín 1 n─âm"
+-                  value={webCostName}
+-                  onChange={(e) => setWebCostName(e.target.value)}
+-                  required
+-                />
++      {activeTab === 'worklogs' && (
++        <div className="space-y-6 animate-fade-in-up">
++            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
++              <h2 className="text-xl font-black text-slate-800 flex items-center gap-2">
++                <Clock className="w-5 h-5 text-indigo-500" />
++                Thß╗¥i gian l├ám viß╗çc
++              </h2>
++              <div className="flex items-center gap-3">
+                 <Select
+-                  label="Ph├ón loß║íi chi ph├¡ *"
+-                  value={webCostType}
+-                  onChange={(e) => setWebCostType(e.target.value)}
++                  value={workLogFilter}
++                  onChange={(e) => setWorkLogFilter(e.target.value)}
+                   options={[
+-                    { value: 'thiß║┐t kß║┐', label: 'Thiß║┐t kß║┐ (Design)' },
+-                    { value: 'hosting', label: 'Hosting / Server' },
+-                    { value: 'domain', label: 'Domain (T├¬n miß╗ün)' },
+-                    { value: 'lß║¡p tr├¼nh', label: 'Lß║¡p tr├¼nh / Code' },
+-                    { value: 'kh├íc', label: 'Kh├íc' },
++                    { value: 'all', label: 'Tß║Ñt cß║ú' },
++                    { value: '7days', label: '7 ng├áy qua' },
++                    { value: '30days', label: '30 ng├áy qua' },
++                    { value: 'lastMonth', label: '1 th├íng tr╞░ß╗¢c' },
+                   ]}
+-                />
+-                <Input
+-                  label="Sß╗æ tiß╗ün (VN─É) *"
+-                  type="number"
+-                  placeholder="V├¡ dß╗Ñ: 1200000"
+-                  value={webCostAmount}
+-                  onChange={(e) => setWebCostAmount(e.target.value)}
+-                  required
+-                />
+-                <Input
+-                  label="Ng├áy ph├ít sinh *"
+-                  type="date"
+-                  value={webCostDate}
+-                  onChange={(e) => setWebCostDate(e.target.value)}
+-                  required
+-                />
+-                <Textarea
+-                  label="Ghi ch├║"
+-                  placeholder="Th├¬m chi tiß║┐t vß╗ü nh├á cung cß║Ñp, h├│a ─æ╞ín..."
+-                  value={webCostNote}
+-                  onChange={(e) => setWebCostNote(e.target.value)}
+-                  rows={2}
+-                />
+-              </div>
+-              <div className="px-6 py-4 bg-slate-50 border-t border-slate-150 flex justify-end gap-3 rounded-b-2xl">
+-                <Button type="button" variant="outline" size="sm" onClick={() => setIsWebCostModalOpen(false)}>
+-                  Hß╗ºy
+-                </Button>
+-                <Button type="submit" variant="primary" size="sm">
+-                  L╞░u lß║íi
+-                </Button>
+-              </div>
+-            </form>
+-          </div>
+-        </div>
+-      )}
+-
+-      {/* Modal Chi ph├¡ C├┤ng cß╗Ñ */}
+-      {isToolModalOpen && (
+-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+-          <div className="w-full max-w-md bg-white rounded-2xl shadow-xl overflow-hidden animate-scale-in">
+-            <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
+-              <h3 className="font-extrabold text-slate-800 text-base">
+-                {editToolId ? 'Sß╗¡a th├┤ng tin c├┤ng cß╗Ñ ≡ƒô¥' : 'Th├¬m phß║ºn mß╗üm/c├┤ng cß╗Ñ ≡ƒ¢á∩╕Å'}
+-              </h3>
+-              <button onClick={() => setIsToolModalOpen(false)} className="text-slate-400 hover:text-slate-600 font-bold text-lg focus:outline-none cursor-pointer">
+-                Γ£ò
+-              </button>
+-            </div>
+-            <form onSubmit={handleToolSubmit}>
+-              <div className="px-6 py-6 space-y-4">
+-                <Input
+-                  label="T├¬n phß║ºn mß╗üm/c├┤ng cß╗Ñ *"
+-                  placeholder="V├¡ dß╗Ñ: Figma Pro, Ahrefs Standard"
+-                  value={toolName}
+-                  onChange={(e) => setToolName(e.target.value)}
+-                  required
+-                />
+-                <Input
+-                  label="Mß╗Ñc ─æ├¡ch sß╗¡ dß╗Ñng"
+-                  placeholder="V├¡ dß╗Ñ: Thiß║┐t kß║┐ UI/UX, ph├ón t├¡ch tß╗½ kh├│a..."
+-                  value={toolPurpose}
+-                  onChange={(e) => setToolPurpose(e.target.value)}
+-                />
+-                <div className="grid grid-cols-2 gap-4">
+-                  <Input
+-                    label="G├│i ─æ─âng k├╜"
+-                    placeholder="V├¡ dß╗Ñ: Pro, Agency, Free..."
+-                    value={toolPlan}
+-                    onChange={(e) => setToolPlan(e.target.value)}
+-                  />
+-                  <Select
+-                    label="Chu kß╗│ thanh to├ín *"
+-                    value={toolCycle}
+-                    onChange={(e) => {
+-                      const val = e.target.value;
+-                      setToolCycle(val);
+-                      if (val === 'month') {
+-                        const nextMonth = new Date();
+-                        nextMonth.setMonth(nextMonth.getMonth() + 1);
+-                        setToolRenewal(nextMonth.toISOString().split('T')[0]);
+-                      } else if (val === 'year') {
+-                        const nextYear = new Date();
+-                        nextYear.setFullYear(nextYear.getFullYear() + 1);
+-                        setToolRenewal(nextYear.toISOString().split('T')[0]);
+-                      } else if (val === 'one-time') {
+-                        setToolRenewal('');
+-                      }
+-                    }}
+-                    options={[
+-                      { value: 'month', label: 'H├áng th├íng' },
+-                      { value: 'year', label: 'H├áng n─âm' },
+-                      { value: 'one-time', label: 'Mß╗Öt lß║ºn' },
+-                    ]}
+-                  />
+-                </div>
+-                <div className="grid grid-cols-2 gap-4">
+-                  <Input
+-                    label="Chi ph├¡ (VN─É) *"
+-                    type="number"
+-                    placeholder="V├¡ dß╗Ñ: 350000"
+-                    value={toolCostAmount}
+-                    onChange={(e) => setToolCostAmount(e.target.value)}
+-                    required
+-                  />
+-                  {toolCycle !== 'one-time' ? (
+-                    <Input
+-                      label="Ng├áy gia hß║ín tiß║┐p theo"
+-                      type="date"
+-                      value={toolRenewal}
+-                      onChange={(e) => setToolRenewal(e.target.value)}
+-                    />
+-                  ) : (
+-                    <div className="flex items-center text-[11px] text-emerald-600 font-bold bg-emerald-50 border border-emerald-100 p-2.5 rounded-xl h-11 self-end">
+-                      Thanh to├ín 1 lß║ºn (kh├┤ng cß║ºn gia hß║ín)
+-                    </div>
+-                  )}
+-                </div>
+-                <Textarea
+-                  label="Ghi ch├║ chi tiß║┐t (T├ái khoß║ún, link ─æ─âng k├╜, l├╜ do chß╗ìn...)"
+-                  placeholder="T├ái khoß║ún ─æ─âng nhß║¡p: user@example.com / link ─æ─âng k├╜..."
+-                  value={toolNote}
+-                  onChange={(e) => setToolNote(e.target.value)}
+-                  rows={3}
+-                />
+-              </div>
+-              <div className="px-6 py-4 bg-slate-50 border-t border-slate-150 flex justify-end gap-3 rounded-b-2xl">
+-                <Button type="button" variant="outline" size="sm" onClick={() => setIsToolModalOpen(false)}>
+-                  Hß╗ºy
+-                </Button>
+-                <Button type="submit" variant="primary" size="sm">
+-                  L╞░u lß║íi
+-                </Button>
+-              </div>
+-            </form>
+-          </div>
+-        </div>
+-      )}
+-
+-      {/* Dialog x├íc nhß║¡n x├│a chung */}
+-      <Dialog
+-        isOpen={deleteType !== null}
+-        onClose={() => {
+-          setDeleteType(null);
+-          setDeleteTargetId(null);
+-        }}
+-        onConfirm={handleDeleteConfirm}
+-        title="X├íc nhß║¡n x├│a dß╗» liß╗çu ΓÜá∩╕Å"
+-        description="H├ánh ─æß╗Öng n├áy sß║╜ x├│a v─⌐nh viß╗àn mß╗Ñc ─æ├ú chß╗ìn v├á kh├┤ng thß╗â kh├┤i phß╗Ñc lß║íi. Bß║ín c├│ chß║»c chß║»n muß╗æn tiß║┐p tß╗Ñc?"
+-        confirmText="X├│a dß╗» liß╗çu"
+-        cancelText="Hß╗ºy bß╗Å"
+-        isDanger={true}
+-        isLoading={deleting}
+-      />
+-      {/* TIMELINE NOTE CREATE/EDIT MODAL */}
+-      {isNoteModalOpen && (
+-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+-          <div className="w-full max-w-lg bg-white rounded-2xl shadow-xl overflow-hidden animate-scale-in">
+-            <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
+-              <h3 className="font-extrabold text-slate-800 text-base">
+-                {editingNote ? 'Chß╗ënh sß╗¡a ghi ch├║ y├¬u cß║ºu' : 'Th├¬m ghi ch├║ y├¬u cß║ºu kh├ích h├áng'} ≡ƒô¥
+-              </h3>
+-              <button
+-                type="button"
+-                onClick={() => setIsNoteModalOpen(false)}
+-                className="text-slate-400 hover:text-slate-600 font-bold text-lg focus:outline-none cursor-pointer"
+-              >
+-                Γ£ò
+-              </button>
+-            </div>
+-            <form onSubmit={handleSaveNote}>
+-              <div className="px-6 py-6 space-y-4 max-h-[60vh] overflow-y-auto">
+-                <Input
+-                  label="Ti├¬u ─æß╗ü y├¬u cß║ºu *"
+-                  placeholder="V├¡ dß╗Ñ: Gß╗¡i t├ái liß╗çu API, Y├¬u cß║ºu ─æß╗òi m├áu sß║»c giao diß╗çn..."
+-                  value={noteTitle}
+-                  onChange={(e) => setNoteTitle(e.target.value)}
+-                  required
+-                />
+-                <Input
+-                  label="Thß╗¥i gian mß╗æc y├¬u cß║ºu"
+-                  type="date"
+-                  value={noteDate}
+-                  onChange={(e) => setNoteDate(e.target.value)}
+-                  required
+-                />
+-                
+-                <div className="space-y-2 border-t border-slate-100 pt-3">
+-                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block">
+-                    Danh s├ích li├¬n kß║┐t ─æ├¡nh k├¿m (Figma, Drive, Trello...)
+-                  </label>
+-                  <div className="space-y-2">
+-                    {noteLinks.map((lnk, lIdx) => (
+-                      <div key={lIdx} className="flex gap-2 items-center">
+-                        <Input
+-                          placeholder="T├¬n hiß╗ân thß╗ï (v├¡ dß╗Ñ: Figma, Trello...)"
+-                          value={lnk.label}
+-                          onChange={(e) => {
+-                            const newLinks = [...noteLinks];
+-                            newLinks[lIdx].label = e.target.value;
+-                            setNoteLinks(newLinks);
+-                          }}
+-                          className="flex-1"
+-                        />
+-                        <Input
+-                          placeholder="─É╞░ß╗¥ng dß║½n URL (https://...)"
+-                          value={lnk.url}
+-                          onChange={(e) => {
+-                            const newLinks = [...noteLinks];
+-                            newLinks[lIdx].url = e.target.value;
+-                            setNoteLinks(newLinks);
+-                          }}
+-                          className="flex-2"
+-                        />
+-                        <button
+-                          type="button"
+-                          onClick={() => {
+-                            setNoteLinks(noteLinks.filter((_, i) => i !== lIdx));
+-                          }}
+-                          disabled={noteLinks.length === 1}
+-                          className="p-2 text-slate-400 hover:text-red-500 disabled:opacity-30 disabled:hover:text-slate-400 cursor-pointer shrink-0"
+-                          title="X├│a li├¬n kß║┐t"
+-                        >
+-                          <Trash2 className="w-4 h-4" />
+-                        </button>
+-                      </div>
+-                    ))}
+-                  </div>
+-                  <Button
+-                    type="button"
+-                    variant="outline"
+-                    size="xs"
+-                    onClick={() => setNoteLinks([...noteLinks, { label: '', url: '' }])}
+-                    className="mt-1 flex items-center gap-1 py-1.5 cursor-pointer"
+-                  >
+-                    <Plus className="w-3.5 h-3.5" />
+-                    <span>Th├¬m li├¬n kß║┐t</span>
+-                  </Button>
+-                </div>
+-
+-                <div className="border-t border-slate-100 pt-3">
+-                  <Textarea
+-                    label="Nß╗Öi dung y├¬u cß║ºu / Phß║ún hß╗ôi chi tiß║┐t"
+-                    placeholder="M├┤ tß║ú cß╗Ñ thß╗â nß╗Öi dung kh├ích h├áng gß╗¡i hoß║╖c y├¬u cß║ºu..."
+-                    value={noteContent}
+-                    onChange={(e) => setNoteContent(e.target.value)}
+-                    rows={8}
+-                  />
+-                </div>
+-              </div>
+-              <div className="px-6 py-4 bg-slate-50 border-t border-slate-150 flex justify-end gap-3 rounded-b-2xl">
+-                <Button
+-                  type="button"
+-                  variant="outline"
+-                  size="sm"
+-                  onClick={() => setIsNoteModalOpen(false)}
+-                  disabled={savingNote}
+-                >
+-                  Hß╗ºy bß╗Å
+-                </Button>
+-                <Button type="submit" variant="primary" size="sm" loading={savingNote} className="cursor-pointer">
+-                  L╞░u lß║íi
+-                </Button>
+-              </div>
+-            </form>
+-          </div>
+-        </div>
+-      )}
+-
+-      {/* DELETE NOTE CONFIRM DIALOG */}
+-      <Dialog
+-        isOpen={!!deleteNoteId}
+-        onClose={() => setDeleteNoteId(null)}
+-        title="X├íc nhß║¡n x├│a ghi ch├║ y├¬u cß║ºu ΓÜá∩╕Å"
+-        description="Bß║ín c├│ chß║»c chß║»n muß╗æn x├│a ghi ch├║ timeline n├áy kh├┤ng? H├ánh ─æß╗Öng n├áy kh├┤ng thß╗â ho├án t├íc."
+-        confirmText="X├│a ghi ch├║"
+-        cancelText="Hß╗ºy bß╗Å"
+-        isDanger={true}
+-        onConfirm={handleDeleteNote}
+         isLoading={deletingNote}
+       />
+     </div>

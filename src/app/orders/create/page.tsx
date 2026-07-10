@@ -25,7 +25,7 @@ interface Product {
 interface Customer {
   id: string;
   name: string;
-  phone: string;
+  phone: string | null;
   facebook: string | null;
   zalo: string | null;
   email: string | null;
@@ -118,7 +118,7 @@ function OrderCreateForm() {
     if (!customerSearch.trim()) return customers.slice(0, 8);
     const q = customerSearch.toLowerCase();
     return customers.filter(c =>
-      c.name.toLowerCase().includes(q) || c.phone.includes(q)
+      (c.name || '').toLowerCase().includes(q) || (c.phone || '').includes(q)
     ).slice(0, 8);
   }, [customers, customerSearch]);
 
@@ -126,7 +126,7 @@ function OrderCreateForm() {
     setSelectedCustomer(c);
     setCustomerSearch(c.name);
     setCustomerName(c.name);
-    setCustomerPhone(c.phone);
+    setCustomerPhone(c.phone || '');
     setCustomerFacebook(c.facebook || '');
     setCustomerZalo(c.zalo || '');
     setCustomerEmail(c.email || '');
@@ -148,7 +148,7 @@ function OrderCreateForm() {
   // Lookup matching customer as they type phone number in new mode
   const matchingCustomer = useMemo(() => {
     if (customerMode !== 'new' || customerPhone.length < 8) return null;
-    return customers.find((c) => c.phone.trim() === customerPhone.trim()) || null;
+    return customers.find((c) => (c.phone || '').trim() === customerPhone.trim()) || null;
   }, [customers, customerPhone, customerMode]);
 
   // Autofill old customer info
@@ -593,20 +593,6 @@ function OrderCreateForm() {
             </CardContent>
           </Card>
 
-          {/* Section 3: Order notes */}
-          <Card>
-            <CardHeader className="py-5">
-              <CardTitle>Ghi chú đơn hàng</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <Textarea
-                placeholder="Nhập ghi chú hoặc yêu cầu đặc biệt về đơn hàng (khách hàng có thể xem)..."
-                value={note}
-                onChange={(e) => setNote(e.target.value)}
-                rows={3}
-              />
-            </CardContent>
-          </Card>
         </div>
 
         {/* Right: Date & Billing */}

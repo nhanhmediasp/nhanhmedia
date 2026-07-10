@@ -29,7 +29,7 @@ interface Product {
   variants: Variant[];
 }
 interface Customer {
-  id: string; name: string; phone: string;
+  id: string; name: string; phone: string | null;
   facebook: string | null; zalo: string | null; email: string | null;
 }
 
@@ -122,7 +122,7 @@ function AdminOrderCreateForm() {
     if (!customerSearch.trim()) return customers.slice(0, 8);
     const q = customerSearch.toLowerCase();
     return customers.filter(c =>
-      c.name.toLowerCase().includes(q) || c.phone.includes(q)
+      (c.name || '').toLowerCase().includes(q) || (c.phone || '').includes(q)
     ).slice(0, 8);
   }, [customers, customerSearch]);
 
@@ -130,7 +130,7 @@ function AdminOrderCreateForm() {
     setSelectedCustomer(c);
     setCustomerSearch(c.name);
     setCustomerName(c.name);
-    setCustomerPhone(c.phone);
+    setCustomerPhone(c.phone || '');
     setCustomerFacebook(c.facebook || '');
     setCustomerZalo(c.zalo || '');
     setCustomerEmail(c.email || '');
@@ -147,7 +147,7 @@ function AdminOrderCreateForm() {
   /* ── autofill (new mode) ── */
   const matchingCustomer = useMemo(() => {
     if (customerMode !== 'new' || customerPhone.length < 8) return null;
-    return customers.find(c => c.phone.trim() === customerPhone.trim()) ?? null;
+    return customers.find(c => (c.phone || '').trim() === customerPhone.trim()) ?? null;
   }, [customers, customerPhone, customerMode]);
 
   const handleAutofill = () => {
@@ -580,9 +580,6 @@ function AdminOrderCreateForm() {
               <CardTitle>Ghi chú &amp; Thông tin tài khoản</CardTitle>
             </CardHeader>
             <CardContent className="space-y-5">
-              <Textarea label="Ghi chú đơn hàng (Khách có thể xem)"
-                placeholder="Nhập nội dung ghi chú đơn hàng..."
-                value={note} onChange={e => setNote(e.target.value)} rows={3} />
               <Textarea label="Ghi chú nội bộ (Chỉ quản trị viên xem)"
                 placeholder="Nhập ghi chú kỹ thuật, trạng thái thanh toán nội bộ..."
                 value={internalNote} onChange={e => setInternalNote(e.target.value)} rows={3} />

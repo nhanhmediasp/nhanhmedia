@@ -12,7 +12,7 @@ Hệ thống được phát triển bằng **Next.js (App Router)**, **TypeScrip
 Hệ thống này **chỉ dành cho Quản lý (Admin/Staff)** đăng nhập để vận hành công việc, không có cổng đăng ký công cộng cho khách hàng hay CTV bên ngoài.
 
 Hãy thực hiện dự án theo các thông số chi tiết dưới đây:
-
+a
 ---
 
 ## 🚀 1. CÔNG NGHỆ & THƯ VIỆN SỬ DỤNG

@@ -46,6 +46,7 @@ interface ProjectItem {
   status: string;
   progress: number;
   totalCost: number;
+  budget: number;
   categoryId: string | null;
   category: { id: string; name: string; icon: string | null; color: string | null } | null;
   customerId: string | null;
@@ -274,37 +275,6 @@ export default function ProjectsListPage() {
         </Button>
       </PageHeader>
 
-      {/* Stats row */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
-        <StatCard
-          title="Tổng số dự án"
-          value={totalCount}
-          description="Dự án trong toàn bộ hệ thống"
-          icon={<Briefcase className="w-6 h-6" />}
-          iconColor="primary"
-        />
-        <StatCard
-          title="Dự án Đang chạy"
-          value={runningCount}
-          description="Đang trong quá trình thực hiện"
-          icon={<Calendar className="w-6 h-6" />}
-          iconColor="success"
-        />
-        <StatCard
-          title="Tổng chi phí"
-          value={formatVND(totalCostSum)}
-          description="Gồm phí Website và Công cụ"
-          icon={<DollarSign className="w-6 h-6" />}
-          iconColor="warning"
-        />
-        <StatCard
-          title="Tiến độ trung bình"
-          value={`${avgProgressRunning}%`}
-          description="Tính trên các dự án đang chạy"
-          icon={<TrendingUp className="w-6 h-6" />}
-          iconColor="info"
-        />
-      </div>
 
       {/* Search & Filters row */}
       <div
@@ -501,11 +471,23 @@ export default function ProjectsListPage() {
                 </CardContent>
               </div>
 
-              <div className="px-7 py-4 bg-slate-50 rounded-b-2xl border-t border-slate-100 flex items-center justify-between">
-                <div className="flex flex-col">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Tổng chi phí</span>
-                  <span className="text-sm font-black text-rose-600 dark:text-rose-450">{formatVND(p.totalCost)}</span>
+              <div className="px-5 py-4 bg-slate-50 rounded-b-2xl border-t border-slate-100 flex items-center justify-between">
+                <div className="flex flex-col gap-1.5 w-full">
+                  <div className="flex items-center justify-between w-full">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Ngân sách:</span>
+                    <span className="text-sm font-black text-slate-700">{formatVND(p.budget || 0)}</span>
+                  </div>
+                  <div className="flex items-center justify-between w-full">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Tổng chi phí:</span>
+                    <span className="text-sm font-black text-rose-600 dark:text-rose-450">{formatVND(p.totalCost)}</span>
+                  </div>
+                  <div className="flex items-center justify-between w-full pt-1.5 border-t border-slate-200/60">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Lợi nhuận:</span>
+                    <span className="text-sm font-black text-green-600 dark:text-green-500">{formatVND((p.budget || 0) - p.totalCost)}</span>
+                  </div>
                 </div>
+              </div>
+              <div className="px-5 pb-4 bg-slate-50 flex items-center justify-end">
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => handleOpenEditModal(p)}
@@ -544,7 +526,9 @@ export default function ProjectsListPage() {
                 <th className="px-6 py-4">Thời gian</th>
                 <th className="px-6 py-4">Trạng thái</th>
                 <th className="px-6 py-4">Tiến độ</th>
+                <th className="px-6 py-4">Ngân sách</th>
                 <th className="px-6 py-4">Tổng chi phí</th>
+                <th className="px-6 py-4">Lợi nhuận</th>
                 <th className="px-6 py-4 text-right">Thao tác</th>
               </tr>
             </thead>
@@ -609,8 +593,14 @@ export default function ProjectsListPage() {
                       </div>
                     </div>
                   </td>
+                  <td className="px-6 py-4 font-extrabold text-slate-700">
+                    {formatVND(p.budget || 0)}
+                  </td>
                   <td className="px-6 py-4 font-extrabold text-rose-600">
                     {formatVND(p.totalCost)}
+                  </td>
+                  <td className="px-6 py-4 font-extrabold text-green-600">
+                    {formatVND((p.budget || 0) - p.totalCost)}
                   </td>
                   <td className="px-6 py-4 text-right">
                     <div className="flex items-center justify-end gap-1.5">

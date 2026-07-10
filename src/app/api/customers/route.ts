@@ -13,52 +13,73 @@ export async function GET(req: Request) {
 
     const isAdmin = role === 'admin';
 
-    // Query customers and aggregates in parallel
-    const [customers, orderStats] = await Promise.all([
-      prisma.customer.findMany({
-        where: isAdmin ? {} : { createdByUserId: userId },
-        select: {
-          id: true,
-          name: true,
-          phone: true,
-          facebook: true,
-          zalo: true,
-          email: true,
-          createdByUserId: true,
-          note: true,
-          createdAt: true,
-          createdByUser: {
-            select: { name: true, role: true },
-          },
+    const customers = await prisma.customer.findMany({
+      where: isAdmin ? {} : { createdByUserId: userId },
+      select: {
+        id: true,
+        name: true,
+        phone: true,
+        facebook: true,
+        zalo: true,
+        email: true,
+        createdByUserId: true,
+        note: true,
+        source: true,
+        manualRating: true,
+        internalNotes: true,
+        createdAt: true,
+        createdByUser: {
+          select: { name: true, role: true },
         },
-        orderBy: { createdAt: 'desc' },
-      }),
-      prisma.$queryRaw<{ customerId: string; orderCount: number; totalSpent: number }[]>`
-        SELECT 
-          "customer_id" as "customerId",
-          COUNT(*)::int as "orderCount",
-          COALESCE(SUM(COALESCE(custom_price, price)), 0)::float as "totalSpent"
-        FROM orders
-        GROUP BY "customer_id"
-      `,
-    ]);
+        orders: {
+          select: {
+            price: true,
+            customPrice: true,
+            amountPaid: true,
+            refundAmount: true,
+            status: true,
+          }
+        }
+      },
+      orderBy: { createdAt: 'desc' },
+    });
 
-    // Build map for fast matching
-    const statsMap = new Map<string, { orderCount: number; totalSpent: number }>();
-    if (Array.isArray(orderStats)) {
-      orderStats.forEach((stat) => {
-        if (stat.customerId) {
-          statsMap.set(stat.customerId, {
-            orderCount: Number(stat.orderCount) || 0,
-            totalSpent: Number(stat.totalSpent) || 0,
-          });
+    const formattedCustomers = customers.map((c) => {
+      const orderCount = c.orders.length;
+      let totalSpent = 0;
+      let totalPaid = 0;
+      let totalDebt = 0;
+      let cancelledCount = 0;
+      let refundedCount = 0;
+
+      c.orders.forEach((o) => {
+        const orderPrice = o.customPrice !== null ? o.customPrice : o.price;
+        totalSpent += orderPrice;
+        totalPaid += o.amountPaid;
+        totalDebt += Math.max(0, orderPrice - o.amountPaid);
+        if (o.status === 'cancelled') {
+          cancelledCount++;
+        }
+        if (o.refundAmount && o.refundAmount > 0) {
+          refundedCount++;
         }
       });
-    }
 
-    // Format output with computed aggregates (total spent, order count)
-    const formattedCustomers = customers.map((c) => {
-      const stat = statsMap.get(c.id) || { orderCount: 0, totalSpent: 0 };
+      // auto rating logic
+      let rating = 4;
+      const cancelRate = orderCount > 0 ? (cancelledCount / orderCount) : 0;
+      if (cancelRate > 0.2) rating -= 1;
+      if (totalDebt > 0) rating -= 1;
+      if (totalPaid > 20000000) rating += 1;
+      rating = Math.max(1, Math.min(5, rating));
+
+      // vipStatus
+      let vipStatus = 'standard';
+      if (totalPaid > 20000000) {
+        vipStatus = 'vip';
+      } else if (totalPaid > 5000000) {
+        vipStatus = 'loyal';
+      }
 
       return {
         id: c.id,
@@ -71,9 +92,18 @@ export async function GET(req: Request) {
         createdByName: c.createdByUser.name,
         createdByRole: c.createdByUser.role,
         note: c.note,
+        source: c.source,
+        manualRating: c.manualRating,
+        internalNotes: c.internalNotes,
         createdAt: c.createdAt,
-        orderCount: stat.orderCount,
-        totalSpent: stat.totalSpent,
+        orderCount,
+        totalSpent,
+        totalPaid,
+        totalDebt,
+        cancelledCount,
+        refundedCount,
+        autoRating: rating,
+        vipStatus,
       };
     });
 
@@ -91,7 +121,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Chưa đăng nhập.' }, { status: 401 });
     }
 
-    const { name, phone, facebook, zalo, email, note } = await req.json();
+    const { name, phone, facebook, zalo, email, note, source, manualRating, internalNotes } = await req.json();
 
     if (!name) {
       return NextResponse.json({ error: 'Họ tên là bắt buộc.' }, { status: 400 });
@@ -134,6 +164,9 @@ export async function POST(req: Request) {
         email: email ? email.trim() : null,
         createdByUserId: userId,
         note: note ? note.trim() : null,
+        source: source ? source.trim() : null,
+        manualRating: manualRating ? Number(manualRating) : null,
+        internalNotes: internalNotes ? internalNotes.trim() : null,
       },
     });
 
@@ -152,7 +185,10 @@ export async function POST(req: Request) {
         facebook: newCustomer.facebook,
         zalo: newCustomer.zalo,
         email: newCustomer.email,
-        note: newCustomer.note
+        note: newCustomer.note,
+        source: newCustomer.source,
+        manualRating: newCustomer.manualRating,
+        internalNotes: newCustomer.internalNotes,
       },
       request: req,
       status: 'success'

@@ -29,7 +29,48 @@ export async function GET(
       return NextResponse.json({ error: 'Nguồn hàng không tồn tại.' }, { status: 404 });
     }
 
-    return NextResponse.json({ supplier });
+    let totalRevenue = 0;
+    let totalCost = 0;
+    let cancelledCount = 0;
+    let totalRefundAmount = 0;
+    const orderCount = supplier.orders.length;
+
+    supplier.orders.forEach(o => {
+      totalRevenue += (o.customPrice !== null ? o.customPrice : o.price);
+      totalCost += (o.importPrice || 0);
+      if (o.status === 'cancelled') {
+        cancelledCount++;
+      }
+      totalRefundAmount += (o.refundAmount || 0);
+    });
+
+    let rating = 4;
+    if (orderCount > 0) {
+      const cancelRate = cancelledCount / orderCount;
+      if (cancelRate > 0.3) {
+        rating -= 2;
+      } else if (cancelRate > 0.1) {
+        rating -= 1;
+      }
+      if (totalRefundAmount > totalRevenue * 0.2) {
+        rating -= 1;
+      }
+    }
+    if (orderCount >= 10 && cancelledCount === 0) {
+      rating += 1;
+    }
+    rating = Math.max(1, Math.min(5, rating));
+
+    const result = {
+      ...supplier,
+      totalRevenue,
+      totalCost,
+      cancelledCount,
+      totalRefundAmount,
+      autoRating: rating,
+    };
+
+    return NextResponse.json({ supplier: result });
   } catch (error) {
     console.error('Get supplier detail error:', error);
     return NextResponse.json({ error: 'Lỗi tải chi tiết nguồn hàng.' }, { status: 500 });
@@ -43,7 +84,7 @@ export async function PUT(
   try {
     const { id } = await params;
     const body = await req.json();
-    const { name, contactUrl, icon } = body;
+    const { name, contactUrl, icon, manualRating, internalNotes } = body;
 
     if (!name) {
       return NextResponse.json({ error: 'Tên nguồn hàng là bắt buộc.' }, { status: 400 });
@@ -73,7 +114,9 @@ export async function PUT(
       data: {
         name: name.trim(),
         contactUrl: contactUrl ? contactUrl.trim() : null,
-        icon: icon !== undefined ? (icon ? icon.trim() : null) : undefined
+        icon: icon !== undefined ? (icon ? icon.trim() : null) : undefined,
+        manualRating: manualRating !== undefined ? (manualRating ? Number(manualRating) : null) : undefined,
+        internalNotes: internalNotes !== undefined ? (internalNotes ? internalNotes.trim() : null) : undefined,
       }
     });
 

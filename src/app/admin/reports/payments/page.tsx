@@ -59,6 +59,7 @@ export default function AdminPaymentsReportPage() {
 
   const [fromDate, setFromDate] = useState(thirtyDaysAgoStr);
   const [toDate, setToDate] = useState(todayStr);
+  const [preset, setPreset] = useState('30days'); // 7days, 30days, lastMonth, custom
   const [matchedFilter, setMatchedFilter] = useState('all'); // all, matched, unmatched
   
   const [transactions, setTransactions] = useState<PaymentTransaction[]>([]);
@@ -105,6 +106,38 @@ export default function AdminPaymentsReportPage() {
     fetchReportData();
   }, [fromDate, toDate, matchedFilter]);
 
+  const handlePresetChange = (presetValue: string) => {
+    setPreset(presetValue);
+    const today = new Date();
+    const tzOffset = today.getTimezoneOffset() * 60000;
+
+    let newFrom = '';
+    let newTo = new Date(Date.now() - tzOffset).toISOString().substring(0, 10);
+
+    if (presetValue === '7days') {
+      newFrom = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000 - tzOffset).toISOString().substring(0, 10);
+      setFromDate(newFrom);
+      setToDate(newTo);
+    } else if (presetValue === '30days') {
+      newFrom = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000 - tzOffset).toISOString().substring(0, 10);
+      setFromDate(newFrom);
+      setToDate(newTo);
+    } else if (presetValue === 'lastMonth') {
+      const firstDayLastMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+      const lastDayLastMonth = new Date(today.getFullYear(), today.getMonth(), 0);
+      newFrom = new Date(firstDayLastMonth.getTime() - tzOffset).toISOString().substring(0, 10);
+      newTo = new Date(lastDayLastMonth.getTime() - tzOffset).toISOString().substring(0, 10);
+      setFromDate(newFrom);
+      setToDate(newTo);
+    }
+  };
+
+  const handleDateChange = (isFrom: boolean, val: string) => {
+    setPreset('custom');
+    if (isFrom) setFromDate(val);
+    else setToDate(val);
+  };
+
   const handleSort = (field: 'transactionAt' | 'amount') => {
     if (sortField === field) {
       setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
@@ -150,29 +183,66 @@ export default function AdminPaymentsReportPage() {
 
       {/* Filter Toolbar */}
       <Card>
-        <CardContent className="py-4 grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <Input
-            label="Từ ngày"
-            type="date"
-            value={fromDate}
-            onChange={(e) => setFromDate(e.target.value)}
-          />
-          <Input
-            label="Đến ngày"
-            type="date"
-            value={toDate}
-            onChange={(e) => setToDate(e.target.value)}
-          />
-          <Select
-            label="Trạng thái khớp đơn"
-            options={[
-              { value: 'all', label: 'Tất cả giao dịch' },
-              { value: 'matched', label: 'Đã khớp đơn hàng' },
-              { value: 'unmatched', label: 'Chưa khớp đơn hàng (Lỗi/Thừa)' },
-            ]}
-            value={matchedFilter}
-            onChange={(e) => setMatchedFilter(e.target.value)}
-          />
+        <CardContent className="py-4 space-y-4">
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant={preset === '7days' ? 'primary' : 'outline'}
+              size="sm"
+              onClick={() => handlePresetChange('7days')}
+              className="text-xs"
+            >
+              7 ngày qua
+            </Button>
+            <Button
+              variant={preset === '30days' ? 'primary' : 'outline'}
+              size="sm"
+              onClick={() => handlePresetChange('30days')}
+              className="text-xs"
+            >
+              30 ngày qua
+            </Button>
+            <Button
+              variant={preset === 'lastMonth' ? 'primary' : 'outline'}
+              size="sm"
+              onClick={() => handlePresetChange('lastMonth')}
+              className="text-xs"
+            >
+              1 tháng trước
+            </Button>
+            <Button
+              variant={preset === 'custom' ? 'primary' : 'outline'}
+              size="sm"
+              onClick={() => setPreset('custom')}
+              className="text-xs"
+            >
+              Tùy chỉnh
+            </Button>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <Input
+              label="Từ ngày"
+              type="date"
+              value={fromDate}
+              onChange={(e) => handleDateChange(true, e.target.value)}
+            />
+            <Input
+              label="Đến ngày"
+              type="date"
+              value={toDate}
+              onChange={(e) => handleDateChange(false, e.target.value)}
+            />
+            <Select
+              label="Trạng thái khớp đơn"
+              options={[
+                { value: 'all', label: 'Tất cả giao dịch' },
+                { value: 'matched', label: 'Đã khớp đơn hàng' },
+                { value: 'unmatched', label: 'Chưa khớp đơn hàng (Lỗi/Thừa)' },
+              ]}
+              value={matchedFilter}
+              onChange={(e) => setMatchedFilter(e.target.value)}
+            />
+          </div>
         </CardContent>
       </Card>
 

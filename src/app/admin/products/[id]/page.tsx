@@ -150,7 +150,7 @@ export default function ProductStatsDetailPage({ params }: { params: Promise<{ i
     const matchesSearch =
       o.orderCode.toLowerCase().includes(searchTerm.toLowerCase()) ||
       o.customer.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      o.customer.phone.includes(searchTerm);
+      (o.customer.phone || '').includes(searchTerm);
 
     const matchesStatus = statusFilter === '' || o.status === statusFilter;
 

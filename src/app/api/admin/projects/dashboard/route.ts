@@ -10,6 +10,11 @@ export async function GET(req: Request) {
     const startDate = startDateStr ? new Date(startDateStr) : null;
     const endDate = endDateStr ? new Date(endDateStr) : null;
 
+    const prevStartDateStr = searchParams.get('prevStartDate');
+    const prevEndDateStr = searchParams.get('prevEndDate');
+    const prevStartDate = prevStartDateStr ? new Date(prevStartDateStr) : null;
+    const prevEndDate = prevEndDateStr ? new Date(prevEndDateStr) : null;
+
     // Build date filters for relations
     // WebsiteCost has a 'date' field
     const websiteCostDateFilter: any = {};
@@ -44,6 +49,7 @@ export async function GET(req: Request) {
         toolCosts: {
           where: startDate || endDate ? { createdAt: toolCostDateFilter } : {},
         },
+        customer: true,
       },
     });
 
@@ -59,15 +65,26 @@ export async function GET(req: Request) {
       else if (p.status === 'paused') statusCounts.paused++;
     });
 
-    // 3. Cost calculations
+    // 3. Cost and Profit calculations
     let totalWebsiteCost = 0;
     let totalToolCost = 0;
+    let totalBudget = 0;
+
+    const customerBudgets: Record<string, { id: string, name: string, totalBudget: number }> = {};
 
     const costByProject = projects.map((p) => {
       const pWebsite = p.websiteCosts.reduce((sum, item) => sum + item.amount, 0);
       const pTool = p.toolCosts.reduce((sum, item) => sum + item.cost, 0);
       totalWebsiteCost += pWebsite;
       totalToolCost += pTool;
+      totalBudget += p.budget || 0;
+
+      if (p.customer) {
+        if (!customerBudgets[p.customer.id]) {
+          customerBudgets[p.customer.id] = { id: p.customer.id, name: p.customer.name, totalBudget: 0 };
+        }
+        customerBudgets[p.customer.id].totalBudget += (p.budget || 0);
+      }
 
       return {
         id: p.id,
@@ -75,10 +92,77 @@ export async function GET(req: Request) {
         websiteCost: pWebsite,
         toolCost: pTool,
         totalCost: pWebsite + pTool,
+        budget: p.budget || 0,
+        profit: (p.budget || 0) - (pWebsite + pTool),
       };
     });
 
     const totalCost = totalWebsiteCost + totalToolCost;
+    const totalProfit = totalBudget - totalCost;
+
+    let topCustomerByBudget = null;
+    let maxBudget = -1;
+    for (const cid in customerBudgets) {
+      if (customerBudgets[cid].totalBudget > maxBudget) {
+        maxBudget = customerBudgets[cid].totalBudget;
+        topCustomerByBudget = customerBudgets[cid];
+      }
+    }
+
+    const topCustomers = Object.values(customerBudgets)
+      .sort((a, b) => b.totalBudget - a.totalBudget)
+      .slice(0, 5);
+
+    // Top tools
+    const toolFreq: Record<string, { id: string, name: string, count: number, totalCost: number }> = {};
+    projects.forEach(p => {
+      p.toolCosts.forEach(tc => {
+        if (!toolFreq[tc.name]) toolFreq[tc.name] = { id: tc.name, name: tc.name, count: 0, totalCost: 0 };
+        toolFreq[tc.name].count += 1;
+        toolFreq[tc.name].totalCost += tc.cost;
+      });
+    });
+    const topTools = Object.values(toolFreq)
+      .sort((a, b) => b.count - a.count || b.totalCost - a.totalCost)
+      .slice(0, 5);
+
+    // Previous Stats Calculation
+    let prevTotalBudget = 0;
+    let prevTotalCost = 0;
+    let prevTotalProfit = 0;
+
+    if (prevStartDate || prevEndDate) {
+      const prevWebsiteCostDateFilter: any = {};
+      if (prevStartDate) prevWebsiteCostDateFilter.gte = prevStartDate;
+      if (prevEndDate) prevWebsiteCostDateFilter.lte = prevEndDate;
+
+      const prevToolCostDateFilter: any = {};
+      if (prevStartDate) prevToolCostDateFilter.gte = prevStartDate;
+      if (prevEndDate) prevToolCostDateFilter.lte = prevEndDate;
+
+      const prevProjectDateFilter: any = {};
+      if (prevStartDate) prevProjectDateFilter.startDate = { gte: prevStartDate };
+      if (prevEndDate) {
+        if (!prevProjectDateFilter.startDate) prevProjectDateFilter.startDate = {};
+        prevProjectDateFilter.startDate.lte = prevEndDate;
+      }
+
+      const prevProjects = await prisma.project.findMany({
+        where: prevStartDate || prevEndDate ? prevProjectDateFilter : {},
+        include: {
+          websiteCosts: { where: prevStartDate || prevEndDate ? { date: prevWebsiteCostDateFilter } : {} },
+          toolCosts: { where: prevStartDate || prevEndDate ? { createdAt: prevToolCostDateFilter } : {} },
+        },
+      });
+
+      prevProjects.forEach(p => {
+        const pWebsite = p.websiteCosts.reduce((sum, item) => sum + item.amount, 0);
+        const pTool = p.toolCosts.reduce((sum, item) => sum + item.cost, 0);
+        prevTotalBudget += p.budget || 0;
+        prevTotalCost += pWebsite + pTool;
+      });
+      prevTotalProfit = prevTotalBudget - prevTotalCost;
+    }
 
     // 4. Average progress of running projects
     const runningProjects = projects.filter((p) => p.status === 'running');
@@ -170,6 +254,12 @@ export async function GET(req: Request) {
         website: totalWebsiteCost,
         tools: totalToolCost,
       },
+      totalBudget,
+      totalProfit,
+      previousStats: { budget: prevTotalBudget, cost: prevTotalCost, profit: prevTotalProfit },
+      topCustomerByBudget,
+      topCustomers,
+      topTools,
       costByProject,
       avgProgress,
       overdueTasks,

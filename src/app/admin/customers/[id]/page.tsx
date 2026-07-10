@@ -42,11 +42,20 @@ interface CustomerDetail {
   zalo: string | null;
   email: string | null;
   note: string | null;
+  source: string | null;
+  manualRating: number | null;
+  internalNotes: string | null;
   createdAt: string;
   createdByUserId: string;
   createdByUser: { id: string; name: string; role: string };
   orderCount: number;
   totalSpent: number;
+  totalPaid: number;
+  totalDebt: number;
+  cancelledCount: number;
+  refundedCount: number;
+  autoRating: number;
+  vipStatus: string;
   orders: Order[];
 }
 
@@ -117,6 +126,8 @@ export default function AdminCustomerDetailPage({ params }: { params: Promise<{ 
       o.product.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  const effectiveRating = customer.manualRating || customer.autoRating || 4;
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -142,7 +153,11 @@ export default function AdminCustomerDetailPage({ params }: { params: Promise<{ 
                   {customer.name.charAt(0).toUpperCase()}
                 </div>
                 <div className="min-w-0 flex-1">
-                  <h2 className="text-base font-extrabold text-foreground truncate">{customer.name}</h2>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <h2 className="text-base font-extrabold text-foreground truncate">{customer.name}</h2>
+                    {customer.vipStatus === 'vip' && <Badge variant="success" className="scale-90 font-black">VIP 💎</Badge>}
+                    {customer.vipStatus === 'loyal' && <Badge variant="primary" className="scale-90">Thân thiết</Badge>}
+                  </div>
                   <div className="text-[11px] text-muted-foreground mt-0.5">Khách hàng hệ thống</div>
                 </div>
               </div>
@@ -153,6 +168,39 @@ export default function AdminCustomerDetailPage({ params }: { params: Promise<{ 
                     <Phone className="w-4 h-4 text-slate-400" /> SĐT:
                   </span>
                   <span className="font-semibold text-foreground">{customer.phone}</span>
+                </div>
+                {customer.source && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground font-medium flex items-center gap-1.5">
+                      <User className="w-4 h-4 text-slate-400" /> Nguồn khách:
+                    </span>
+                    <span className="px-1.5 py-0.5 text-xs font-bold uppercase rounded bg-indigo-50 text-indigo-600 border border-indigo-100">
+                      {customer.source}
+                    </span>
+                  </div>
+                )}
+                <div className="flex justify-between items-center">
+                  <span className="text-muted-foreground font-medium flex items-center gap-1.5">
+                    Uy tín:
+                  </span>
+                  <div className="flex items-center gap-0.5">
+                    {[...Array(5)].map((_, i) => {
+                      const starVal = i + 1;
+                      return (
+                        <span
+                          key={i}
+                          className={`text-base ${
+                            starVal <= effectiveRating ? 'text-amber-400 font-extrabold' : 'text-slate-200'
+                          }`}
+                        >
+                          ★
+                        </span>
+                      );
+                    })}
+                    <span className="text-[10px] text-slate-400 font-bold ml-1">
+                      ({customer.manualRating ? 'Admin' : 'Tự động'})
+                    </span>
+                  </div>
                 </div>
                 {customer.email && (
                   <div className="flex justify-between">
@@ -193,13 +241,21 @@ export default function AdminCustomerDetailPage({ params }: { params: Promise<{ 
                 <div className="pt-2.5 border-t border-border flex justify-between items-center text-xs">
                   <span className="text-muted-foreground font-medium">Người đăng ký khách:</span>
                   <div className="text-right">
-                    <div className="font-bold text-foreground">{customer.createdByUser.name}</div>
-                    <div className="mt-0.5"><RoleBadge role={customer.createdByUser.role} /></div>
+                    <div className="font-bold text-foreground">{customer.createdByUser?.name || 'Hệ thống'}</div>
+                    <div className="mt-0.5"><RoleBadge role={customer.createdByUser?.role || 'admin'} /></div>
                   </div>
                 </div>
+                {customer.internalNotes && (
+                  <div className="pt-3 border-t border-border">
+                    <span className="text-xs font-semibold text-rose-500 uppercase">Ghi chú uy tín nội bộ:</span>
+                    <p className="text-xs bg-rose-500/5 border border-rose-100 p-2.5 rounded-lg text-rose-600 dark:text-rose-450 mt-1">
+                      {customer.internalNotes}
+                    </p>
+                  </div>
+                )}
                 {customer.note && (
                   <div className="pt-3 border-t border-border">
-                    <span className="text-xs font-semibold text-muted-foreground uppercase">Ghi chú:</span>
+                    <span className="text-xs font-semibold text-muted-foreground uppercase">Ghi chú thêm:</span>
                     <p className="text-xs bg-muted/40 p-2.5 rounded-lg text-slate-600 dark:text-slate-350 mt-1">
                       {customer.note}
                     </p>
@@ -215,14 +271,27 @@ export default function AdminCustomerDetailPage({ params }: { params: Promise<{ 
               <h3 className="font-bold text-sm text-foreground uppercase tracking-wide">Thống kê chi tiêu</h3>
               <div className="grid grid-cols-2 gap-4">
                 <div className="bg-primary/5 border border-primary/10 p-3 rounded-xl col-span-2">
-                  <div className="text-[10px] font-bold text-muted-foreground uppercase">Tổng tiền đã chi tiêu</div>
+                  <div className="text-[10px] font-bold text-muted-foreground uppercase">Tổng tiền đơn hàng (Ngân sách)</div>
                   <div className="text-lg font-black text-primary mt-1">{formatVND(customer.totalSpent)}</div>
                 </div>
+                <div className="bg-emerald-500/5 border border-emerald-500/10 p-3 rounded-xl col-span-2">
+                  <div className="text-[10px] font-bold text-muted-foreground uppercase">Tổng tiền đã trả</div>
+                  <div className="text-base font-black text-emerald-500 mt-1">{formatVND(customer.totalPaid || 0)}</div>
+                </div>
+                {customer.totalDebt > 0 && (
+                  <div className="bg-rose-500/5 border border-rose-500/10 p-3 rounded-xl col-span-2 animate-pulse">
+                    <div className="text-[10px] font-bold text-rose-500 uppercase">Tổng nợ chưa thanh toán 💸</div>
+                    <div className="text-base font-black text-rose-600 mt-1">{formatVND(customer.totalDebt)}</div>
+                  </div>
+                )}
                 <div className="bg-blue-500/5 border border-blue-500/10 p-3 rounded-xl col-span-2">
                   <div className="text-[10px] font-bold text-muted-foreground uppercase">Số lượng đơn hàng đã mua</div>
                   <div className="text-base font-black text-blue-500 mt-1 flex items-center gap-1.5">
                     <FileText className="w-4.5 h-4.5 shrink-0" />
                     <span>{customer.orderCount} đơn hàng</span>
+                    {customer.cancelledCount > 0 && (
+                      <span className="text-xs font-medium text-slate-400">({customer.cancelledCount} hủy)</span>
+                    )}
                   </div>
                 </div>
               </div>

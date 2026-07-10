@@ -28,6 +28,11 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       return NextResponse.json({ error: 'Không tìm thấy khách hàng dự án.' }, { status: 404 });
     }
 
+    let totalSpent = 0;
+    let totalBudget = 0;
+    let totalPaid = 0;
+    let completedProjects = 0;
+
     // Format projects to calculate cost & progress
     const formattedProjects = customer.projects.map((p) => {
       const totalTasks = p.tasks.length;
@@ -43,6 +48,13 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       const totalToolCost = p.toolCosts.reduce((sum, item) => sum + item.cost, 0);
       const totalCost = totalWebsiteCost + totalToolCost;
 
+      totalSpent += totalCost;
+      totalBudget += p.budget || 0;
+      totalPaid += p.amountReceived || 0;
+      if (p.status === 'completed') {
+        completedProjects++;
+      }
+
       return {
         id: p.id,
         name: p.name,
@@ -54,9 +66,32 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       };
     });
 
+    const totalDebt = Math.max(0, totalBudget - totalPaid);
+
+    // auto rating logic
+    let rating = 4;
+    if (totalDebt > 0) rating -= 1;
+    if (totalDebt > 0 && completedProjects > 0) rating -= 1;
+    if (totalPaid > 50000000) rating += 1;
+    rating = Math.max(1, Math.min(5, rating));
+
+    // vipStatus
+    let vipStatus = 'standard';
+    if (totalPaid > 50000000) {
+      vipStatus = 'vip';
+    } else if (totalPaid > 15000000) {
+      vipStatus = 'loyal';
+    }
+
     const result = {
       ...customer,
       projects: formattedProjects,
+      totalSpent,
+      totalBudget,
+      totalPaid,
+      totalDebt,
+      autoRating: rating,
+      vipStatus,
     };
 
     return NextResponse.json({ customer: result });
@@ -75,7 +110,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
 
   try {
     const body = await req.json();
-    const { name, phone, zalo, facebook, email, note, avatarUrl } = body;
+    const { name, phone, zalo, facebook, email, note, avatarUrl, source, manualRating, internalNotes } = body;
 
     if (!name || !name.trim()) {
       return NextResponse.json({ error: 'Tên khách hàng là bắt buộc.' }, { status: 400 });
@@ -96,6 +131,9 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
         email: email ? email.trim() : null,
         note: note ? note.trim() : null,
         avatarUrl: avatarUrl ? avatarUrl.trim() : null,
+        source: source ? source.trim() : null,
+        manualRating: manualRating ? Number(manualRating) : null,
+        internalNotes: internalNotes ? internalNotes.trim() : null,
       },
     });
 

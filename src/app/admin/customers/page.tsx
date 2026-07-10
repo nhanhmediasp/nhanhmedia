@@ -8,7 +8,7 @@ import { Search, Plus, Edit2, Trash2, UserCheck, MessageSquare, Phone, Facebook,
 interface Customer {
   id: string;
   name: string;
-  phone: string;
+  phone: string | null;
   facebook: string | null;
   zalo: string | null;
   email: string | null;
@@ -16,9 +16,18 @@ interface Customer {
   createdByName: string;
   createdByRole: string;
   note: string | null;
+  source: string | null;
+  manualRating: number | null;
+  internalNotes: string | null;
   createdAt: string;
   orderCount: number;
   totalSpent: number;
+  totalPaid: number;
+  totalDebt: number;
+  cancelledCount: number;
+  refundedCount: number;
+  autoRating: number;
+  vipStatus: string;
 }
 
 type SortField = 'name' | 'orderCount' | 'totalSpent';
@@ -58,6 +67,7 @@ export default function AdminCustomersPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [creatorFilter, setCreatorFilter] = useState('');
   const [purchaseFilter, setPurchaseFilter] = useState('');
+  const [reputationFilter, setReputationFilter] = useState('');
   const [loading, setLoading] = useState(true);
 
   // Sort state
@@ -77,6 +87,9 @@ export default function AdminCustomersPage() {
   const [zalo, setZalo] = useState('');
   const [email, setEmail] = useState('');
   const [note, setNote] = useState('');
+  const [source, setSource] = useState('');
+  const [manualRating, setManualRating] = useState('');
+  const [internalNotes, setInternalNotes] = useState('');
   const [saving, setSaving] = useState(false);
 
   // Delete state
@@ -176,17 +189,23 @@ export default function AdminCustomersPage() {
     setZalo('');
     setEmail('');
     setNote('');
+    setSource('');
+    setManualRating('');
+    setInternalNotes('');
     setIsOpen(true);
   };
 
   const openEditModal = (c: Customer) => {
     setEditId(c.id);
     setName(c.name);
-    setPhone(c.phone);
+    setPhone(c.phone || '');
     setFacebook(c.facebook || '');
     setZalo(c.zalo || '');
     setEmail(c.email || '');
     setNote(c.note || '');
+    setSource(c.source || '');
+    setManualRating(c.manualRating ? String(c.manualRating) : '');
+    setInternalNotes(c.internalNotes || '');
     setIsOpen(true);
   };
 
@@ -205,7 +224,17 @@ export default function AdminCustomersPage() {
       const res = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, phone, facebook, zalo, email, note }),
+        body: JSON.stringify({ 
+          name, 
+          phone, 
+          facebook, 
+          zalo, 
+          email, 
+          note, 
+          source: source || null, 
+          manualRating: manualRating ? Number(manualRating) : null, 
+          internalNotes: internalNotes || null 
+        }),
       });
 
       const data = await res.json();
@@ -264,7 +293,7 @@ export default function AdminCustomersPage() {
   const filteredCustomers = customers.filter((c) => {
     const matchesSearch =
       c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      c.phone.includes(searchTerm) ||
+      (c.phone || '').includes(searchTerm) ||
       (c.email && c.email.toLowerCase().includes(searchTerm.toLowerCase()));
 
     const matchesCreator = creatorFilter === '' || c.createdByUserId === creatorFilter;
@@ -276,7 +305,16 @@ export default function AdminCustomersPage() {
       matchesPurchase = c.orderCount === 0;
     }
 
-    return matchesSearch && matchesCreator && matchesPurchase;
+    let matchesReputation = true;
+    if (reputationFilter === 'vip') {
+      matchesReputation = c.vipStatus === 'vip';
+    } else if (reputationFilter === 'debt') {
+      matchesReputation = c.totalDebt > 0;
+    } else if (reputationFilter === 'risk') {
+      matchesReputation = c.cancelledCount > 2 || (c.orderCount > 0 && (c.cancelledCount / c.orderCount) > 0.2);
+    }
+
+    return matchesSearch && matchesCreator && matchesPurchase && matchesReputation;
   });
 
   const sortedCustomers = [...filteredCustomers].sort((a, b) => {
@@ -293,7 +331,7 @@ export default function AdminCustomersPage() {
   // Reset page when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, creatorFilter, purchaseFilter]);
+  }, [searchTerm, creatorFilter, purchaseFilter, reputationFilter]);
 
   const totalPages = Math.ceil(sortedCustomers.length / PAGE_SIZE);
   const paginatedCustomers = sortedCustomers.slice(
@@ -306,7 +344,7 @@ export default function AdminCustomersPage() {
       {/* Header */}
       <PageHeader
         title="Quản lý Khách hàng"
-        description="Xem toàn bộ thông tin khách hàng, số điện thoại, chi tiêu và lịch sử liên hệ."
+        description="Xem toàn bộ thông tin khách hàng, số điện thoại, đánh giá uy tín và nợ nần."
       >
         <Button onClick={openAddModal} className="flex items-center gap-2 cursor-pointer">
           <Plus className="w-4 h-4" />
@@ -318,13 +356,13 @@ export default function AdminCustomersPage() {
       <Card>
         <CardContent className="py-5">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-5">
-            <div className="md:col-span-2 relative">
+            <div className="md:col-span-1 relative">
               <span className="absolute left-3 top-3.5 text-slate-400">
                 <Search className="w-4.5 h-4.5" />
               </span>
               <input
                 type="text"
-                placeholder="Tìm kiếm khách hàng theo tên, số điện thoại hoặc email..."
+                placeholder="Tìm kiếm khách hàng..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full pl-10 pr-4 py-2.5 text-sm bg-input border border-border rounded-xl text-foreground placeholder-slate-400 focus:outline-none focus:border-primary focus:ring-2 focus:ring-ring transition-all duration-200"
@@ -355,6 +393,19 @@ export default function AdminCustomersPage() {
                 <option value="">Tình trạng mua hàng</option>
                 <option value="purchased">Đã mua hàng</option>
                 <option value="not_purchased">Chưa mua hàng</option>
+              </select>
+            </div>
+
+            <div>
+              <select
+                value={reputationFilter}
+                onChange={(e) => setReputationFilter(e.target.value)}
+                className="w-full px-3 py-2.5 text-sm bg-input border border-border rounded-xl text-foreground focus:outline-none focus:border-primary focus:ring-2 focus:ring-ring cursor-pointer"
+              >
+                <option value="">Đánh giá & Uy tín</option>
+                <option value="vip">Khách hàng VIP 💎</option>
+                <option value="debt">Khách hàng đang nợ 💸</option>
+                <option value="risk">Rủi ro hủy đơn cao ⚠️</option>
               </select>
             </div>
           </div>
@@ -389,7 +440,8 @@ export default function AdminCustomersPage() {
                     />
                   </th>
                   <SortableHeader label="Khách hàng" field="name" currentField={sortField} currentDirection={sortDirection} onSort={handleSort} />
-                  <th className="px-6 py-5">Liên lạc</th>
+                  <th className="px-6 py-5">Liên lạc / Nguồn</th>
+                  <th className="px-6 py-5">Đánh giá & Uy tín</th>
                   <th className="px-6 py-5">Phụ trách bởi</th>
                   <SortableHeader label="Đơn hàng" field="orderCount" currentField={sortField} currentDirection={sortDirection} onSort={handleSort} className="text-center" />
                   <SortableHeader label="Tổng chi tiêu" field="totalSpent" currentField={sortField} currentDirection={sortDirection} onSort={handleSort} className="text-right" />
@@ -397,7 +449,7 @@ export default function AdminCustomersPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-border bg-card">
-                {paginatedCustomers.map((c, idx) => (
+                {paginatedCustomers.map((c) => (
                   <tr key={c.id} className="hover:bg-muted/20 transition-colors">
                     <td className="px-4 py-5 text-center">
                       <input
@@ -408,7 +460,13 @@ export default function AdminCustomersPage() {
                       />
                     </td>
                     <td className="px-6 py-5">
-                      <div className="font-bold text-foreground">{c.name}</div>
+                      <div className="font-bold text-foreground flex items-center gap-1.5 flex-wrap">
+                        <span>{c.name}</span>
+                        {c.vipStatus === 'vip' && <Badge variant="success" className="scale-90 font-black">VIP 💎</Badge>}
+                        {c.vipStatus === 'loyal' && <Badge variant="primary" className="scale-90 font-extrabold">Thân thiết</Badge>}
+                        {c.totalDebt > 0 && <Badge variant="danger" className="scale-90 animate-pulse">Nợ: {formatVND(c.totalDebt)}</Badge>}
+                        {c.cancelledCount > 2 && <Badge variant="warning" className="scale-90">Rủi ro hủy</Badge>}
+                      </div>
                       {c.note && (
                         <div className="text-xs text-muted-foreground mt-0.5 line-clamp-1 max-w-[200px]" title={c.note}>
                           Ghi chú: {c.note}
@@ -416,9 +474,14 @@ export default function AdminCustomersPage() {
                       )}
                     </td>
                     <td className="px-6 py-5 space-y-1">
-                      <div className="flex items-center gap-1.5 text-xs text-foreground font-medium">
+                      <div className="flex items-center gap-1.5 text-xs text-foreground font-medium flex-wrap">
                         <Phone className="w-3.5 h-3.5 text-slate-400" />
                         <span>{c.phone}</span>
+                        {c.source && (
+                          <span className="px-1.5 py-0.2 text-[9px] font-bold uppercase rounded bg-indigo-50 text-indigo-600 border border-indigo-100">
+                            {c.source}
+                          </span>
+                        )}
                       </div>
                       <div className="flex items-center gap-3">
                         {c.zalo && (
@@ -443,6 +506,32 @@ export default function AdminCustomersPage() {
                         )}
                         {c.email && <span className="text-[11px] text-muted-foreground truncate max-w-[120px]">{c.email}</span>}
                       </div>
+                    </td>
+                    <td className="px-6 py-5 space-y-1">
+                      <div className="flex items-center gap-1">
+                        {[...Array(5)].map((_, i) => {
+                          const ratingVal = i + 1;
+                          const effectiveRating = c.manualRating || c.autoRating;
+                          return (
+                            <span
+                              key={i}
+                              className={`text-sm ${
+                                ratingVal <= effectiveRating ? 'text-amber-400 font-extrabold' : 'text-slate-200'
+                              }`}
+                            >
+                              ★
+                            </span>
+                          );
+                        })}
+                        <span className="text-[10px] text-slate-400 font-bold ml-1">
+                          ({c.manualRating ? 'Admin' : 'Tự động'})
+                        </span>
+                      </div>
+                      {c.internalNotes && (
+                        <div className="text-[10px] text-slate-400 italic line-clamp-1 max-w-[150px]" title={c.internalNotes}>
+                          "{c.internalNotes}"
+                        </div>
+                      )}
                     </td>
                     <td className="px-6 py-5">
                       <div className="text-xs font-bold text-slate-800 dark:text-slate-200">{c.createdByName}</div>
@@ -575,8 +664,8 @@ export default function AdminCustomersPage() {
               </h3>
             </div>
             <form onSubmit={handleSave}>
-              <div className="p-6 space-y-5">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+              <div className="p-6 space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <Input
                     label="Họ tên khách hàng *"
                     placeholder="Ví dụ: Nguyễn Văn A"
@@ -593,7 +682,7 @@ export default function AdminCustomersPage() {
                   />
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <Input
                     label="Link Facebook"
                     placeholder="Ví dụ: https://facebook.com/user"
@@ -608,16 +697,61 @@ export default function AdminCustomersPage() {
                   />
                 </div>
 
-                <Input
-                  label="Email khách hàng"
-                  type="email"
-                  placeholder="Vi dụ: customer@gmail.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <Input
+                    label="Email khách hàng"
+                    type="email"
+                    placeholder="Vi dụ: customer@gmail.com"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                  />
+                  <div>
+                    <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-2">
+                      Nguồn khách hàng
+                    </label>
+                    <select
+                      value={source}
+                      onChange={(e) => setSource(e.target.value)}
+                      className="w-full flex h-10 items-center justify-between rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
+                    >
+                      <option value="">Chọn nguồn khách</option>
+                      <option value="Zalo">Zalo</option>
+                      <option value="Facebook">Facebook</option>
+                      <option value="Website">Website</option>
+                      <option value="Referral">Giới thiệu</option>
+                      <option value="Other">Khác</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-2">
+                      Đánh giá uy tín (Admin)
+                    </label>
+                    <select
+                      value={manualRating}
+                      onChange={(e) => setManualRating(e.target.value)}
+                      className="w-full flex h-10 items-center justify-between rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
+                    >
+                      <option value="">Đánh giá tự động</option>
+                      <option value="1">1 Sao ★ (Rất kém)</option>
+                      <option value="2">2 Sao ★★ (Kém)</option>
+                      <option value="3">3 Sao ★★★ (Trung bình)</option>
+                      <option value="4">4 Sao ★★★★ (Tốt)</option>
+                      <option value="5">5 Sao ★★★★★ (Tuyệt vời)</option>
+                    </select>
+                  </div>
+                  <Input
+                    label="Ghi chú uy tín nội bộ"
+                    placeholder="Ví dụ: Thanh toán nhanh, hay hủy đơn..."
+                    value={internalNotes}
+                    onChange={(e) => setInternalNotes(e.target.value)}
+                  />
+                </div>
 
                 <Input
-                  label="Ghi chú thêm"
+                  label="Ghi chú chung"
                   placeholder="Ghi chú nhanh thông tin khách hàng..."
                   value={note}
                   onChange={(e) => setNote(e.target.value)}
