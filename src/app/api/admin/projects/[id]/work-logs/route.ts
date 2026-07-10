@@ -2,9 +2,9 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { createAuditLog } from '@/lib/audit';
 
-export async function GET(req: Request, context: { params: { id: string } }) {
+export async function GET(req: Request, context: { params: Promise<{ id: string }> }) {
   try {
-    const projectId = context.params.id;
+    const { id: projectId } = await context.params;
     const { searchParams } = new URL(req.url);
     const range = searchParams.get('range') || 'all'; // 7days, 30days, lastMonth, all
 
@@ -43,12 +43,12 @@ export async function GET(req: Request, context: { params: { id: string } }) {
   }
 }
 
-export async function POST(req: Request, context: { params: { id: string } }) {
+export async function POST(req: Request, context: { params: Promise<{ id: string }> }) {
   const userId = req.headers.get('x-user-id') || 'unknown';
   const userName = req.headers.get('x-user-name') || 'System';
 
   try {
-    const projectId = context.params.id;
+    const { id: projectId } = await context.params;
     const body = await req.json();
     const { title, hours, date, customerId } = body;
 

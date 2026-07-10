@@ -45,6 +45,8 @@ interface Order {
   endDate: string;
   createdAt: string;
   createdByUser: UserSession;
+  refundAmount: number | null;
+  refundedAt: string | null;
 }
 
 interface Supplier {

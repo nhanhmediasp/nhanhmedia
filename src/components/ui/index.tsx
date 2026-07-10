@@ -413,8 +413,8 @@ export const PageHeader = ({ title, description, children }: PageHeaderProps) =>
 // ============================================================
 interface StatCardProps {
   title: string;
-  value: string | number;
-  description?: string;
+  value: React.ReactNode;
+  description?: React.ReactNode;
   icon?: React.ReactNode;
   iconColor?: 'primary' | 'success' | 'warning' | 'danger' | 'info';
   trend?: { value: string; isPositive: boolean };
@@ -433,7 +433,12 @@ export const StatCard = ({ title, value, description, icon, iconColor = 'primary
   <Card className={`p-6 hover:-translate-y-1 transition-all duration-300 relative overflow-hidden group ${className}`}>
     <div className={`flex flex-col space-y-1.5 min-w-0 ${icon ? 'pr-8' : ''}`}>
       <p className="text-[10px] font-extrabold uppercase tracking-widest text-slate-400 truncate" title={title}>{title}</p>
-      <p className="text-lg sm:text-xl md:text-2xl xl:text-base 2xl:text-xl font-black leading-none text-slate-800 whitespace-nowrap truncate" title={String(value)}>{value}</p>
+      <p 
+        className="text-lg sm:text-xl md:text-2xl xl:text-base 2xl:text-xl font-black leading-none text-slate-800 whitespace-nowrap truncate" 
+        title={typeof value === 'string' || typeof value === 'number' ? String(value) : undefined}
+      >
+        {value}
+      </p>
       {(description || trend) && (
         <div className="flex items-center gap-1.5 flex-wrap pt-0.5 min-w-0 w-full">
           {trend && (
@@ -448,7 +453,12 @@ export const StatCard = ({ title, value, description, icon, iconColor = 'primary
             </span>
           )}
           {description && (
-            <span className="text-[11px] font-medium whitespace-nowrap truncate max-w-full text-slate-400" title={description}>{description}</span>
+            <div 
+              className="text-[11px] font-medium truncate max-w-full text-slate-400" 
+              title={typeof description === 'string' ? description : undefined}
+            >
+              {description}
+            </div>
           )}
         </div>
       )}

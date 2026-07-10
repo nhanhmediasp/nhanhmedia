@@ -2,12 +2,12 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { createAuditLog } from '@/lib/audit';
 
-export async function DELETE(req: Request, context: { params: { id: string; logId: string } }) {
+export async function DELETE(req: Request, context: { params: Promise<{ id: string; logId: string }> }) {
   const userId = req.headers.get('x-user-id') || 'unknown';
   const userName = req.headers.get('x-user-name') || 'System';
 
   try {
-    const { logId } = context.params;
+    const { logId } = await context.params;
 
     const workLog = await prisma.projectWorkLog.findUnique({ where: { id: logId } });
     if (!workLog) {
