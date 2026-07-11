@@ -457,6 +457,7 @@ model ProjectCategory {
   updatedAt DateTime  @updatedAt @map("updated_at")
 
   projects  Project[]
+  workLogs  ProjectWorkLog[]
 
   @@map("project_categories")
 }
@@ -520,19 +521,26 @@ model PaymentTransaction {
 }
 
 model ProjectWorkLog {
-  id         String   @id @default(uuid())
-  projectId  String   @map("project_id")
-  customerId String?  @map("customer_id")
-  title      String
-  hours      Float
-  date       DateTime
-  createdAt  DateTime @default(now()) @map("created_at")
-  updatedAt  DateTime @updatedAt @map("updated_at")
+  id          String   @id @default(uuid())
+  projectId   String?  @map("project_id")
+  categoryId  String?  @map("category_id")
+  customerId  String?  @map("customer_id")
+  title       String
+  description String?
+  hours       Float
+  hourlyRate  Float    @default(0) @map("hourly_rate")
+  websiteUrl  String?  @map("website_url")
+  status      String   @default("completed") // completed, processing, pending
+  date        DateTime
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
 
-  project    Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  customer   ProjectCustomer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  project     Project?         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  category    ProjectCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  customer    ProjectCustomer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
 
   @@index([projectId])
+  @@index([categoryId])
   @@index([customerId])
   @@index([date])
   @@map("project_work_logs")

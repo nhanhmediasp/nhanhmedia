@@ -27,9 +27,10 @@ import {
   Mail,
   FolderGit2,
   Sparkles,
+  RefreshCw,
+  Clock,
   MessageSquare,
   Send,
-  RefreshCw,
 } from 'lucide-react';
 import { Badge } from './ui';
 
@@ -67,6 +68,7 @@ const menuItems = [
       { label: 'Quản lý Dự Án', href: '/admin/projects', icon: FolderGit2 },
       { label: 'Khách hàng dự án', href: '/admin/projects/customers', icon: Users },
       { label: 'Phân loại', href: '/admin/projects/categories', icon: Tag },
+      { label: 'Kê khai giờ làm (To-do)', href: '/admin/work-logs', icon: Clock },
       { label: 'Báo cáo chi tiết', href: '/admin/projects/dashboard', icon: FileText },
     ],
   },
@@ -258,7 +260,7 @@ Tôi có thể giúp bạn kiểm tra dự án, doanh thu, đơn hàng dịch v�
   }, [user]);
 
   useEffect(() => {
-    const isProjectsActive = pathname.startsWith('/admin/projects');
+    const isProjectsActive = pathname.startsWith('/admin/projects') || pathname.startsWith('/admin/work-logs');
     const isUsersCustomersActive = pathname.startsWith('/admin/users') || pathname.startsWith('/admin/customers');
     const isProductsSuppliersActive = pathname.startsWith('/admin/products') || pathname.startsWith('/admin/suppliers');
     const isSettingsActive = 
