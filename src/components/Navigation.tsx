@@ -31,6 +31,7 @@ import {
   Clock,
   MessageSquare,
   Send,
+  PlusCircle,
 } from 'lucide-react';
 import { Badge } from './ui';
 
@@ -49,15 +50,20 @@ const menuItems = [
   },
   {
     type: 'link' as const,
-    label: 'Báo cáo doanh thu',
-    href: '/admin/reports',
-    icon: BarChart3,
+    label: 'Tạo đơn hàng mới',
+    href: '/admin/orders/create',
+    icon: PlusCircle,
   },
   {
-    type: 'link' as const,
-    label: 'Lịch sử thanh toán QR',
-    href: '/admin/reports/payments',
-    icon: CreditCard,
+    type: 'group' as const,
+    key: 'reports',
+    label: 'Báo cáo doanh thu',
+    icon: BarChart3,
+    subLinks: [
+      { label: 'Báo cáo doanh thu', href: '/admin/reports', icon: BarChart3 },
+      { label: 'Thanh toán Sepay', href: '/admin/reports/payments', icon: CreditCard },
+      { label: 'Báo cáo Dự Án', href: '/admin/projects/dashboard', icon: FileText },
+    ],
   },
   {
     type: 'group' as const,
@@ -66,20 +72,10 @@ const menuItems = [
     icon: FolderGit2,
     subLinks: [
       { label: 'Quản lý Dự Án', href: '/admin/projects', icon: FolderGit2 },
+      { label: 'Quản lý Nhân sự', href: '/admin/users', icon: UserCheck },
       { label: 'Khách hàng dự án', href: '/admin/projects/customers', icon: Users },
       { label: 'Phân loại', href: '/admin/projects/categories', icon: Tag },
       { label: 'Kê khai giờ làm (To-do)', href: '/admin/work-logs', icon: Clock },
-      { label: 'Báo cáo chi tiết', href: '/admin/projects/dashboard', icon: FileText },
-    ],
-  },
-  {
-    type: 'group' as const,
-    key: 'usersAndCustomers',
-    label: 'Tài khoản',
-    icon: Users,
-    subLinks: [
-      { label: 'Quản lý Tài khoản', href: '/admin/users', icon: UserCheck },
-      { label: 'Khách hàng', href: '/admin/customers', icon: Users },
     ],
   },
   {
@@ -89,6 +85,7 @@ const menuItems = [
     icon: Package,
     subLinks: [
       { label: 'Sản phẩm & Giá', href: '/admin/products', icon: Package },
+      { label: 'Khách hàng', href: '/admin/customers', icon: Users },
       { label: 'Nguồn hàng', href: '/admin/suppliers', icon: Tag },
       { label: 'Đơn hàng dịch vụ', href: '/admin/orders', icon: FileText },
     ],
@@ -110,8 +107,8 @@ export default function Navigation({ children }: { children: React.ReactNode }) 
   const [showNotifications, setShowNotifications] = useState(false);
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({
     projects: false,
-    usersAndCustomers: false,
     productsAndSuppliers: false,
+    reports: false,
     settings: false,
   });
 
@@ -260,9 +257,10 @@ Tôi có thể giúp bạn kiểm tra dự án, doanh thu, đơn hàng dịch v�
   }, [user]);
 
   useEffect(() => {
-    const isProjectsActive = pathname.startsWith('/admin/projects') || pathname.startsWith('/admin/work-logs');
+    const isProjectsActive = (pathname.startsWith('/admin/projects') && pathname !== '/admin/projects/dashboard') || pathname.startsWith('/admin/work-logs');
     const isUsersCustomersActive = pathname.startsWith('/admin/users') || pathname.startsWith('/admin/customers');
     const isProductsSuppliersActive = pathname.startsWith('/admin/products') || pathname.startsWith('/admin/suppliers');
+    const isReportsActive = pathname.startsWith('/admin/reports') || pathname === '/admin/projects/dashboard';
     const isSettingsActive = 
       pathname.startsWith('/admin/settings') || 
       pathname.startsWith('/admin/notifications') || 
@@ -272,6 +270,7 @@ Tôi có thể giúp bạn kiểm tra dự án, doanh thu, đơn hàng dịch v�
       projects: isProjectsActive ? true : prev.projects,
       usersAndCustomers: isUsersCustomersActive ? true : prev.usersAndCustomers,
       productsAndSuppliers: isProductsSuppliersActive ? true : prev.productsAndSuppliers,
+      reports: isReportsActive ? true : prev.reports,
       settings: isSettingsActive ? true : prev.settings,
     }));
   }, [pathname]);
@@ -1024,14 +1023,6 @@ Tôi có thể giúp bạn kiểm tra dự án, doanh thu, đơn hàng dịch v�
                     >
                       <User className="w-3.5 h-3.5 text-slate-400" />
                       <span>Thông tin tài khoản</span>
-                    </Link>
-                    <Link
-                      href="/contact"
-                      onClick={() => setShowUserDropdown(false)}
-                      className="flex items-center gap-2 px-4 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
-                    >
-                      <Mail className="w-3.5 h-3.5 text-slate-400" />
-                      <span>Liên hệ hỗ trợ</span>
                     </Link>
                     <div className="h-px bg-border/60" />
                     <button

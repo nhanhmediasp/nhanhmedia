@@ -73,12 +73,14 @@ function SortableHeader({ label, field, currentField, currentDirection, onSort, 
   className?: string;
 }) {
   const isActive = currentField === field;
+  const isCenter = className?.includes('text-center');
+  const isRight = className?.includes('text-right');
   return (
     <th
-      className={`px-6 py-5 cursor-pointer select-none hover:text-primary transition-colors group ${className || ''}`}
+      className={`px-4 py-4 cursor-pointer select-none hover:text-primary transition-colors group ${className || ''}`}
       onClick={() => onSort(field)}
     >
-      <div className="flex items-center gap-1.5">
+      <div className={`flex items-center gap-1.5 ${isCenter ? 'justify-center' : isRight ? 'justify-end' : ''}`}>
         <span>{label}</span>
         <span className={`transition-opacity ${isActive ? 'opacity-100' : 'opacity-0 group-hover:opacity-40'}`}>
           {isActive ? (
@@ -142,8 +144,6 @@ export default function AdminOrdersPage() {
   // Advanced Filters
   const [supplierFilter, setSupplierFilter] = useState('');
   const [suppliers, setSuppliers] = useState<SupplierInfo[]>([]);
-  const [creatorFilter, setCreatorFilter] = useState('');
-  const [creators, setCreators] = useState<{ id: string; name: string; role: string }[]>([]);
   const [expiryFilter, setExpiryFilter] = useState('');
   const [paymentFilter, setPaymentFilter] = useState('');
 
@@ -350,12 +350,11 @@ export default function AdminOrdersPage() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      // Fetch orders, products, suppliers, and creators in parallel
-      const [ordersRes, productsRes, suppliersRes, usersRes] = await Promise.all([
+      // Fetch orders, products, and suppliers in parallel
+      const [ordersRes, productsRes, suppliersRes] = await Promise.all([
         fetch('/api/orders'),
         fetch('/api/admin/products'),
-        fetch('/api/admin/suppliers').catch(() => null),
-        fetch('/api/admin/users').catch(() => null)
+        fetch('/api/admin/suppliers').catch(() => null)
       ]);
 
       if (ordersRes.ok && productsRes.ok) {
@@ -367,10 +366,6 @@ export default function AdminOrdersPage() {
         if (suppliersRes && suppliersRes.ok) {
           const suppliersData = await suppliersRes.json();
           setSuppliers(suppliersData.suppliers || []);
-        }
-        if (usersRes && usersRes.ok) {
-          const usersData = await usersRes.json();
-          setCreators(usersData.users || []);
         }
       } else {
         showToast('Không thể tải danh sách đơn hàng.', 'error');
@@ -448,14 +443,13 @@ export default function AdminOrdersPage() {
     }
   };
 
-  const isFiltered = searchTerm !== '' || statusFilter !== '' || productFilter !== '' || supplierFilter !== '' || creatorFilter !== '' || expiryFilter !== '' || paymentFilter !== '';
+  const isFiltered = searchTerm !== '' || statusFilter !== '' || productFilter !== '' || supplierFilter !== '' || expiryFilter !== '' || paymentFilter !== '';
 
   const handleClearFilters = () => {
     setSearchTerm('');
     setStatusFilter('');
     setProductFilter('');
     setSupplierFilter('');
-    setCreatorFilter('');
     setExpiryFilter('');
     setPaymentFilter('');
     showToast('Đã xóa tất cả bộ lọc', 'info');
@@ -471,7 +465,6 @@ export default function AdminOrdersPage() {
     const matchesStatus = statusFilter === '' || o.status === statusFilter;
     const matchesProduct = productFilter === '' || o.productId === productFilter;
     const matchesSupplier = supplierFilter === '' || o.supplierId === supplierFilter;
-    const matchesCreator = creatorFilter === '' || o.createdByUserId === creatorFilter;
 
     const finalPrice = o.customPrice !== null ? o.customPrice : o.price;
     const isPaid = (o.amountPaid ?? 0) >= finalPrice;
@@ -502,7 +495,7 @@ export default function AdminOrdersPage() {
       }
     }
 
-    return matchesSearch && matchesStatus && matchesProduct && matchesSupplier && matchesCreator && matchesExpiry && matchesPayment;
+    return matchesSearch && matchesStatus && matchesProduct && matchesSupplier && matchesExpiry && matchesPayment;
   });
 
   // Sort orders
@@ -548,7 +541,7 @@ export default function AdminOrdersPage() {
   React.useEffect(() => {
     setCurrentPage(1);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchTerm, statusFilter, productFilter, supplierFilter, creatorFilter, expiryFilter, paymentFilter, sortField, sortDirection]);
+  }, [searchTerm, statusFilter, productFilter, supplierFilter, expiryFilter, paymentFilter, sortField, sortDirection]);
 
   // Client-side CSV Export
   const exportCSV = () => {
@@ -565,8 +558,6 @@ export default function AdminOrdersPage() {
         'Số Điện Thoại',
         'Sản Phẩm',
         'Gói Đăng Ký',
-        'Người Tạo',
-        'Vai Trò Người Tạo',
         'Chi Phí (VND)',
         'Trạng Thái',
         'Ngày Bắt Đầu',
@@ -580,8 +571,6 @@ export default function AdminOrdersPage() {
         o.customer?.phone || '',
         o.product?.name || '',
         o.variant?.name || '',
-        o.createdByUser?.name || '',
-        o.createdByUser?.role || '',
         (o.customPrice !== null && o.customPrice !== undefined) ? o.customPrice : (o.price || 0),
         ({
           new: 'Mới tạo',
@@ -710,8 +699,8 @@ export default function AdminOrdersPage() {
               </div>
             </div>
 
-            {/* Row 2: Supplier, Creator, Expiry */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-1">
+            {/* Row 2: Supplier, Expiry */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
               <div>
                 <select
                   value={supplierFilter}
@@ -722,21 +711,6 @@ export default function AdminOrdersPage() {
                   {suppliers.map((s) => (
                     <option key={s.id} value={s.id}>
                       {s.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <select
-                  value={creatorFilter}
-                  onChange={(e) => setCreatorFilter(e.target.value)}
-                  className="w-full px-3 py-2.5 text-sm bg-input border border-border rounded-xl text-foreground focus:outline-none focus:border-primary focus:ring-2 focus:ring-ring cursor-pointer"
-                >
-                  <option value="">Tất cả người tạo</option>
-                  {creators.map((u) => (
-                    <option key={u.id} value={u.id}>
-                      {u.name} ({u.role === 'admin' ? 'Admin' : u.role === 'collaborator' ? 'CTV' : u.role === 'agency' ? 'Đại lý' : 'Thành viên'})
                     </option>
                   ))}
                 </select>
@@ -789,7 +763,7 @@ export default function AdminOrdersPage() {
             <table className="w-full border-collapse text-left text-sm">
               <thead>
                 <tr className="border-b border-border bg-muted/40 text-muted-foreground font-semibold">
-                  <th className="px-4 py-5 w-[48px] text-center">
+                  <th className="px-4 py-4 w-[48px] text-center">
                     <input
                       type="checkbox"
                       checked={
@@ -800,13 +774,13 @@ export default function AdminOrdersPage() {
                       className="w-4 h-4 rounded border-slate-300 text-[#a145ab] focus:ring-[#a145ab] cursor-pointer"
                     />
                   </th>
-                  <SortableHeader label="Mã đơn" field="orderCode" currentField={sortField} currentDirection={sortDirection} onSort={handleSort} />
-                  <SortableHeader label="Khách hàng" field="customerName" currentField={sortField} currentDirection={sortDirection} onSort={handleSort} />
-                  <th className="px-6 py-5">Dịch vụ</th>
-                  <th className="px-6 py-5">Người tạo</th>
-                  <SortableHeader label="Chi phí" field="price" currentField={sortField} currentDirection={sortDirection} onSort={handleSort} className="text-right" />
-                  <SortableHeader label="Thời gian" field="createdAt" currentField={sortField} currentDirection={sortDirection} onSort={handleSort} className="text-center" />
-                  <th className="px-6 py-5 text-center">Hành động</th>
+                  <th className="px-4 py-4 w-[60px] text-center text-muted-foreground font-semibold">STT</th>
+                  <SortableHeader label="Mã đơn" field="orderCode" currentField={sortField} currentDirection={sortDirection} onSort={handleSort} className="px-4 w-[140px]" />
+                  <SortableHeader label="Khách hàng" field="customerName" currentField={sortField} currentDirection={sortDirection} onSort={handleSort} className="px-4 w-[180px]" />
+                  <th className="px-4 py-4 w-[200px]">Dịch vụ</th>
+                  <SortableHeader label="Chi phí" field="price" currentField={sortField} currentDirection={sortDirection} onSort={handleSort} className="px-4 w-[180px] text-right" />
+                  <SortableHeader label="Thời gian" field="createdAt" currentField={sortField} currentDirection={sortDirection} onSort={handleSort} className="px-4 w-[150px] text-center" />
+                  <th className="px-4 py-4 w-[110px] text-center">Hành động</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border bg-card">
@@ -814,7 +788,7 @@ export default function AdminOrdersPage() {
                   const finalPrice = o.customPrice !== null ? o.customPrice : o.price;
                   return (
                     <tr key={o.id} className="hover:bg-muted/20 transition-colors">
-                      <td className="px-4 py-5 text-center">
+                      <td className="px-4 py-4 text-center">
                         <input
                           type="checkbox"
                           checked={selectedIds.includes(o.id)}
@@ -822,54 +796,59 @@ export default function AdminOrdersPage() {
                           className="w-4 h-4 rounded border-slate-300 text-[#a145ab] focus:ring-[#a145ab] cursor-pointer"
                         />
                       </td>
-                      <td className="px-6 py-5">
-                        <div className="text-xs font-bold text-foreground">{o.orderCode}</div>
+                      <td className="px-4 py-4 text-center text-xs font-semibold text-slate-400">{(currentPage - 1) * PAGE_SIZE + idx + 1}</td>
+                      <td className="px-4 py-4 w-[140px] max-w-[140px]">
+                        <div className="text-xs font-bold text-foreground break-all">{o.orderCode}</div>
                         <div className="mt-1.5">
                           <StatusBadge status={o.status} />
                         </div>
                       </td>
-                      <td className="px-6 py-5">
-                        <div className="text-xs font-bold text-slate-800 dark:text-slate-200">{o.customer.name}</div>
+                      <td className="px-4 py-4 w-[180px] max-w-[180px]">
+                        <div className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate" title={o.customer.name}>{o.customer.name}</div>
                         <div className="text-[11px] text-muted-foreground mt-0.5">{o.customer.phone}</div>
                       </td>
-                      <td className="px-6 py-5">
-                        <div className="text-xs font-bold text-slate-800 dark:text-slate-200">{o.product.name}</div>
-                        <div className="text-[11px] text-muted-foreground mt-0.5">{o.variant.name}</div>
+                      <td className="px-4 py-4 w-[200px] max-w-[200px]">
+                        <div className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate" title={o.product.name}>{o.product.name}</div>
+                        <div className="text-[11px] text-muted-foreground mt-0.5 truncate" title={o.variant.name}>{o.variant.name}</div>
                       </td>
-                      <td className="px-6 py-5">
-                        <div className="text-xs font-semibold text-slate-800 dark:text-slate-200">{o.createdByUser.name}</div>
-                        <div className="mt-1">
-                          <RoleBadge role={o.createdByUser.role} />
+                      <td className="px-4 py-4 w-[180px] text-right font-medium">
+                        <div className="flex flex-col gap-0.5 text-xs text-right font-medium">
+                          <div className="text-slate-650 dark:text-slate-355">
+                            Giá: <span className="font-bold text-foreground">{formatVND(finalPrice)}</span>
+                            {o.customPrice !== null && (
+                              <span className="text-[9px] text-amber-500 font-bold ml-0.5" title="Sửa thủ công">(*)</span>
+                            )}
+                          </div>
+                          <div className="text-slate-500 dark:text-slate-400">
+                            Chi phí: <span className="font-semibold text-slate-700 dark:text-slate-300">{formatVND(o.importPrice ?? 0)}</span>
+                          </div>
+                          <div className={`font-bold ${finalPrice - (o.importPrice ?? 0) >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
+                            Lợi nhuận: {formatVND(finalPrice - (o.importPrice ?? 0))}
+                          </div>
+                          <div className="mt-1">
+                            {(o.amountPaid ?? 0) >= finalPrice ? (
+                              <span className="text-[10px] font-bold text-green-600 bg-green-50 dark:bg-green-950/20 px-1.5 py-0.5 rounded">
+                                Đã trả đủ
+                              </span>
+                            ) : (o.amountPaid ?? 0) > 0 ? (
+                              <span className="text-[10px] font-bold text-amber-600 bg-amber-50 dark:bg-amber-950/20 px-1.5 py-0.5 rounded" title={`Đã trả: ${formatVND(o.amountPaid)}`}>
+                                Còn nợ: {formatVND(finalPrice - o.amountPaid)}
+                              </span>
+                            ) : (
+                              <span className="text-[10px] font-bold text-rose-600 bg-rose-50 dark:bg-rose-950/20 px-1.5 py-0.5 rounded">
+                                Nợ 100%
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </td>
-                      <td className="px-6 py-5 text-right">
-                        <div className="text-sm font-bold text-primary">{formatVND(finalPrice)}</div>
-                        {o.customPrice !== null && (
-                          <div className="text-[10px] text-amber-500 font-semibold mt-0.5">Sửa thủ công</div>
-                        )}
-                        <div className="mt-1">
-                          {(o.amountPaid ?? 0) >= finalPrice ? (
-                            <span className="text-[10px] font-bold text-green-600 bg-green-50 dark:bg-green-950/20 px-1.5 py-0.5 rounded">
-                              Đã trả đủ
-                            </span>
-                          ) : (o.amountPaid ?? 0) > 0 ? (
-                            <span className="text-[10px] font-bold text-amber-600 bg-amber-50 dark:bg-amber-950/20 px-1.5 py-0.5 rounded" title={`Đã trả: ${formatVND(o.amountPaid)}`}>
-                              Còn nợ: {formatVND(finalPrice - o.amountPaid)}
-                            </span>
-                          ) : (
-                            <span className="text-[10px] font-bold text-rose-600 bg-rose-50 dark:bg-rose-950/20 px-1.5 py-0.5 rounded">
-                              Nợ 100%
-                            </span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-6 py-5">
+                      <td className="px-4 py-4 w-[150px] text-center">
                         <div className="flex flex-col items-center gap-0.5 text-xs">
                           <span className="text-muted-foreground">Tạo: {formatDate(o.createdAt)}</span>
                           <span className="font-bold text-rose-500">Hạn: {formatDate(o.endDate)}</span>
                         </div>
                       </td>
-                      <td className="px-6 py-5">
+                      <td className="px-4 py-4 w-[110px] text-center">
                         <div className="flex items-center justify-center gap-2">
                           <Link href={`/admin/orders/${o.id}`}>
                             <button
@@ -879,13 +858,6 @@ export default function AdminOrdersPage() {
                               <Eye className="w-3.5 h-3.5" />
                             </button>
                           </Link>
-                          <button
-                            onClick={() => handleOpenQuickEdit(o)}
-                            className="p-1.5 text-slate-500 hover:text-primary rounded-lg hover:bg-slate-100 dark:hover:bg-zinc-800 cursor-pointer"
-                            title="Sửa nhanh"
-                          >
-                            <Edit2 className="w-3.5 h-3.5" />
-                          </button>
                           <button
                             onClick={() => setDeleteId(o.id)}
                             className="p-1.5 text-slate-500 hover:text-rose-500 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/20 cursor-pointer"

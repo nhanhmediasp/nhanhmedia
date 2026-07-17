@@ -17,6 +17,7 @@ import {
   Loader2,
   Users,
   Search,
+  FolderGit2,
 } from 'lucide-react';
 
 interface Customer {
@@ -49,6 +50,15 @@ interface Order {
   createdAt: string;
 }
 
+interface UserProject {
+  id: string;
+  name: string;
+  status: string;
+  progress: number;
+  startDate: string;
+  endDate: string | null;
+}
+
 interface UserDetail {
   id: string;
   name: string;
@@ -61,6 +71,8 @@ interface UserDetail {
   orderCount: number;
   customerCount: number;
   totalSales: number;
+  projectCount: number;
+  projects: UserProject[];
   orders: Order[];
   avatarUrl?: string | null;
 }
@@ -139,12 +151,10 @@ export default function AdminUserDetailPage({ params }: { params: Promise<{ id: 
 
   if (!userDetail) return null;
 
-  const filteredOrders = userDetail.orders.filter(
-    (o) =>
-      o.orderCode.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      o.customer.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (o.customer.phone || '').includes(searchTerm) ||
-      o.product.name.toLowerCase().includes(searchTerm.toLowerCase())
+  const filteredProjects = (userDetail.projects || []).filter(
+    (p) =>
+      p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      p.status.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   return (
@@ -219,38 +229,27 @@ export default function AdminUserDetailPage({ params }: { params: Promise<{ id: 
           {/* Aggregates Card */}
           <Card>
             <CardContent className="p-5 space-y-4">
-              <h3 className="font-bold text-sm text-foreground uppercase tracking-wide">Thống kê hoạt động</h3>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="bg-primary/5 border border-primary/10 p-3 rounded-xl">
-                  <div className="text-[10px] font-bold text-muted-foreground uppercase">Tổng doanh số</div>
-                  <div className="text-base font-black text-primary mt-1">{formatVND(userDetail.totalSales)}</div>
-                </div>
-                <div className="bg-emerald-500/5 border border-emerald-500/10 p-3 rounded-xl">
-                  <div className="text-[10px] font-bold text-muted-foreground uppercase">Khách hàng</div>
-                  <div className="text-base font-black text-emerald-500 mt-1 flex items-center gap-1.5">
-                    <Users className="w-4 h-4 shrink-0" />
-                    <span>{userDetail.customerCount}</span>
+              <h3 className="font-bold text-sm text-slate-800 uppercase tracking-wide">Thống kê hoạt động</h3>
+              <div className="grid grid-cols-1 gap-4">
+                <div className="bg-primary/5 border border-primary/10 p-4 rounded-xl flex items-center justify-between">
+                  <div>
+                    <div className="text-[10px] font-bold text-slate-400 uppercase">Dự án tham gia</div>
+                    <div className="text-2xl font-black text-primary mt-1">{userDetail.projectCount || 0} dự án</div>
                   </div>
-                </div>
-                <div className="bg-blue-500/5 border border-blue-500/10 p-3 rounded-xl col-span-2">
-                  <div className="text-[10px] font-bold text-muted-foreground uppercase">Số đơn hàng đã tạo</div>
-                  <div className="text-base font-black text-blue-500 mt-1 flex items-center gap-1.5">
-                    <FileText className="w-4.5 h-4.5 shrink-0" />
-                    <span>{userDetail.orderCount}</span>
-                  </div>
+                  <FolderGit2 className="w-8 h-8 text-primary/30" />
                 </div>
               </div>
             </CardContent>
           </Card>
         </div>
 
-        {/* Right column: Orders created by user */}
+        {/* Right column: Projects participated by user */}
         <div className="lg:col-span-2 space-y-4">
           <Card>
             <CardContent className="py-4 flex items-center justify-between flex-wrap gap-4">
-              <h3 className="font-bold text-base text-foreground flex items-center gap-2">
-                <FileText className="w-5 h-5 text-primary" />
-                <span>Danh sách Đơn hàng đã tạo ({filteredOrders.length})</span>
+              <h3 className="font-bold text-base text-slate-800 flex items-center gap-2">
+                <FolderGit2 className="w-5 h-5 text-primary" />
+                <span>Danh sách Dự án tham gia ({filteredProjects.length})</span>
               </h3>
               
               {/* Search filter */}
@@ -260,7 +259,7 @@ export default function AdminUserDetailPage({ params }: { params: Promise<{ id: 
                 </span>
                 <input
                   type="text"
-                  placeholder="Tìm đơn hàng, khách..."
+                  placeholder="Tìm kiếm dự án..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="w-full pl-9 pr-3 py-1.5 text-xs bg-input border border-border rounded-xl text-foreground placeholder-slate-400 focus:outline-none focus:border-primary transition-all"
@@ -269,10 +268,10 @@ export default function AdminUserDetailPage({ params }: { params: Promise<{ id: 
             </CardContent>
           </Card>
 
-          {filteredOrders.length === 0 ? (
+          {filteredProjects.length === 0 ? (
             <EmptyState
-              title="Không tìm thấy đơn hàng nào"
-              description={searchTerm ? "Không có đơn hàng nào khớp với từ khóa tìm kiếm." : "Tài khoản này chưa tạo đơn hàng nào."}
+              title="Không tìm thấy dự án nào"
+              description={searchTerm ? "Không có dự án nào khớp với từ khóa tìm kiếm." : "Nhân sự này chưa tham gia dự án nào."}
             />
           ) : (
             <Card className="overflow-hidden">
@@ -280,45 +279,49 @@ export default function AdminUserDetailPage({ params }: { params: Promise<{ id: 
                 <table className="w-full border-collapse text-left text-xs">
                   <thead>
                     <tr className="border-b border-border bg-muted/40 text-muted-foreground font-semibold">
-                      <th className="px-5 py-4">Mã đơn</th>
-                      <th className="px-5 py-4">Khách hàng</th>
-                      <th className="px-5 py-4">Dịch vụ</th>
-                      <th className="px-5 py-4 text-right">Chi phí</th>
-                      <th className="px-5 py-4 text-center">Hạn dùng</th>
+                      <th className="px-5 py-4">Tên dự án</th>
+                      <th className="px-5 py-4 text-center">Tiến độ</th>
+                      <th className="px-5 py-4 text-center">Ngày bắt đầu</th>
+                      <th className="px-5 py-4 text-center">Ngày kết thúc</th>
+                      <th className="px-5 py-4 text-center">Trạng thái</th>
                       <th className="px-5 py-4 text-center">Hành động</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border bg-card">
-                    {filteredOrders.map((o) => {
-                      const finalPrice = o.customPrice !== null ? o.customPrice : o.price;
+                    {filteredProjects.map((p) => {
                       return (
-                        <tr key={o.id} className="hover:bg-muted/10 transition-colors">
+                        <tr key={p.id} className="hover:bg-muted/10 transition-colors">
                           <td className="px-5 py-4 font-bold text-foreground">
-                            <div>{o.orderCode}</div>
-                            <div className="mt-1">
-                              {getOrderStatusBadge(o.status)}
+                            {p.name}
+                          </td>
+                          <td className="px-5 py-4 text-center">
+                            <div className="flex items-center justify-center gap-2">
+                              <div className="w-12 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                                <div className="h-full bg-primary" style={{ width: `${p.progress}%` }} />
+                              </div>
+                              <span className="font-extrabold text-[10px] text-slate-600">{p.progress}%</span>
                             </div>
                           </td>
-                          <td className="px-5 py-4">
-                            <div className="font-bold text-slate-800 dark:text-slate-200">{o.customer.name}</div>
-                            <div className="text-[10px] text-muted-foreground mt-0.5">{o.customer.phone}</div>
+                          <td className="px-5 py-4 text-center font-medium text-slate-600">
+                            {formatDate(p.startDate)}
                           </td>
-                          <td className="px-5 py-4">
-                            <div className="font-bold text-slate-800 dark:text-slate-200">{o.product.name}</div>
-                            <div className="text-[10px] text-muted-foreground mt-0.5">{o.variant.name}</div>
-                          </td>
-                          <td className="px-5 py-4 text-right font-bold text-primary">
-                            {formatVND(finalPrice)}
+                          <td className="px-5 py-4 text-center font-medium text-slate-600">
+                            {p.endDate ? formatDate(p.endDate) : '—'}
                           </td>
                           <td className="px-5 py-4 text-center">
-                            <div className="text-[10px] text-muted-foreground">Hết hạn:</div>
-                            <div className="font-bold text-rose-500 mt-0.5">{formatDate(o.endDate)}</div>
+                            {p.status === 'running' ? (
+                              <Badge variant="success">Đang chạy</Badge>
+                            ) : p.status === 'completed' ? (
+                              <Badge variant="info">Hoàn thành</Badge>
+                            ) : (
+                              <Badge variant="secondary">{p.status}</Badge>
+                            )}
                           </td>
                           <td className="px-5 py-4 text-center">
-                            <Link href={`/admin/orders/${o.id}`}>
+                            <Link href={`/admin/projects/${p.id}`}>
                               <button
-                                className="p-1.5 text-slate-500 hover:text-primary rounded-lg hover:bg-slate-100 dark:hover:bg-zinc-800 cursor-pointer animate-all"
-                                title="Xem chi tiết đơn hàng"
+                                className="p-1.5 text-slate-500 hover:text-primary rounded-lg hover:bg-slate-100 dark:hover:bg-zinc-800 cursor-pointer transition-all"
+                                title="Xem chi tiết dự án"
                               >
                                 <Eye className="w-3.5 h-3.5" />
                               </button>

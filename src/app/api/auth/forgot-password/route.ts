@@ -108,10 +108,9 @@ export async function POST(req: Request) {
       );
     }
 
-    // 3. Generate a reset token (expires in 15 minutes) - signed with dynamic key (secret + password hash)
     const token = jwt.sign(
       { userId: user.id, email: user.email, purpose: 'reset-password' },
-      JWT_SECRET + user.passwordHash,
+      (JWT_SECRET || '') + (user.passwordHash || ''),
       { expiresIn: '15m' }
     );
 

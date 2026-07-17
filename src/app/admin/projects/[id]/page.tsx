@@ -53,6 +53,54 @@ import {
 } from 'lucide-react';
 import { ProjectCategoryAvatar } from '@/components/ProjectCategoryAvatar';
 
+interface Member {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  avatarUrl: string | null;
+  phone: string | null;
+}
+
+const renderMemberAvatarStack = (members: Member[]) => {
+  if (!members || members.length === 0) return <span className="text-[10px] text-slate-400 italic">Chưa có nhân sự</span>;
+  
+  const maxVisible = 5;
+  const visibleMembers = members.slice(0, maxVisible);
+  const extraCount = members.length - maxVisible;
+  
+  return (
+    <div className="flex items-center -space-x-1.5 overflow-hidden">
+      {visibleMembers.map((m) => {
+        const initials = m.name ? m.name.charAt(0).toUpperCase() : '?';
+        return (
+          <div
+            key={m.id}
+            className="relative inline-block w-6 h-6 rounded-full ring-2 ring-white overflow-hidden bg-slate-100 cursor-help"
+            title={`${m.name} (${m.role})`}
+          >
+            {m.avatarUrl ? (
+              <img src={m.avatarUrl} alt={m.name} className="w-full h-full object-cover" />
+            ) : (
+              <div className="w-full h-full flex items-center justify-center text-[9px] font-black text-slate-550 bg-slate-200">
+                {initials}
+              </div>
+            )}
+          </div>
+        );
+      })}
+      {extraCount > 0 && (
+        <div
+          className="relative inline-flex items-center justify-center w-6 h-6 rounded-full ring-2 ring-white bg-slate-800 text-white text-[9px] font-black"
+          title={`${extraCount} nhân sự khác`}
+        >
+          +{extraCount}
+        </div>
+      )}
+    </div>
+  );
+};
+
 interface Project {
   id: string;
   name: string;
@@ -72,6 +120,7 @@ interface Project {
   toolCosts: ToolCost[];
   requirementNotes: any[];
   websiteUrl: string | null;
+  members: Member[];
 }
 
 interface TaskColumn {
@@ -111,6 +160,7 @@ interface ToolCost {
   billingCycle: string; // month, year, one-time
   nextRenewal: string | null;
   note: string | null;
+  createdAt?: string | null;
 }
 
 function decodeHeaderValue(val: string | null): string {
@@ -133,7 +183,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
 
   const [project, setProject] = useState<Project | null>(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'kanban' | 'website' | 'tools' | 'customer' | 'requirements' | 'budget' | 'activity' | 'worklogs'>('kanban');
+  const [activeTab, setActiveTab] = useState<'kanban' | 'website' | 'tools' | 'customer' | 'requirements' | 'budget' | 'activity' | 'worklogs' | 'members'>('kanban');
 
   // Budget states
   const [isEditingBudget, setIsEditingBudget] = useState(false);
@@ -196,6 +246,14 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
   const [toolCycle, setToolCycle] = useState('month');
   const [toolRenewal, setToolRenewal] = useState('');
   const [toolNote, setToolNote] = useState('');
+  const [toolStartDate, setToolStartDate] = useState('');
+  const [toolDurationMonths, setToolDurationMonths] = useState('12');
+
+  // Members states
+  const [isMemberModalOpen, setIsMemberModalOpen] = useState(false);
+  const [systemUsers, setSystemUsers] = useState<any[]>([]);
+  const [selectedMemberIds, setSelectedMemberIds] = useState<string[]>([]);
+  const [savingMembers, setSavingMembers] = useState(false);
 
   // Activity Log Pagination
   const [logPage, setLogPage] = useState(1);
@@ -287,8 +345,8 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
   };
 
   const setQuickAmountReceived = (pct: number) => {
-    if (!project) return;
-    const val = Math.round(project.budget * pct / 100);
+    const budgetVal = parseFloat(budgetInput) || 0;
+    const val = Math.round(budgetVal * pct / 100);
     setAmountReceivedInput(String(val));
   };
 
@@ -631,6 +689,22 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
   // ==========================================
   // TOOL COSTS ACTIONS
   // ==========================================
+  // ==========================================
+  // TOOL COSTS ACTIONS & AUTO RENEWAL
+  // ==========================================
+  const updateRenewalFromDuration = (startDateStr: string, monthsStr: string, cycle = toolCycle) => {
+    if (cycle === 'one-time') {
+      setToolRenewal('');
+      return;
+    }
+    if (!startDateStr || !monthsStr) return;
+    const months = parseInt(monthsStr, 10);
+    if (isNaN(months) || months <= 0) return;
+    const start = new Date(startDateStr);
+    start.setMonth(start.getMonth() + months);
+    setToolRenewal(start.toISOString().split('T')[0]);
+  };
+
   const handleOpenAddTool = () => {
     setEditToolId(null);
     setToolName('');
@@ -638,7 +712,10 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
     setToolPlan('pro');
     setToolCostAmount('');
     setToolCycle('month');
-    setToolRenewal('');
+    const today = new Date().toISOString().split('T')[0];
+    setToolStartDate(today);
+    setToolDurationMonths('1');
+    updateRenewalFromDuration(today, '1', 'month');
     setToolNote('');
     setIsToolModalOpen(true);
   };
@@ -651,6 +728,20 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
     setToolCostAmount(String(tc.cost));
     setToolCycle(tc.billingCycle);
     setToolRenewal(tc.nextRenewal ? tc.nextRenewal.split('T')[0] : '');
+    
+    // createdAt của record làm ngày bắt đầu
+    const start = tc.createdAt ? tc.createdAt.split('T')[0] : new Date().toISOString().split('T')[0];
+    setToolStartDate(start);
+    
+    if (tc.nextRenewal) {
+      const s = new Date(tc.createdAt || new Date());
+      const e = new Date(tc.nextRenewal);
+      const months = (e.getFullYear() - s.getFullYear()) * 12 + (e.getMonth() - s.getMonth());
+      setToolDurationMonths(months > 0 ? String(months) : '1');
+    } else {
+      setToolDurationMonths('1');
+    }
+    
     setToolNote(tc.note || '');
     setIsToolModalOpen(true);
   };
@@ -688,6 +779,56 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
       }
     } catch {
       showToast('Lỗi kết nối.', 'error');
+    }
+  };
+
+  // ==========================================
+  // MEMBERS ACTIONS
+  // ==========================================
+  const fetchSystemUsers = async () => {
+    try {
+      const res = await fetch('/api/admin/users');
+      if (res.ok) {
+        const data = await res.json();
+        setSystemUsers(data.users || []);
+      }
+    } catch (e) {
+      console.error('Fetch system users error:', e);
+    }
+  };
+
+  const handleOpenUpdateMembers = async () => {
+    if (!project) return;
+    setSelectedMemberIds(project.members ? project.members.map((m) => m.id) : []);
+    setIsMemberModalOpen(true);
+    await fetchSystemUsers();
+  };
+
+  const handleSaveMembers = async () => {
+    if (!project) return;
+    setSavingMembers(true);
+    try {
+      const res = await fetch(`/api/admin/projects/${projectId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: project.name,
+          startDate: project.startDate,
+          memberIds: selectedMemberIds,
+        }),
+      });
+      if (res.ok) {
+        showToast('Cập nhật nhân sự tham gia thành công!', 'success');
+        setIsMemberModalOpen(false);
+        fetchProjectDetail();
+      } else {
+        const d = await res.json();
+        showToast(d.error || 'Lỗi cập nhật nhân sự.', 'error');
+      }
+    } catch {
+      showToast('Lỗi kết nối máy chủ.', 'error');
+    } finally {
+      setSavingMembers(false);
     }
   };
 
@@ -1048,20 +1189,6 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                     {project.category.name}
                   </span>
                 )}
-                {project.customer && (
-                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-100 text-xs font-bold">
-                    {project.customer.avatarUrl ? (
-                      <img
-                        src={project.customer.avatarUrl}
-                        alt={project.customer.name}
-                        className="w-3.5 h-3.5 rounded-full object-cover shrink-0"
-                      />
-                    ) : (
-                      <User className="w-3.5 h-3.5 text-blue-500" />
-                    )}
-                    {project.customer.name}
-                  </span>
-                )}
                 {project.websiteUrl && (
                   <a
                     href={project.websiteUrl.startsWith('http') ? project.websiteUrl : `https://${project.websiteUrl}`}
@@ -1069,14 +1196,20 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                     rel="noopener noreferrer"
                     className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded bg-teal-50 text-teal-700 border border-teal-100 text-xs font-bold hover:bg-teal-100 transition-colors"
                   >
-                    <ExternalLink className="w-3.5 h-3.5 text-teal-650" />
+                    <ExternalLink className="w-3.5 h-3.5 text-teal-655" />
                     <span>Website trực tiếp</span>
                   </a>
+                )}
+                {project.members && project.members.length > 0 && (
+                  <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-200/60 text-xs font-bold">
+                    <span className="text-[10px] text-slate-400 font-extrabold uppercase mr-1">Nhân sự:</span>
+                    {renderMemberAvatarStack(project.members)}
+                  </div>
                 )}
               </div>
               <p className="text-sm text-slate-500 max-w-3xl leading-relaxed">{project.description || 'Chưa có mô tả chi tiết cho dự án này.'}</p>
             </div>
-            <div className="flex flex-wrap items-center gap-6 text-xs text-slate-500 shrink-0 border border-slate-200/60 p-4 rounded-xl bg-slate-50/50">
+            <div className="flex flex-wrap items-center gap-6 text-xs text-slate-550 shrink-0 border border-slate-200/60 p-4 rounded-xl bg-slate-50/50">
               <div className="space-y-1">
                 <span className="block font-bold text-[9px] uppercase tracking-wider text-slate-400">Thời gian</span>
                 <span className="block font-extrabold text-slate-700">
@@ -1088,17 +1221,23 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                 <span className="block font-bold text-[9px] uppercase tracking-wider text-slate-400">Tổng chi phí dự án</span>
                 <span className="block text-sm font-black text-rose-600">{formatVND(totalProjectCost)}</span>
               </div>
-              {project.customer && (
-                <>
-                  <div className="w-px h-8 bg-slate-200" />
-                  <div className="space-y-1">
-                    <span className="block font-bold text-[9px] uppercase tracking-wider text-slate-400">Khách hàng</span>
-                    <span className="block font-extrabold text-slate-700">
-                      {project.customer.name}
-                    </span>
-                  </div>
-                </>
-              )}
+              <div className="w-px h-8 bg-slate-200" />
+              <div className="space-y-1">
+                <span className="block font-bold text-[9px] uppercase tracking-wider text-slate-400">Ngân sách dự án</span>
+                <div className="flex items-center gap-1.5">
+                  <span className="block text-sm font-black text-violet-750">{formatVND(project.budget)}</span>
+                  <button onClick={handleOpenEditBudget} className="p-1 rounded text-slate-400 hover:text-primary hover:bg-slate-100 transition-colors cursor-pointer" title="Sửa ngân sách">
+                    <Pencil className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+              <div className="w-px h-8 bg-slate-200" />
+              <div className="space-y-1">
+                <span className="block font-bold text-[9px] uppercase tracking-wider text-slate-400">Lợi nhuận dự kiến</span>
+                <span className={`block text-sm font-black ${project.budget - totalProjectCost >= 0 ? 'text-green-600' : 'text-rose-600'}`}>
+                  {formatVND(project.budget - totalProjectCost)}
+                </span>
+              </div>
             </div>
           </div>
 
@@ -1188,287 +1327,81 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
           <Clock className="w-4.5 h-4.5" />
           Chi phí Công cụ hỗ trợ ({formatVND(totalToolCost)})
         </button>
-        {project.customer && (
-          <button
-            onClick={() => setActiveTab('customer')}
-            className={`px-5 py-3 font-bold text-sm border-b-2 transition-all flex items-center gap-2 whitespace-nowrap cursor-pointer ${
-              activeTab === 'customer'
-                ? 'border-primary text-primary bg-primary/5 rounded-t-xl'
-                : 'border-transparent text-slate-500 hover:text-slate-700'
-            }`}
-          >
-            <User className="w-4.5 h-4.5" />
-            Khách hàng
-          </button>
-        )}
         <button
-          onClick={() => setActiveTab('budget')}
+          onClick={() => setActiveTab('members' as any)}
           className={`px-5 py-3 font-bold text-sm border-b-2 transition-all flex items-center gap-2 whitespace-nowrap cursor-pointer ${
-            activeTab === 'budget'
+            activeTab === ('members' as any)
               ? 'border-primary text-primary bg-primary/5 rounded-t-xl'
               : 'border-transparent text-slate-500 hover:text-slate-700'
           }`}
         >
-          <Wallet className="w-4.5 h-4.5" />
-          Ngân sách
-        </button>
-        <button
-          onClick={() => setActiveTab('worklogs')}
-          className={`px-5 py-3 font-bold text-sm border-b-2 transition-all flex items-center gap-2 whitespace-nowrap cursor-pointer ${
-            activeTab === 'worklogs'
-              ? 'border-primary text-primary bg-primary/5 rounded-t-xl'
-              : 'border-transparent text-slate-500 hover:text-slate-700'
-          }`}
-        >
-          <Clock className="w-4.5 h-4.5" />
-          Nhật ký làm việc
+          <User className="w-4.5 h-4.5" />
+          Nhân sự ({project.members?.length || 0})
         </button>
       </div>
 
-      {/* TAB CONTENT: BUDGET */}
-      {activeTab === 'budget' && (
-        <div className="space-y-5">
-          <Card>
-            <CardHeader className="border-b border-slate-100 pb-4 flex flex-row items-center justify-between">
-              <CardTitle className="text-base font-extrabold text-slate-800 flex items-center gap-2">
-                <Wallet className="w-5 h-5 text-violet-500" />
-                Quản lý Ngân sách Dự án
-              </CardTitle>
-              {!isEditingBudget ? (
-                <Button variant="outline" size="sm" onClick={handleOpenEditBudget} className="flex items-center gap-1.5 cursor-pointer">
-                  <Pencil className="w-3.5 h-3.5 mr-1" />Chỉnh sửa
-                </Button>
-              ) : (
-                <div className="flex items-center gap-2">
-                  <Button variant="outline" size="sm" onClick={() => setIsEditingBudget(false)} disabled={savingBudget} className="cursor-pointer">
-                    Hủy
-                  </Button>
-                  <Button variant="primary" size="sm" onClick={handleSaveBudget} loading={savingBudget} className="cursor-pointer">
-                    Lưu lại
-                  </Button>
-                </div>
-              )}
-            </CardHeader>
-            <CardContent className="p-6 space-y-6">
-              {!isEditingBudget ? (
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-                  <div className="rounded-2xl border border-violet-200 bg-violet-50/60 p-5 flex flex-col gap-2">
-                    <div className="flex items-center gap-2 text-violet-600 font-extrabold text-xs uppercase tracking-wider">
-                      <BadgeDollarSign className="w-4 h-4" />Ngân sách dự án
-                    </div>
-                    <div className="text-2xl font-black text-violet-700">{formatVND(project.budget)}</div>
-                    <p className="text-[11px] text-violet-500">Tổng giá trị hợp đồng / ngân sách được phân bổ</p>
-                  </div>
-                  <div className="rounded-2xl border border-green-200 bg-green-50/60 p-5 flex flex-col gap-2">
-                    <div className="flex items-center gap-2 text-green-600 font-extrabold text-xs uppercase tracking-wider">
-                      <TrendingUp className="w-4 h-4" />Đã nhận thanh toán
-                    </div>
-                    <div className="text-2xl font-black text-green-700">{formatVND(project.amountReceived)}</div>
-                    {project.budget > 0 && (
-                      <div className="flex items-center gap-2">
-                        <div className="flex-1 h-1.5 bg-green-100 rounded-full overflow-hidden">
-                          <div className="h-full bg-green-500 rounded-full" style={{ width: `${Math.min(100, Math.round((project.amountReceived / project.budget) * 100))}%` }} />
-                        </div>
-                        <span className="text-[11px] font-extrabold text-green-600">{Math.round((project.amountReceived / project.budget) * 100)}%</span>
-                      </div>
-                    )}
-                  </div>
-                  <div className={`rounded-2xl border p-5 flex flex-col gap-2 ${project.amountReceived >= project.budget && project.budget > 0 ? 'border-green-200 bg-green-50/40' : 'border-amber-200 bg-amber-50/60'}`}>
-                    <div className={`flex items-center gap-2 font-extrabold text-xs uppercase tracking-wider ${project.amountReceived >= project.budget && project.budget > 0 ? 'text-green-600' : 'text-amber-600'}`}>
-                      <Wallet className="w-4 h-4" />{project.amountReceived >= project.budget && project.budget > 0 ? 'Đã thanh toán đủ ✓' : 'Còn lại chưa nhận'}
-                    </div>
-                    <div className={`text-2xl font-black ${project.amountReceived >= project.budget && project.budget > 0 ? 'text-green-600' : 'text-amber-600'}`}>
-                      {formatVND(Math.max(0, project.budget - project.amountReceived))}
-                    </div>
-                    <p className="text-[11px] text-slate-500">
-                      {project.budget > 0 ? `${Math.max(0, 100 - Math.round((project.amountReceived / project.budget) * 100))}% ngân sách chưa được thanh toán` : 'Chưa thiết lập ngân sách'}
-                    </p>
-                  </div>
-                </div>
-              ) : (
-                <div className="space-y-5 max-w-xl">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-2">Ngân sách dự án (VNĐ)</label>
-                    <Input placeholder="VD: 5000000" value={budgetInput} onChange={(e) => setBudgetInput(e.target.value)} type="number" min="0" />
-                    <p className="text-[11px] text-slate-400 mt-1.5">Tổng giá trị hợp đồng hoặc ngân sách dự án</p>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-2">Số tiền đã nhận (VNĐ)</label>
-                    <Input placeholder="VD: 2500000" value={amountReceivedInput} onChange={(e) => setAmountReceivedInput(e.target.value)} type="number" min="0" />
-                    <div className="flex flex-wrap gap-2 mt-2.5">
-                      <span className="text-[11px] text-slate-400 font-semibold self-center">Đặt nhanh:</span>
-                      {[0, 25, 50, 70, 100].map((pct) => (
-                        <button
-                          key={pct}
-                          type="button"
-                          onClick={() => setQuickAmountReceived(pct)}
-                          disabled={project.budget <= 0}
-                          className={`px-3 py-1 text-[11px] font-extrabold rounded-full border cursor-pointer transition-all ${
-                            project.budget > 0 && Math.round((parseFloat(amountReceivedInput || '0') / project.budget) * 100) === pct
-                              ? 'bg-primary text-white border-primary'
-                              : 'bg-white border-slate-200 text-slate-600 hover:border-primary hover:text-primary'
-                          }`}
-                        >
-                          {pct}%
-                        </button>
-                      ))}
-                    </div>
-                    {project.budget <= 0 && (
-                      <p className="text-[11px] text-amber-500 mt-1.5">⚠️ Nhập ngân sách trước để dùng nút tỷ lệ %</p>
-                    )}
-                  </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </div>
-      )}
+      
 
-      {/* TAB CONTENT: WORK LOGS */}
-      {activeTab === 'worklogs' && (
-        <div className="space-y-6 animate-fade-in-up">
+      {/* TAB CONTENT: MEMBERS INFO */}
+      {activeTab === ('members' as any) && (
+        <div className="space-y-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <h2 className="text-sm font-bold text-slate-700 flex items-center gap-2">
-              <Clock className="w-5 h-5 text-indigo-500" />
-              Bảng kê khai thời gian làm việc (To-do)
+              <User className="w-5 h-5 text-indigo-500" />
+              Danh sách nhân sự tham gia dự án
             </h2>
-            <div className="flex items-center gap-3">
-              <select
-                value={workLogFilter}
-                onChange={(e) => setWorkLogFilter(e.target.value)}
-                className="flex h-9 w-40 items-center justify-between rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
-              >
-                <option value="all">Tất cả</option>
-                <option value="7days">7 ngày qua</option>
-                <option value="30days">30 ngày qua</option>
-                <option value="lastMonth">1 tháng trước</option>
-              </select>
-              <Button variant="primary" size="sm" onClick={handleOpenAddWorkLog} className="flex items-center gap-1 text-xs py-2 px-3">
-                <Plus className="w-4 h-4" />
-                Ghi nhận giờ làm
-              </Button>
-            </div>
+            <Button variant="primary" size="sm" onClick={handleOpenUpdateMembers} className="flex items-center gap-1.5">
+              <Pencil className="w-3.5 h-3.5 mr-1" />
+              Thiết lập nhân sự
+            </Button>
           </div>
 
           <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="bg-slate-50 text-[10px] font-bold text-slate-500 uppercase border-b border-slate-200 tracking-wider">
-                  <th className="px-6 py-4">Công việc đã làm</th>
-                  <th className="px-6 py-4">Thời gian (Giờ)</th>
-                  <th className="px-6 py-4">Ngày làm</th>
-                  <th className="px-6 py-4">Nguồn khách hàng</th>
-                  <th className="px-6 py-4 text-right">Thao tác</th>
+                  <th className="px-6 py-4">Nhân sự</th>
+                  <th className="px-6 py-4">Email</th>
+                  <th className="px-6 py-4">Vai trò hệ thống</th>
+                  <th className="px-6 py-4">Số điện thoại</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-xs">
-                {loadingWorkLogs ? (
+                {!project.members || project.members.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="py-12 text-center text-slate-400">Đang tải nhật ký...</td>
-                  </tr>
-                ) : workLogs.length === 0 ? (
-                  <tr>
-                    <td colSpan={5} className="py-12 text-center text-slate-400 italic">Chưa có nhật ký thời gian nào.</td>
+                    <td colSpan={4} className="py-12 text-center text-slate-400 italic">Chưa gán nhân sự tham gia dự án này.</td>
                   </tr>
                 ) : (
-                  workLogs.map((log) => (
-                    <tr key={log.id} className="hover:bg-slate-50/50 transition-colors">
-                      <td className="px-6 py-4 font-bold text-slate-800">{log.title}</td>
-                      <td className="px-6 py-4 font-extrabold text-slate-800">{log.hours} giờ</td>
-                      <td className="px-6 py-4 text-slate-500">{formatDate(log.date)}</td>
-                      <td className="px-6 py-4 text-slate-500">
-                        {log.customer ? (
-                          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-blue-50 text-blue-700 text-[11px] font-bold border border-blue-100">
-                            {log.customer.name}
-                          </span>
-                        ) : '—'}
+                  project.members.map((m) => (
+                    <tr key={m.id} className="hover:bg-slate-50/50 transition-colors">
+                      <td className="px-6 py-4 font-bold text-slate-800 flex items-center gap-2">
+                        {m.avatarUrl ? (
+                          <img
+                            src={m.avatarUrl}
+                            alt={m.name}
+                            className="w-7 h-7 rounded-full object-cover border border-slate-200"
+                          />
+                        ) : (
+                          <div className="w-7 h-7 rounded-full bg-slate-100 flex items-center justify-center text-xs font-black text-slate-550 border border-slate-200">
+                            {m.name ? m.name.charAt(0).toUpperCase() : '?'}
+                          </div>
+                        )}
+                        <span>{m.name}</span>
                       </td>
-                      <td className="px-6 py-4 text-right">
-                        <button
-                          onClick={() => triggerDelete('worklog', log.id)}
-                          className="p-1 rounded text-rose-500 hover:bg-rose-50 hover:text-rose-700 transition-colors cursor-pointer"
-                          title="Xóa"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+                      <td className="px-6 py-4 text-slate-550">{m.email}</td>
+                      <td className="px-6 py-4">
+                        <Badge variant={m.role === 'admin' ? 'danger' : m.role === 'member' ? 'primary' : 'secondary'} className="scale-90">
+                          {m.role === 'admin' ? 'Admin' : m.role === 'member' ? 'Member' : m.role === 'collaborator' ? 'Collaborator' : m.role}
+                        </Badge>
                       </td>
+                      <td className="px-6 py-4 text-slate-500">{m.phone || '—'}</td>
                     </tr>
                   ))
                 )}
               </tbody>
-              {workLogs.length > 0 && (
-                <tfoot>
-                  <tr className="bg-slate-50/50 border-t-2 border-slate-200 font-extrabold text-xs">
-                    <td className="px-6 py-4 text-slate-600">Tổng giờ làm tích lũy:</td>
-                    <td colSpan={4} className="px-6 py-4 text-indigo-600 text-sm font-black">
-                      {workLogs.reduce((sum, item) => sum + Number(item.hours), 0)} giờ
-                    </td>
-                  </tr>
-                </tfoot>
-              )}
             </table>
           </div>
         </div>
-      )}
-
-      
-
-      {/* TAB CONTENT: CUSTOMER INFO */}
-      {activeTab === 'customer' && project.customer && (
-        <Card className="max-w-2xl">
-          <CardHeader className="border-b border-slate-100 pb-3 flex flex-row items-center justify-between">
-            <CardTitle className="text-base font-extrabold text-slate-800 flex items-center gap-2">
-              <User className="w-5 h-5 text-primary" />
-              Thông tin chi tiết Khách hàng
-            </CardTitle>
-            <Link href={`/admin/customers`}>
-              <Button variant="outline" size="sm">
-                Đến quản lý khách hàng
-              </Button>
-            </Link>
-          </CardHeader>
-          <CardContent className="p-6 space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4 text-sm">
-              <div className="space-y-1">
-                <span className="text-xs text-slate-400 block font-bold uppercase tracking-wider">Họ và tên</span>
-                <span className="font-extrabold text-slate-700">{project.customer.name}</span>
-              </div>
-              <div className="space-y-1">
-                <span className="text-xs text-slate-400 block font-bold uppercase tracking-wider">Số điện thoại</span>
-                <span className="font-extrabold text-slate-700">{project.customer.phone}</span>
-              </div>
-              <div className="space-y-1">
-                <span className="text-xs text-slate-400 block font-bold uppercase tracking-wider">Email</span>
-                <span className="font-extrabold text-slate-700">{project.customer.email || 'Chưa cập nhật'}</span>
-              </div>
-              <div className="space-y-1">
-                <span className="text-xs text-slate-400 block font-bold uppercase tracking-wider">Zalo</span>
-                <span className="font-extrabold text-slate-700">{project.customer.zalo || 'Chưa cập nhật'}</span>
-              </div>
-              <div className="space-y-1">
-                <span className="text-xs text-slate-400 block font-bold uppercase tracking-wider">Facebook Link</span>
-                <span className="font-extrabold text-slate-700">
-                  {project.customer.facebook ? (
-                    <a
-                      href={project.customer.facebook}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-primary hover:underline font-semibold"
-                    >
-                      Mở liên kết Facebook
-                    </a>
-                  ) : (
-                    'Chưa cập nhật'
-                  )}
-                </span>
-              </div>
-              <div className="space-y-1">
-                <span className="text-xs text-slate-400 block font-bold uppercase tracking-wider">Ghi chú</span>
-                <span className="font-extrabold text-slate-700">{project.customer.note || 'Không có ghi chú'}</span>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
       )}
 
       
@@ -1844,141 +1777,81 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
         </div>
       )}
 
-      {/* ALWAYS VISIBLE AT THE BOTTOM: REQUIREMENTS & TIMELINE */}
+      {/* ALWAYS VISIBLE AT THE BOTTOM: WORK LOGS (TO-DO) */}
       <Card className="mt-6">
-        <CardHeader className="border-b border-slate-100 pb-4 flex flex-row items-center justify-between">
+        <CardHeader className="border-b border-slate-100 pb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <CardTitle className="text-base font-extrabold text-slate-800 flex items-center gap-2">
-            <FileText className="w-5 h-5 text-primary" />
-            Timeline Yêu cầu & Ghi chú từ Khách hàng
+            <Clock className="w-5 h-5 text-indigo-500" />
+            Bảng kê khai thời gian làm việc (To-do)
           </CardTitle>
-          <Button
-            variant="primary"
-            size="sm"
-            onClick={() => {
-              setEditingNote(null);
-              setNoteTitle('');
-              setNoteContent('');
-              setNoteLinks([{ label: '', url: '' }]);
-              setNoteDate(new Date().toISOString().split('T')[0]);
-              setIsNoteModalOpen(true);
-            }}
-            className="flex items-center gap-1 cursor-pointer"
-          >
-            <Plus className="w-4.5 h-4.5" />
-            <span>Thêm ghi chú</span>
-          </Button>
+          <div className="flex items-center gap-3">
+            <select
+              value={workLogFilter}
+              onChange={(e) => setWorkLogFilter(e.target.value)}
+              className="flex h-9 w-40 items-center justify-between rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
+            >
+              <option value="all">Tất cả</option>
+              <option value="7days">7 ngày qua</option>
+              <option value="30days">30 ngày qua</option>
+              <option value="lastMonth">1 tháng trước</option>
+            </select>
+            <Button variant="primary" size="sm" onClick={handleOpenAddWorkLog} className="flex items-center gap-1 text-xs py-2 px-3">
+              <Plus className="w-4 h-4" />
+              Ghi nhận giờ làm
+            </Button>
+          </div>
         </CardHeader>
-        <CardContent className="p-6">
-          {loadingNotes ? (
-            <LoadingSkeleton className="h-40 w-full" />
-          ) : requirementNotes.length === 0 ? (
-            <EmptyState
-              icon={FileText}
-              title="Chưa có ghi chú yêu cầu nào"
-              description="Lưu lại các mốc thời gian khách hàng gửi yêu cầu, phản hồi hoặc tài liệu để dễ dàng theo dõi."
-              action={
-                <Button
-                  onClick={() => {
-                    setEditingNote(null);
-                    setNoteTitle('');
-                    setNoteContent('');
-                    setNoteLinks([{ label: '', url: '' }]);
-                    setNoteDate(new Date().toISOString().split('T')[0]);
-                    setIsNoteModalOpen(true);
-                  }}
-                >
-                  Tạo ghi chú đầu tiên
-                </Button>
-              }
-            />
-          ) : (
-            <div className="relative border-l-2 border-slate-150 ml-4 pl-6 space-y-6">
-              {requirementNotes.map((note) => (
-                <div key={note.id} className="relative group">
-                  <div className="absolute -left-[31px] top-1 w-4 h-4 rounded-full bg-primary border-4 border-white shadow-sm ring-1 ring-primary/20" />
-                  <div className="bg-slate-50/50 hover:bg-slate-50 border border-slate-150/80 rounded-2xl p-5 transition-all">
-                    <div className="flex items-center justify-between gap-3 mb-2 flex-wrap">
-                      <div className="flex items-center gap-2.5">
-                        <span className="text-xs font-extrabold text-slate-400 bg-slate-100 px-2 py-0.5 rounded">
-                          {formatDate(note.date)}
-                        </span>
-                        <h4 className="text-sm font-black text-slate-800">{note.title}</h4>
-                      </div>
-                      <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="bg-slate-50 text-[10px] font-bold text-slate-500 uppercase border-b border-slate-200 tracking-wider">
+                  <th className="px-6 py-4">Công việc đã làm</th>
+                  <th className="px-6 py-4">Thời gian (Giờ)</th>
+                  <th className="px-6 py-4">Ngày làm</th>
+                  <th className="px-6 py-4 text-right">Thao tác</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 text-xs">
+                {loadingWorkLogs ? (
+                  <tr>
+                    <td colSpan={4} className="py-12 text-center text-slate-400">Đang tải nhật ký...</td>
+                  </tr>
+                ) : workLogs.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} className="py-12 text-center text-slate-400 italic">Chưa có nhật ký thời gian nào.</td>
+                  </tr>
+                ) : (
+                  workLogs.map((log) => (
+                    <tr key={log.id} className="hover:bg-slate-50/50 transition-colors">
+                      <td className="px-6 py-4 font-bold text-slate-800">{log.title}</td>
+                      <td className="px-6 py-4 font-extrabold text-slate-800">{log.hours} giờ</td>
+                      <td className="px-6 py-4 text-slate-500">{formatDate(log.date)}</td>
+                      <td className="px-6 py-4 text-right">
                         <button
-                          onClick={() => {
-                            let parsedLinks = [{ label: '', url: '' }];
-                            if (note.link) {
-                              try {
-                                const parsed = JSON.parse(note.link);
-                                if (Array.isArray(parsed)) {
-                                  parsedLinks = parsed;
-                                } else {
-                                  parsedLinks = [{ label: 'Liên kết', url: note.link }];
-                                }
-                              } catch {
-                                parsedLinks = [{ label: 'Liên kết', url: note.link }];
-                              }
-                            }
-                            setEditingNote(note);
-                            setNoteTitle(note.title);
-                            setNoteContent(note.content || '');
-                            setNoteLinks(parsedLinks);
-                            setNoteDate(note.date ? note.date.split('T')[0] : '');
-                            setIsNoteModalOpen(true);
-                          }}
-                          className="p-1 text-slate-400 hover:text-primary transition-colors cursor-pointer"
-                          title="Sửa ghi chú"
-                        >
-                          <Edit2 className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          onClick={() => setDeleteNoteId(note.id)}
-                          className="p-1 text-slate-400 hover:text-red-500 transition-colors cursor-pointer"
-                          title="Xóa ghi chú"
+                          onClick={() => triggerDelete('worklog', log.id)}
+                          className="p-1 rounded text-rose-500 hover:bg-rose-50 hover:text-rose-700 transition-colors cursor-pointer"
+                          title="Xóa"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
-                      </div>
-                    </div>
-                    <p className="text-xs text-slate-650 leading-relaxed whitespace-pre-line font-medium">
-                      {note.content || 'Không có mô tả chi tiết.'}
-                    </p>
-                    {note.link && (() => {
-                      let links = [];
-                      try {
-                        const parsed = JSON.parse(note.link);
-                        if (Array.isArray(parsed)) {
-                          links = parsed;
-                        } else {
-                          links = [{ label: 'Mở liên kết đính kèm', url: note.link }];
-                        }
-                      } catch {
-                        links = [{ label: 'Mở liên kết đính kèm', url: note.link }];
-                      }
-                      if (links.length === 0) return null;
-                      return (
-                        <div className="mt-3 flex flex-wrap gap-2">
-                          {links.map((lnk, lIdx) => (
-                            <a
-                              key={lIdx}
-                              href={lnk.url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="inline-flex items-center gap-1.5 text-[11px] font-bold text-primary bg-primary/5 hover:bg-primary/10 border border-primary/20 px-2.5 py-1.2 rounded-lg transition-colors"
-                            >
-                              <ExternalLink className="w-3 h-3" />
-                              {lnk.label || 'Mở liên kết'}
-                            </a>
-                          ))}
-                        </div>
-                      );
-                    })()}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+              {workLogs.length > 0 && (
+                <tfoot>
+                  <tr className="bg-slate-50/50 border-t-2 border-slate-200 font-extrabold text-xs">
+                    <td className="px-6 py-4 text-slate-600">Tổng giờ làm tích lũy:</td>
+                    <td colSpan={3} className="px-6 py-4 text-indigo-600 text-sm font-black">
+                      {workLogs.reduce((sum, item) => sum + Number(item.hours), 0)} giờ
+                    </td>
+                  </tr>
+                </tfoot>
+              )}
+            </table>
+          </div>
         </CardContent>
       </Card>
 
@@ -2318,13 +2191,11 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                       const val = e.target.value;
                       setToolCycle(val);
                       if (val === 'month') {
-                        const nextMonth = new Date();
-                        nextMonth.setMonth(nextMonth.getMonth() + 1);
-                        setToolRenewal(nextMonth.toISOString().split('T')[0]);
+                        setToolDurationMonths('1');
+                        updateRenewalFromDuration(toolStartDate, '1', 'month');
                       } else if (val === 'year') {
-                        const nextYear = new Date();
-                        nextYear.setFullYear(nextYear.getFullYear() + 1);
-                        setToolRenewal(nextYear.toISOString().split('T')[0]);
+                        setToolDurationMonths('12');
+                        updateRenewalFromDuration(toolStartDate, '12', 'year');
                       } else if (val === 'one-time') {
                         setToolRenewal('');
                       }
@@ -2336,6 +2207,32 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                     ]}
                   />
                 </div>
+                {toolCycle !== 'one-time' && (
+                  <div className="grid grid-cols-2 gap-4">
+                    <Input
+                      label="Ngày bắt đầu sử dụng"
+                      type="date"
+                      value={toolStartDate}
+                      onChange={(e) => {
+                        const start = e.target.value;
+                        setToolStartDate(start);
+                        updateRenewalFromDuration(start, toolDurationMonths);
+                      }}
+                    />
+                    <Input
+                      label="Thời hạn sử dụng (Tháng) ⏳"
+                      type="number"
+                      min="1"
+                      placeholder="Số tháng sử dụng"
+                      value={toolDurationMonths}
+                      onChange={(e) => {
+                        const duration = e.target.value;
+                        setToolDurationMonths(duration);
+                        updateRenewalFromDuration(toolStartDate, duration);
+                      }}
+                    />
+                  </div>
+                )}
                 <div className="grid grid-cols-2 gap-4">
                   <Input
                     label="Chi phí (VNĐ) *"
@@ -2347,7 +2244,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                   />
                   {toolCycle !== 'one-time' ? (
                     <Input
-                      label="Ngày gia hạn tiếp theo"
+                      label="Ngày hết hạn tiếp theo (tự tính) 🎯"
                       type="date"
                       value={toolRenewal}
                       onChange={(e) => setToolRenewal(e.target.value)}
@@ -2379,6 +2276,84 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
         </div>
       )}
 
+      {/* Modal Thiết lập nhân sự */}
+      {isMemberModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+          <div className="w-full max-w-lg bg-white rounded-2xl shadow-xl overflow-hidden animate-scale-in">
+            <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
+              <h3 className="font-extrabold text-slate-800 text-base">
+                Thiết lập nhân sự tham gia dự án 👥
+              </h3>
+              <button onClick={() => setIsMemberModalOpen(false)} className="text-slate-400 hover:text-slate-600 font-bold text-lg focus:outline-none cursor-pointer">
+                ✕
+              </button>
+            </div>
+            <div className="px-6 py-6 space-y-4">
+              <p className="text-xs text-slate-400">Chọn những nhân sự trong hệ thống tham gia vào dự án này:</p>
+              <div className="border border-slate-200 rounded-xl p-3 bg-slate-50/50 max-h-60 overflow-y-auto">
+                {systemUsers.length === 0 ? (
+                  <p className="text-xs text-slate-400 italic">Đang tải danh sách nhân sự...</p>
+                ) : (
+                  <div className="grid grid-cols-1 gap-2">
+                    {systemUsers.map((u) => {
+                      const isChecked = selectedMemberIds.includes(u.id);
+                      return (
+                        <label
+                          key={u.id}
+                          className={`flex items-center gap-3 p-2.5 rounded-lg border transition-all cursor-pointer text-xs font-bold ${
+                            isChecked
+                              ? 'bg-primary/5 border-primary/40 text-primary'
+                              : 'bg-white border-slate-200 text-slate-655 hover:bg-slate-50'
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setSelectedMemberIds((prev) => [...prev, u.id]);
+                              } else {
+                                setSelectedMemberIds((prev) => prev.filter((id) => id !== u.id));
+                              }
+                            }}
+                            className="rounded text-primary focus:ring-primary w-4 h-4"
+                          />
+                          <div className="flex items-center gap-2 min-w-0 flex-1">
+                            {u.avatarUrl ? (
+                              <img
+                                src={u.avatarUrl}
+                                alt={u.name}
+                                className="w-6 h-6 rounded-full object-cover"
+                              />
+                            ) : (
+                              <div className="w-6 h-6 rounded-full bg-slate-200 flex items-center justify-center text-[10px] text-slate-550 font-black">
+                                {u.name.charAt(0).toUpperCase()}
+                              </div>
+                            )}
+                            <span className="truncate">{u.name}</span>
+                            <span className="text-[10px] font-medium opacity-70">
+                              ({u.role === 'admin' ? 'Admin' : u.role === 'member' ? 'Member' : u.role === 'collaborator' ? 'Collaborator' : u.role})
+                            </span>
+                          </div>
+                        </label>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className="px-6 py-4 bg-slate-50 border-t border-slate-150 flex justify-end gap-3 rounded-b-2xl">
+              <Button type="button" variant="outline" size="sm" onClick={() => setIsMemberModalOpen(false)} disabled={savingMembers}>
+                Hủy bỏ
+              </Button>
+              <Button type="button" variant="primary" size="sm" onClick={handleSaveMembers} loading={savingMembers}>
+                Lưu thay đổi
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Dialog xác nhận xóa chung */}
       <Dialog
         isOpen={deleteType !== null}
@@ -2394,6 +2369,54 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
         isDanger={true}
         isLoading={deleting}
       />
+
+      {/* Modal Sửa Ngân sách dự án trực tiếp */}
+      {isEditingBudget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+          <div className="w-full max-w-md bg-white rounded-2xl shadow-xl overflow-hidden animate-scale-in">
+            <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
+              <h3 className="font-extrabold text-slate-800 text-base">
+                Cập nhật tài chính dự án 💰
+              </h3>
+              <button onClick={() => setIsEditingBudget(false)} className="text-slate-400 hover:text-slate-600 font-bold text-lg focus:outline-none cursor-pointer">
+                ✕
+              </button>
+            </div>
+            <div className="px-6 py-6 space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-655 uppercase tracking-wider mb-2">Ngân sách dự án (VNĐ) *</label>
+                <Input placeholder="VD: 5000000" value={budgetInput} onChange={(e) => setBudgetInput(e.target.value)} type="number" min="0" required />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-655 uppercase tracking-wider mb-2">Số tiền đã nhận (VNĐ)</label>
+                <Input placeholder="VD: 2500000" value={amountReceivedInput} onChange={(e) => setAmountReceivedInput(e.target.value)} type="number" min="0" />
+                <div className="flex flex-wrap gap-2 mt-2.5">
+                  <span className="text-[11px] text-slate-400 font-semibold self-center">Đặt nhanh:</span>
+                  {[0, 25, 50, 70, 100].map((pct) => (
+                    <button
+                      key={pct}
+                      type="button"
+                      onClick={() => setQuickAmountReceived(pct)}
+                      disabled={parseFloat(budgetInput || '0') <= 0}
+                      className="px-2.5 py-0.5 text-[10px] font-bold rounded-full border bg-white border-slate-200 text-slate-600 hover:border-primary hover:text-primary cursor-pointer transition-all"
+                    >
+                      {pct}%
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <div className="px-6 py-4 bg-slate-50 border-t border-slate-150 flex justify-end gap-3 rounded-b-2xl">
+              <Button type="button" variant="outline" size="sm" onClick={() => setIsEditingBudget(false)} disabled={savingBudget}>
+                Hủy bỏ
+              </Button>
+              <Button type="button" variant="primary" size="sm" onClick={handleSaveBudget} loading={savingBudget}>
+                Lưu lại
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
       {/* TIMELINE NOTE CREATE/EDIT MODAL */}
       {isNoteModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
@@ -2566,17 +2589,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
                     required
                   />
                 </div>
-                <div>
-                  <Select
-                    label="Nguồn khách hàng (Không bắt buộc)"
-                    value={logCustomerId}
-                    onChange={(e) => setLogCustomerId(e.target.value)}
-                    options={[
-                      { value: '', label: 'Không liên kết' },
-                      ...projectCustomers.map((c) => ({ value: c.id, label: c.name })),
-                    ]}
-                  />
-                </div>
+                {/* Ẩn chọn khách hàng theo yêu cầu loại bỏ */}
               </div>
               <div className="px-6 py-4 bg-slate-50 border-t border-slate-150 flex justify-end gap-3 rounded-b-2xl">
                 <Button

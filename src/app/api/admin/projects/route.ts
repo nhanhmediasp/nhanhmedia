@@ -17,6 +17,15 @@ export async function GET(req: Request) {
         websiteCosts: true,
         toolCosts: true,
         columns: true,
+        members: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            role: true,
+            avatarUrl: true,
+          },
+        },
       },
       orderBy: { createdAt: 'desc' },
     });
@@ -58,6 +67,7 @@ export async function GET(req: Request) {
         createdAt: p.createdAt,
         updatedAt: p.updatedAt,
         websiteUrl: p.websiteUrl,
+        members: p.members,
       };
     });
 
@@ -77,7 +87,7 @@ export async function POST(req: Request) {
 
   try {
     const body = await req.json();
-    const { name, description, startDate, endDate, status, categoryId, customerId, websiteUrl } = body;
+    const { name, description, startDate, endDate, status, categoryId, customerId, websiteUrl, memberIds } = body;
 
     if (!name || !startDate) {
       return NextResponse.json({ error: 'Tên dự án và Ngày bắt đầu là bắt buộc.' }, { status: 400 });
@@ -97,6 +107,11 @@ export async function POST(req: Request) {
           websiteUrl: websiteUrl ? websiteUrl.trim() : null,
           progress: 0,
           budget: 0,
+          members: {
+            connect: memberIds && Array.isArray(memberIds)
+              ? memberIds.map((id: string) => ({ id }))
+              : [],
+          },
         },
       });
 

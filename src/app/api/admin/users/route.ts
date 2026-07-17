@@ -91,31 +91,35 @@ export async function POST(req: Request) {
   try {
     const role = req.headers.get('x-user-role');
     if (role !== 'admin') {
-      return NextResponse.json({ error: 'Chỉ Admin mới có quyền tạo tài khoản.' }, { status: 403 });
+      return NextResponse.json({ error: 'Chỉ Admin mới có quyền tạo nhân sự.' }, { status: 403 });
     }
 
     const body = await req.json();
     const { name, email, password, phone, userRole, status, note } = body;
 
-    if (!name || !email || !password || !userRole) {
-      return NextResponse.json({ error: 'Thiếu các thông tin bắt buộc.' }, { status: 400 });
+    if (!name || !userRole) {
+      return NextResponse.json({ error: 'Thiếu các thông tin bắt buộc (Tên và vai trò).' }, { status: 400 });
     }
+
+    const finalEmail = email && email.trim() !== ''
+      ? email.toLowerCase().trim()
+      : `staff_${Date.now()}@nhanhmedia.com`;
 
     // Check if email already exists
     const existing = await prisma.user.findUnique({
-      where: { email: email.toLowerCase().trim() },
+      where: { email: finalEmail },
     });
 
     if (existing) {
-      return NextResponse.json({ error: 'Email đăng nhập đã được sử dụng.' }, { status: 400 });
+      return NextResponse.json({ error: 'Email đã được sử dụng.' }, { status: 400 });
     }
 
-    const passwordHash = hashPassword(password);
+    const passwordHash = password && password.trim() !== '' ? hashPassword(password) : null;
 
     const newUser = await prisma.user.create({
       data: {
         name: name.trim(),
-        email: email.toLowerCase().trim(),
+        email: finalEmail,
         passwordHash,
         phone: phone ? phone.trim() : null,
         role: userRole,
@@ -126,12 +130,12 @@ export async function POST(req: Request) {
 
     await createAuditLog({
       action: 'CREATE_USER',
-      actionLabel: 'Tạo tài khoản mới',
+      actionLabel: 'Tạo nhân sự mới',
       module: 'users',
       entityType: 'User',
       entityId: newUser.id,
       entityName: newUser.email,
-      description: `Đã tạo tài khoản mới: ${newUser.name} (${newUser.email}) với vai trò ${newUser.role}`,
+      description: `Đã tạo nhân sự mới: ${newUser.name} (${newUser.email}) với vai trò ${newUser.role}`,
       newValues: {
         id: newUser.id,
         name: newUser.name,
@@ -146,7 +150,7 @@ export async function POST(req: Request) {
     });
 
     return NextResponse.json({
-      message: 'Tạo tài khoản thành công!',
+      message: 'Tạo nhân sự thành công!',
       user: {
         id: newUser.id,
         name: newUser.name,
@@ -156,7 +160,7 @@ export async function POST(req: Request) {
     });
   } catch (error) {
     console.error('Create user error:', error);
-    return NextResponse.json({ error: 'Lỗi tạo tài khoản mới.' }, { status: 500 });
+    return NextResponse.json({ error: 'Lỗi tạo nhân sự mới.' }, { status: 500 });
   }
 }
 

@@ -147,6 +147,25 @@ export async function POST(req: Request) {
     }
 
     // 2. Check password
+    if (!user.passwordHash) {
+      await createAuditLog({
+        action: 'LOGIN_FAILED',
+        actionLabel: 'Đăng nhập thất bại',
+        module: 'auth',
+        entityType: 'User',
+        entityId: user.id,
+        entityName: user.email,
+        description: `Đăng nhập thất bại: Tài khoản nhân sự ${user.email} không có mật khẩu.`,
+        request: req,
+        status: 'failed',
+        errorMessage: 'Tài khoản này không hỗ trợ đăng nhập.',
+      });
+      return NextResponse.json(
+        { error: 'Tài khoản này không hỗ trợ đăng nhập.' },
+        { status: 400 }
+      );
+    }
+
     const passwordMatch = comparePassword(password, user.passwordHash);
     if (!passwordMatch) {
       let errorMsg = 'Email hoặc mật khẩu không chính xác.';

@@ -29,6 +29,16 @@ export async function GET(
         toolCosts: {
           orderBy: { createdAt: 'desc' },
         },
+        members: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            role: true,
+            avatarUrl: true,
+            phone: true,
+          },
+        },
       },
     });
 
@@ -56,7 +66,7 @@ export async function PUT(
   try {
     const { id } = await params;
     const body = await req.json();
-    const { name, description, startDate, endDate, status, categoryId, customerId, budget, amountReceived, websiteUrl } = body;
+    const { name, description, startDate, endDate, status, categoryId, customerId, budget, amountReceived, websiteUrl, memberIds } = body;
 
     if (!name || !startDate) {
       return NextResponse.json({ error: 'Tên dự án và Ngày bắt đầu là bắt buộc.' }, { status: 400 });
@@ -80,6 +90,9 @@ export async function PUT(
         budget: budget !== undefined ? parseFloat(budget) : undefined,
         amountReceived: amountReceived !== undefined ? parseFloat(amountReceived) : undefined,
         websiteUrl: websiteUrl !== undefined ? (websiteUrl ? websiteUrl.trim() : null) : undefined,
+        members: memberIds !== undefined ? {
+          set: memberIds.map((id: string) => ({ id }))
+        } : undefined,
       },
     });
 

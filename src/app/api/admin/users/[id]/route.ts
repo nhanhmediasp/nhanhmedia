@@ -28,6 +28,17 @@ export async function GET(
         },
         renewals: { select: { price: true } },
         customers: { select: { id: true } },
+        projects: {
+          select: {
+            id: true,
+            name: true,
+            status: true,
+            progress: true,
+            startDate: true,
+            endDate: true,
+          },
+          orderBy: { createdAt: 'desc' },
+        },
       },
     });
 
@@ -58,6 +69,8 @@ export async function GET(
       orderCount,
       customerCount,
       totalSales,
+      projects: user.projects,
+      projectCount: user.projects.length,
       orders: user.orders.map((o) => ({
         id: o.id,
         orderCode: o.orderCode,

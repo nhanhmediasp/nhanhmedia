@@ -754,7 +754,6 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
 
     drawRow('Đơn giá dịch vụ:', formatVND(currentPrice), true, '#a145ab');
     drawRow('Đã thanh toán:', formatVND(order.amountPaid), true, '#16a34a');
-    drawRow('Người tạo đơn:', order.createdByUser.name);
 
     // Divider line
     ctx.beginPath();
@@ -987,13 +986,7 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
                     </div>
                   )}
                 </div>
-                <div className="space-y-1">
-                  <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Người tạo đơn:</span>
-                  <div className="font-bold text-foreground flex items-center gap-1.5 text-sm">
-                    <span>{order.createdByUser.name}</span>
-                    <span className="text-xs text-muted-foreground font-normal">({order.createdByUser.role})</span>
-                  </div>
-                </div>
+                  {/* Removed Creator Info */}
                 <div className="space-y-1">
                   <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Ngày tạo đơn:</span>
                   <div className="font-bold text-foreground flex items-center gap-1.5 text-sm">

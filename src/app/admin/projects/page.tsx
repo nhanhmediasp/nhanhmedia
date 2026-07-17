@@ -37,6 +37,14 @@ import {
 } from 'lucide-react';
 import { ProjectCategoryAvatar } from '@/components/ProjectCategoryAvatar';
 
+interface Member {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  avatarUrl: string | null;
+}
+
 interface ProjectItem {
   id: string;
   name: string;
@@ -52,7 +60,47 @@ interface ProjectItem {
   customerId: string | null;
   customer: { id: string; name: string; phone: string; email: string | null; avatarUrl?: string | null } | null;
   websiteUrl: string | null;
+  members: Member[];
 }
+
+const renderMemberAvatarStack = (members: Member[]) => {
+  if (!members || members.length === 0) return <span className="text-[10px] text-slate-400 italic">Chưa có nhân sự</span>;
+  
+  const maxVisible = 4;
+  const visibleMembers = members.slice(0, maxVisible);
+  const extraCount = members.length - maxVisible;
+  
+  return (
+    <div className="flex items-center -space-x-1.5 overflow-hidden">
+      {visibleMembers.map((m) => {
+        const initials = m.name ? m.name.charAt(0).toUpperCase() : '?';
+        return (
+          <div
+            key={m.id}
+            className="relative inline-block w-6 h-6 rounded-full ring-2 ring-white overflow-hidden bg-slate-100 cursor-help"
+            title={`${m.name} (${m.role})`}
+          >
+            {m.avatarUrl ? (
+              <img src={m.avatarUrl} alt={m.name} className="w-full h-full object-cover" />
+            ) : (
+              <div className="w-full h-full flex items-center justify-center text-[9px] font-black text-slate-550 bg-slate-200">
+                {initials}
+              </div>
+            )}
+          </div>
+        );
+      })}
+      {extraCount > 0 && (
+        <div
+          className="relative inline-flex items-center justify-center w-6 h-6 rounded-full ring-2 ring-white bg-slate-800 text-white text-[9px] font-black"
+          title={`${extraCount} nhân sự khác`}
+        >
+          +{extraCount}
+        </div>
+      )}
+    </div>
+  );
+};
 
 export default function ProjectsListPage() {
   const [projects, setProjects] = useState<ProjectItem[]>([]);
@@ -79,6 +127,8 @@ export default function ProjectsListPage() {
   // Categories & Customers state
   const [categories, setCategories] = useState<any[]>([]);
   const [customers, setCustomers] = useState<any[]>([]);
+  const [systemUsers, setSystemUsers] = useState<any[]>([]);
+  const [selectedMemberIds, setSelectedMemberIds] = useState<string[]>([]);
 
   // Delete State
   const [deleteId, setDeleteId] = useState<string | null>(null);
@@ -126,10 +176,23 @@ export default function ProjectsListPage() {
     }
   };
 
+  const fetchSystemUsers = async () => {
+    try {
+      const res = await fetch('/api/admin/users');
+      if (res.ok) {
+        const data = await res.json();
+        setSystemUsers(data.users || []);
+      }
+    } catch (err) {
+      console.error('Fetch system users error:', err);
+    }
+  };
+
   useEffect(() => {
     fetchProjects();
     fetchCategories();
     fetchCustomers();
+    fetchSystemUsers();
   }, []);
 
   const handleOpenAddModal = () => {
@@ -142,6 +205,7 @@ export default function ProjectsListPage() {
     setCategoryId('');
     setCustomerId('');
     setWebsiteUrl('');
+    setSelectedMemberIds([]);
     setIsModalOpen(true);
   };
 
@@ -155,6 +219,7 @@ export default function ProjectsListPage() {
     setCategoryId(p.categoryId || '');
     setCustomerId(p.customerId || '');
     setWebsiteUrl(p.websiteUrl || '');
+    setSelectedMemberIds(p.members ? p.members.map((m) => m.id) : []);
     setIsModalOpen(true);
   };
 
@@ -182,6 +247,7 @@ export default function ProjectsListPage() {
           categoryId: categoryId || null,
           customerId: customerId || null,
           websiteUrl: websiteUrl ? websiteUrl.trim() : null,
+          memberIds: selectedMemberIds,
         }),
       });
 
@@ -433,6 +499,12 @@ export default function ProjectsListPage() {
                       <span className="text-[10px] text-slate-400 font-medium">
                         Bắt đầu: {formatDate(p.startDate)}
                       </span>
+                      {p.members && p.members.length > 0 && (
+                        <div className="flex items-center gap-1 bg-slate-100/50 px-2 py-0.5 rounded-md border border-slate-200/50">
+                          <span className="text-[10px] text-slate-400 font-bold mr-0.5">Làm:</span>
+                          {renderMemberAvatarStack(p.members)}
+                        </div>
+                      )}
                     </div>
                   </div>
                   <div className="shrink-0">
@@ -526,6 +598,7 @@ export default function ProjectsListPage() {
                 <th className="px-6 py-4">Thời gian</th>
                 <th className="px-6 py-4">Trạng thái</th>
                 <th className="px-6 py-4">Tiến độ</th>
+                <th className="px-6 py-4">Nhân sự</th>
                 <th className="px-6 py-4">Ngân sách</th>
                 <th className="px-6 py-4">Tổng chi phí</th>
                 <th className="px-6 py-4">Lợi nhuận</th>
@@ -592,6 +665,9 @@ export default function ProjectsListPage() {
                         />
                       </div>
                     </div>
+                  </td>
+                  <td className="px-6 py-4">
+                    {renderMemberAvatarStack(p.members)}
                   </td>
                   <td className="px-6 py-4 font-extrabold text-slate-700">
                     {formatVND(p.budget || 0)}
@@ -728,6 +804,63 @@ export default function ProjectsListPage() {
                     value={websiteUrl}
                     onChange={(e) => setWebsiteUrl(e.target.value)}
                   />
+                </div>
+                {/* Nhân sự tham gia */}
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-500">
+                    Nhân sự tham gia dự án
+                  </label>
+                  <div className="border border-slate-200 rounded-xl p-3 bg-slate-50/50 max-h-40 overflow-y-auto">
+                    {systemUsers.length === 0 ? (
+                      <p className="text-xs text-slate-400 italic">Đang tải danh sách nhân sự...</p>
+                    ) : (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        {systemUsers.map((u) => {
+                          const isChecked = selectedMemberIds.includes(u.id);
+                          return (
+                            <label
+                              key={u.id}
+                              className={`flex items-center gap-2 p-2 rounded-lg border transition-all cursor-pointer text-xs font-bold ${
+                                isChecked
+                                  ? 'bg-primary/5 border-primary/40 text-primary'
+                                  : 'bg-white border-slate-200 text-slate-655 hover:bg-slate-50'
+                              }`}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={isChecked}
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    setSelectedMemberIds((prev) => [...prev, u.id]);
+                                  } else {
+                                    setSelectedMemberIds((prev) => prev.filter((id) => id !== u.id));
+                                  }
+                                }}
+                                className="rounded text-primary focus:ring-primary w-3.5 h-3.5"
+                              />
+                              <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                                {u.avatarUrl ? (
+                                  <img
+                                    src={u.avatarUrl}
+                                    alt={u.name}
+                                    className="w-5 h-5 rounded-full object-cover"
+                                  />
+                                ) : (
+                                  <div className="w-5 h-5 rounded-full bg-slate-200 flex items-center justify-center text-[10px] text-slate-550 font-black">
+                                    {u.name.charAt(0).toUpperCase()}
+                                  </div>
+                                )}
+                                <span className="truncate">{u.name}</span>
+                                <span className="text-[9px] font-medium opacity-70">
+                                  ({u.role === 'admin' ? 'Admin' : u.role === 'member' ? 'Memb' : u.role === 'collaborator' ? 'Collab' : 'Agency'})
+                                </span>
+                              </div>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
               <div className="px-6 py-4 bg-slate-50 border-t border-slate-150 flex justify-end gap-3 rounded-b-2xl">

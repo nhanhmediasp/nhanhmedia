@@ -44,9 +44,8 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Tài khoản không tồn tại hoặc thông tin không trùng khớp.' }, { status: 404 });
     }
 
-    // 3. Verify signature using the dynamic secret containing current passwordHash (single-use)
     try {
-      jwt.verify(token, JWT_SECRET + user.passwordHash);
+      jwt.verify(token, (JWT_SECRET || '') + (user.passwordHash || ''));
     } catch (jwtErr) {
       return NextResponse.json(
         { error: 'Mã khôi phục đã hết hạn hoặc đã được sử dụng. Vui lòng gửi lại yêu cầu khôi phục mật khẩu.' },

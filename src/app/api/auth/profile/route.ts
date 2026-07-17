@@ -51,7 +51,7 @@ export async function PUT(req: Request) {
         return NextResponse.json({ error: 'Vui lòng cung cấp mật khẩu hiện tại.' }, { status: 400 });
       }
 
-      const match = comparePassword(oldPassword, user.passwordHash);
+      const match = comparePassword(oldPassword, user.passwordHash || '');
       if (!match) {
         return NextResponse.json({ error: 'Mật khẩu hiện tại không chính xác.' }, { status: 400 });
       }

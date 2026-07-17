@@ -156,7 +156,7 @@ export default function AdminUsersPage() {
     setEmail('');
     setPassword('');
     setPhone('');
-    setUserRole('collaborator');
+    setUserRole('member');
     setStatus('active');
     setNote('');
     setIsOpen(true);
@@ -165,8 +165,8 @@ export default function AdminUsersPage() {
   const openEditModal = (u: UserItem) => {
     setEditId(u.id);
     setName(u.name);
-    setEmail(u.email);
-    setPassword(''); // Leave blank unless changing
+    setEmail(u.email.includes('staff_') && u.email.includes('@nhanhmedia.com') ? '' : u.email);
+    setPassword('');
     setPhone(u.phone || '');
     setUserRole(u.role);
     setStatus(u.status);
@@ -176,7 +176,7 @@ export default function AdminUsersPage() {
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name || !email || (!editId && !password)) {
+    if (!name || !userRole) {
       showToast('Vui lòng điền đầy đủ các thông tin bắt buộc.', 'error');
       return;
     }
@@ -195,11 +195,11 @@ export default function AdminUsersPage() {
       const data = await res.json();
 
       if (res.ok) {
-        showToast(data.message || 'Lưu tài khoản thành công!', 'success');
+        showToast(data.message || 'Lưu nhân sự thành công!', 'success');
         setIsOpen(false);
         fetchUsers();
       } else {
-        showToast(data.error || 'Lỗi khi lưu tài khoản.', 'error');
+        showToast(data.error || 'Lỗi khi lưu nhân sự.', 'error');
       }
     } catch (error) {
       console.error('Save user error:', error);
@@ -279,12 +279,12 @@ export default function AdminUsersPage() {
     <div className="space-y-6">
       {/* Header */}
       <PageHeader
-        title="Quản lý Tài khoản"
-        description="Quản lý thông tin CTV và Đại lý. Thêm mới tài khoản và phân quyền vai trò."
+        title="Quản lý Nhân sự 👥"
+        description="Quản lý thông tin Nhân sự của Nhanh Media. Thêm mới nhân sự để gán vào các dự án."
       >
         <Button onClick={openAddModal} className="flex items-center gap-2 cursor-pointer">
           <Plus className="w-4 h-4" />
-          <span>Thêm tài khoản</span>
+          <span>Thêm nhân sự</span>
         </Button>
       </PageHeader>
 
@@ -351,7 +351,7 @@ export default function AdminUsersPage() {
               <thead>
                 <tr className="border-b border-border bg-muted/40 text-muted-foreground font-semibold">
                   <th className="px-4 py-5 w-[48px] text-center">STT</th>
-                  <SortableHeader label="Tài khoản" field="name" currentField={sortField} currentDirection={sortDirection} onSort={handleSort} />
+                  <SortableHeader label="Nhân sự" field="name" currentField={sortField} currentDirection={sortDirection} onSort={handleSort} />
                   <th className="px-6 py-5">Số điện thoại</th>
                   <th className="px-6 py-5 text-center">Vai trò</th>
                   <th className="px-6 py-5 text-center">Trạng thái</th>
@@ -407,16 +407,9 @@ export default function AdminUsersPage() {
                           </button>
                         </Link>
                         <button
-                          onClick={() => handleOpenEmailModal(u)}
-                          className="p-1.5 text-slate-500 hover:text-primary rounded-lg hover:bg-slate-100 dark:hover:bg-zinc-800 cursor-pointer"
-                          title="Gửi Email cho CTV"
-                        >
-                          <Mail className="w-3.5 h-3.5" />
-                        </button>
-                        <button
                           onClick={() => openEditModal(u)}
                           className="p-1.5 text-slate-500 hover:text-primary rounded-lg hover:bg-slate-100 dark:hover:bg-zinc-800 cursor-pointer"
-                          title="Sửa tài khoản"
+                          title="Sửa nhân sự"
                         >
                           <Edit2 className="w-3.5 h-3.5" />
                         </button>
@@ -424,7 +417,7 @@ export default function AdminUsersPage() {
                           <button
                             onClick={() => setDeleteId(u.id)}
                             className="p-1.5 text-slate-500 hover:text-rose-500 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/20 cursor-pointer"
-                            title="Xóa tài khoản"
+                            title="Xóa nhân sự"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
@@ -445,14 +438,14 @@ export default function AdminUsersPage() {
           <div className="bg-card border border-border w-full max-w-md rounded-2xl shadow-[0_25px_80px_rgba(0,0,0,0.28)] overflow-hidden animate-fade-in">
             <div className="px-6 py-5 border-b border-border">
               <h3 className="text-lg font-bold text-foreground">
-                {editId ? 'Chỉnh sửa tài khoản Người dùng' : 'Thêm mới Tài khoản'}
+                {editId ? 'Chỉnh sửa thông tin Nhân sự' : 'Thêm mới Nhân sự'}
               </h3>
             </div>
             
             <form onSubmit={handleSave}>
               <div className="p-6 space-y-5 max-h-[70vh] overflow-y-auto">
                 <Input
-                  label="Họ tên người dùng *"
+                  label="Họ tên nhân sự *"
                   placeholder="Ví dụ: Nguyễn Văn A"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
@@ -460,21 +453,11 @@ export default function AdminUsersPage() {
                 />
                 
                 <Input
-                  label="Email đăng nhập *"
+                  label="Email liên hệ (Không bắt buộc)"
                   type="email"
                   placeholder="name@example.com"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  required
-                />
-
-                <Input
-                  label={editId ? 'Mật khẩu mới (Bỏ trống nếu không đổi)' : 'Mật khẩu đăng nhập *'}
-                  type="password"
-                  placeholder="Nhập mật khẩu..."
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required={!editId}
                 />
 
                 <Input
@@ -486,11 +469,12 @@ export default function AdminUsersPage() {
 
                 <div className="grid grid-cols-2 gap-5">
                   <Select
-                    label="Phân quyền vai trò *"
+                    label="Vai trò nhân sự *"
                     options={[
-                      { value: 'admin', label: 'Quản trị viên (Admin)' },
+                      { value: 'member', label: 'Nhân viên (Member)' },
                       { value: 'collaborator', label: 'Cộng tác viên (CTV)' },
-                      { value: 'agency', label: 'Đại lý (Agency)' },
+                      { value: 'agency', label: 'Đại lý / Đối tác' },
+                      { value: 'admin', label: 'Quản trị viên (Admin)' },
                     ]}
                     value={userRole}
                     onChange={(e) => setUserRole(e.target.value)}
@@ -498,11 +482,11 @@ export default function AdminUsersPage() {
                   />
 
                   <Select
-                    label="Trạng thái tài khoản *"
+                    label="Trạng thái làm việc *"
                     options={[
                       { value: 'active', label: 'Hoạt động (Active)' },
                       { value: 'inactive', label: 'Ngưng (Inactive)' },
-                      { value: 'locked', label: 'Bị khóa (Locked)' },
+                      { value: 'locked', label: 'Tạm khóa (Locked)' },
                     ]}
                     value={status}
                     onChange={(e) => setStatus(e.target.value)}
@@ -511,8 +495,8 @@ export default function AdminUsersPage() {
                 </div>
 
                 <Input
-                  label="Ghi chú nội bộ"
-                  placeholder="Nhập ghi chú nhanh..."
+                  label="Ghi chú (Kỹ năng, mô tả...)"
+                  placeholder="Ví dụ: Designer Figma, Lập trình React..."
                   value={note}
                   onChange={(e) => setNote(e.target.value)}
                 />
@@ -523,7 +507,7 @@ export default function AdminUsersPage() {
                   Hủy
                 </Button>
                 <Button type="submit" variant="primary" size="sm" loading={saving}>
-                  {editId ? 'Lưu thay đổi' : 'Thêm tài khoản'}
+                  {editId ? 'Lưu thay đổi' : 'Thêm nhân sự'}
                 </Button>
               </div>
             </form>
