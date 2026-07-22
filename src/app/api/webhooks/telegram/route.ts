@@ -307,8 +307,8 @@ async function processOrderCreation(chatId: string | number, text: string) {
     const replyMarkup = {
       inline_keyboard: [
         [
-          { text: '📋 Danh sách đơn hàng', callback_query_data: 'cb_orders' },
-          { text: '📦 Xem gói dịch vụ', callback_query_data: 'cb_products' },
+          { text: '📋 Danh sách đơn hàng', callback_data: 'cb_orders' },
+          { text: '📦 Xem gói dịch vụ', callback_data: 'cb_products' },
         ],
       ],
     };
