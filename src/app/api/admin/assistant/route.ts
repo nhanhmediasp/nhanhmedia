@@ -327,6 +327,46 @@ const geminiTools = [
   }
 ];
 
+// Helper to call Gemini OpenAI endpoint with automatic model fallback and 429 retry
+async function callGeminiWithRetry(geminiKey: string, payload: any) {
+  const models = ['gemini-1.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash-8b'];
+  let lastError: any = null;
+
+  for (const model of models) {
+    try {
+      const response = await fetch('https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${geminiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          ...payload,
+          model,
+        }),
+      });
+
+      if (response.ok) {
+        return await response.json();
+      }
+
+      const errData = await response.json().catch(() => ({}));
+      const errMsg = errData.error?.message || `HTTP ${response.status}`;
+      lastError = new Error(errMsg);
+
+      console.warn(`[Gemini API] Model ${model} returned ${response.status}: ${errMsg}. Trying fallback model...`);
+
+      if (response.status === 429) {
+        await new Promise((res) => setTimeout(res, 1000));
+      }
+    } catch (err: any) {
+      lastError = err;
+    }
+  }
+
+  throw lastError || new Error('Tất cả các mô hình Gemini AI đều vượt quá giới hạn hoặc báo lỗi.');
+}
+
 export async function POST(req: Request) {
   try {
     const userId = req.headers.get('x-user-id');
@@ -427,27 +467,13 @@ LƯU Ý QUAN TRỌNG:
           { role: 'user', content: prompt },
         ];
 
-        const response = await fetch('https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${geminiKey}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            model: 'gemini-2.0-flash',
-            messages: geminiMessages,
-            tools: geminiTools,
-            tool_choice: 'auto',
-            temperature: 0.2,
-          }),
+        const data = await callGeminiWithRetry(geminiKey, {
+          messages: geminiMessages,
+          tools: geminiTools,
+          tool_choice: 'auto',
+          temperature: 0.2,
         });
 
-        if (!response.ok) {
-          const errData = await response.json();
-          throw new Error(errData.error?.message || `HTTP ${response.status}`);
-        }
-
-        const data = await response.json();
         const message = data.choices[0].message;
 
         // Check if LLM requested a tool call
@@ -460,42 +486,35 @@ LƯU Ý QUAN TRỌNG:
           const toolResult = await executeTool(functionName, functionArgs);
 
           // Feed result back to model for final summary
-          const secondResponse = await fetch('https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', {
-            method: 'POST',
-            headers: {
-              Authorization: `Bearer ${geminiKey}`,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              model: 'gemini-2.0-flash',
-              messages: [
-                ...geminiMessages,
-                message,
-                {
-                  role: 'tool',
-                  tool_call_id: toolCall.id,
-                  name: functionName,
-                  content: JSON.stringify(toolResult),
-                },
-              ],
-              temperature: 0.2,
-            }),
+          const secondData = await callGeminiWithRetry(geminiKey, {
+            messages: [
+              ...geminiMessages,
+              message,
+              {
+                role: 'tool',
+                tool_call_id: toolCall.id,
+                name: functionName,
+                content: JSON.stringify(toolResult),
+              },
+            ],
+            temperature: 0.2,
           });
 
-          if (!secondResponse.ok) {
-            throw new Error(`Second call failed: ${secondResponse.status}`);
-          }
-
-          const secondData = await secondResponse.json();
           return NextResponse.json({ reply: secondData.choices[0].message.content });
         }
 
         return NextResponse.json({ reply: message.content });
       } catch (err: any) {
         console.error('Gemini Assistant Agent Error:', err);
-        return NextResponse.json({
-          reply: `Đã xảy ra lỗi khi thực thi lệnh qua máy chủ Gemini AI: ${err.message || String(err)}.`,
-        });
+        const isRateLimit = String(err.message).includes('429') || String(err.message).toLowerCase().includes('quota');
+        const userReply = isRateLimit
+          ? `⚠️ **API Key Gemini hiện đã vượt quá giới hạn lượt dùng (HTTP 429 - Rate Limit / Quota Exceeded).**\n\n` +
+            `👉 **Cách khắc phục nhanh:**\n` +
+            `1. Bạn vui lòng đợi khoảng 1 phút rồi gửi lại tin nhắn.\n` +
+            `2. Hoặc tạo 1 API Key mới tại **[Google AI Studio](https://aistudio.google.com/)** và cập nhật vào mục **[Cài đặt Website](/admin/settings/website)** nhé!`
+          : `Đã xảy ra lỗi khi thực thi lệnh qua máy chủ Gemini AI: ${err.message || String(err)}.`;
+
+        return NextResponse.json({ reply: userReply });
       }
     } else {
       return NextResponse.json({

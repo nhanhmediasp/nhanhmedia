@@ -75,8 +75,10 @@ async function extractOrderDetails(text: string): Promise<{
   const geminiKey = process.env.GEMINI_API_KEY || settings?.geminiApiKey;
 
   if (geminiKey) {
-    try {
-      const systemInstruction = `Bạn là Trợ lý phân tích đơn hàng Telegram của Nhanh Media.
+    const models = ['gemini-1.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash-8b'];
+    for (const model of models) {
+      try {
+        const systemInstruction = `Bạn là Trợ lý phân tích đơn hàng Telegram của Nhanh Media.
 Nhiệm vụ: Trích xuất các trường thông tin đơn hàng từ câu chat của người dùng dựa trên danh sách dịch vụ sẵn có sau đây:
 
 DANH SÁCH SẢN PHẨM & GÓI DỊCH VỤ TRONG HỆ THỐNG:
@@ -97,33 +99,34 @@ LƯU Ý:
 - Nếu người dùng nhập tên sản phẩm/gói không rõ ràng, cố gắng khớp với gói phù hợp nhất trong danh sách catalog.
 - Nếu hoàn toàn không thể xác định được sản phẩm nào, trả về: { "error": "Tên sản phẩm không khớp với bất kỳ dịch vụ nào trong hệ thống." }`;
 
-      const response = await fetch('https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${geminiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: 'gemini-2.0-flash',
-          messages: [
-            { role: 'system', content: systemInstruction },
-            { role: 'user', content: text },
-          ],
-          temperature: 0.1,
-        }),
-      });
+        const response = await fetch('https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${geminiKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            model,
+            messages: [
+              { role: 'system', content: systemInstruction },
+              { role: 'user', content: text },
+            ],
+            temperature: 0.1,
+          }),
+        });
 
-      if (response.ok) {
-        const data = await response.json();
-        const rawContent = data.choices[0].message.content.trim();
-        const jsonMatch = rawContent.match(/\{[\s\S]*\}/);
-        if (jsonMatch) {
-          const parsed = JSON.parse(jsonMatch[0]);
-          return parsed;
+        if (response.ok) {
+          const data = await response.json();
+          const rawContent = data.choices[0].message.content.trim();
+          const jsonMatch = rawContent.match(/\{[\s\S]*\}/);
+          if (jsonMatch) {
+            const parsed = JSON.parse(jsonMatch[0]);
+            return parsed;
+          }
         }
+      } catch (err) {
+        console.error(`[Telegram Bot] Gemini model ${model} error:`, err);
       }
-    } catch (err) {
-      console.error('[Telegram Bot] Gemini extraction error:', err);
     }
   }
 
