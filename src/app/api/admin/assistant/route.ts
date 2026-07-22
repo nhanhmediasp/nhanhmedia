@@ -1,10 +1,255 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 
+async function getAdminUserId(): Promise<string> {
+  const adminUser = await prisma.user.findFirst({
+    where: { role: 'admin' },
+    select: { id: true },
+  });
+  if (adminUser) return adminUser.id;
+  const anyUser = await prisma.user.findFirst({ select: { id: true } });
+  return anyUser ? anyUser.id : 'system';
+}
+
+function generateOrderCode(): string {
+  const dateStr = new Date().toISOString().slice(2, 10).replace(/-/g, '');
+  const rand = Math.floor(1000 + Math.random() * 9000);
+  return `NHANH${dateStr}-${rand}`;
+}
+
+function calculateEndDate(startDate: Date, durationValue: number, durationUnit: string): Date {
+  const end = new Date(startDate);
+  if (durationUnit === 'day') {
+    end.setDate(end.getDate() + durationValue);
+  } else if (durationUnit === 'year') {
+    end.setFullYear(end.getFullYear() + durationValue);
+  } else {
+    end.setMonth(end.getMonth() + durationValue);
+  }
+  return end;
+}
+
 // 1. Tool execution logic (Manipulating Database)
 async function executeTool(name: string, args: any) {
   console.log(`[AI Assistant Agent] Executing tool "${name}" with args:`, args);
   try {
+    if (name === 'createOrder') {
+      const { productName, variantName, customerName, customerPhone, customerEmail, price, note } = args;
+      if (!productName) {
+        return { success: false, message: 'Thiếu tên sản phẩm cần tạo đơn.' };
+      }
+
+      const product = await prisma.product.findFirst({
+        where: { name: { contains: productName, mode: 'insensitive' }, status: 'active' },
+        include: {
+          variants: {
+            where: { status: 'active' },
+            include: { prices: { where: { role: 'member' } } },
+          },
+        },
+      });
+
+      if (!product || product.variants.length === 0) {
+        return { success: false, message: `Không tìm thấy sản phẩm "${productName}" trong danh mục.` };
+      }
+
+      let selectedVariant = product.variants[0];
+      if (variantName) {
+        const foundV = product.variants.find((v) =>
+          v.name.toLowerCase().includes(variantName.toLowerCase())
+        );
+        if (foundV) selectedVariant = foundV;
+      }
+
+      const finalPrice = price !== undefined ? Number(price) : (selectedVariant.prices[0]?.price || 0);
+      const adminUserId = await getAdminUserId();
+
+      let customer = null;
+      if (customerPhone && customerPhone.trim()) {
+        customer = await prisma.customer.findUnique({
+          where: { phone: customerPhone.trim() },
+        });
+      }
+
+      if (!customer) {
+        customer = await prisma.customer.create({
+          data: {
+            name: customerName ? customerName.trim() : 'Khách Web Assistant',
+            phone: customerPhone ? customerPhone.trim() : null,
+            email: customerEmail ? customerEmail.trim() : null,
+            createdByUserId: adminUserId,
+            source: 'web_assistant',
+            note: 'Tạo tự động qua Trợ lý AI',
+          },
+        });
+      }
+
+      const startDate = new Date();
+      const endDate = calculateEndDate(startDate, selectedVariant.durationValue, selectedVariant.durationUnit);
+      const orderCode = generateOrderCode();
+
+      const newOrder = await prisma.order.create({
+        data: {
+          orderCode,
+          customerId: customer.id,
+          createdByUserId: adminUserId,
+          productId: product.id,
+          variantId: selectedVariant.id,
+          price: finalPrice,
+          status: 'new',
+          startDate,
+          endDate,
+          note: note || 'Tạo tự động qua Trợ lý AI Web',
+        },
+        include: {
+          customer: true,
+          product: true,
+          variant: true,
+        },
+      });
+
+      return {
+        success: true,
+        message: `🎉 Đã tạo thành công đơn hàng mới!\n- Mã đơn: **${newOrder.orderCode}**\n- Sản phẩm: **${product.name}** (${selectedVariant.name})\n- Khách hàng: **${customer.name}**\n- Giá tiền: **${finalPrice.toLocaleString('vi-VN')}đ**\n- Thời hạn: ${startDate.toLocaleDateString('vi-VN')} đến ${endDate.toLocaleDateString('vi-VN')}`,
+      };
+    }
+
+    if (name === 'deleteOrder') {
+      const { orderCode } = args;
+      if (!orderCode) return { success: false, message: 'Thiếu mã đơn hàng cần xóa.' };
+
+      const order = await prisma.order.findFirst({
+        where: { orderCode: { contains: orderCode, mode: 'insensitive' } },
+      });
+
+      if (!order) return { success: false, message: `Không tìm thấy đơn hàng "${orderCode}".` };
+
+      await prisma.order.delete({ where: { id: order.id } });
+      return { success: true, message: `Đã xóa thành công đơn hàng "${order.orderCode}".` };
+    }
+
+    if (name === 'createProduct') {
+      const { name: prodName, description, variantName, durationValue, durationUnit, price } = args;
+      if (!prodName) return { success: false, message: 'Thiếu tên sản phẩm.' };
+
+      const slug = prodName
+        .toString()
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[đĐ]/g, 'd')
+        .replace(/[^a-z0-9 -]/g, '')
+        .trim()
+        .replace(/\s+/g, '-')
+        .replace(/-+/g, '-') + '-' + Math.floor(100 + Math.random() * 900);
+
+      const newProd = await prisma.product.create({
+        data: {
+          name: prodName.trim(),
+          slug,
+          description: description ? description.trim() : '',
+          status: 'active',
+          variants: {
+            create: [
+              {
+                name: variantName ? variantName.trim() : 'Gói chuẩn',
+                durationValue: Number(durationValue || 1),
+                durationUnit: durationUnit || 'year',
+                status: 'active',
+                prices: {
+                  create: [
+                    {
+                      role: 'member',
+                      price: Number(price || 0),
+                    },
+                  ],
+                },
+              },
+            ],
+          },
+        },
+        include: { variants: true },
+      });
+
+      return {
+        success: true,
+        message: `🎉 Đã tạo thành công sản phẩm mới "${newProd.name}" với giá ${Number(price || 0).toLocaleString('vi-VN')}đ.`,
+      };
+    }
+
+    if (name === 'deleteProduct') {
+      const { productName } = args;
+      if (!productName) return { success: false, message: 'Thiếu tên sản phẩm.' };
+
+      const product = await prisma.product.findFirst({
+        where: { name: { contains: productName, mode: 'insensitive' } },
+      });
+
+      if (!product) return { success: false, message: `Không tìm thấy sản phẩm "${productName}".` };
+
+      await prisma.product.update({
+        where: { id: product.id },
+        data: { status: 'inactive' },
+      });
+
+      return { success: true, message: `Đã ngừng kinh doanh sản phẩm "${product.name}".` };
+    }
+
+    if (name === 'createCustomer') {
+      const { name: custName, phone, email, note } = args;
+      if (!custName) return { success: false, message: 'Thiếu tên khách hàng.' };
+
+      const adminUserId = await getAdminUserId();
+      const customer = await prisma.customer.create({
+        data: {
+          name: custName.trim(),
+          phone: phone ? phone.trim() : null,
+          email: email ? email.trim() : null,
+          createdByUserId: adminUserId,
+          source: 'web_assistant',
+          note: note || 'Tạo tự động qua Trợ lý AI',
+        },
+      });
+
+      return {
+        success: true,
+        message: `Đã tạo thành công hồ sơ khách hàng "${customer.name}"${customer.phone ? ` (SĐT: ${customer.phone})` : ''}.`,
+      };
+    }
+
+    if (name === 'deleteCustomer') {
+      const { phoneOrName } = args;
+      if (!phoneOrName) return { success: false, message: 'Thiếu tên hoặc SĐT khách hàng.' };
+
+      const customer = await prisma.customer.findFirst({
+        where: {
+          OR: [
+            { phone: { contains: phoneOrName, mode: 'insensitive' } },
+            { name: { contains: phoneOrName, mode: 'insensitive' } },
+          ],
+        },
+      });
+
+      if (!customer) return { success: false, message: `Không tìm thấy khách hàng "${phoneOrName}".` };
+
+      await prisma.customer.delete({ where: { id: customer.id } });
+      return { success: true, message: `Đã xóa khách hàng "${customer.name}".` };
+    }
+
+    if (name === 'deleteProject') {
+      const { projectName } = args;
+      if (!projectName) return { success: false, message: 'Thiếu tên dự án cần xóa.' };
+
+      const project = await prisma.project.findFirst({
+        where: { name: { contains: projectName, mode: 'insensitive' } },
+      });
+
+      if (!project) return { success: false, message: `Không tìm thấy dự án "${projectName}".` };
+
+      await prisma.project.delete({ where: { id: project.id } });
+      return { success: true, message: `Đã xóa thành công dự án "${project.name}".` };
+    }
+
     if (name === 'createProject') {
       const { name: pName, description, startDate, endDate } = args;
       if (!pName || !startDate) {
@@ -246,6 +491,104 @@ const geminiTools = [
   {
     type: 'function',
     function: {
+      name: 'createOrder',
+      description: 'Tạo đơn hàng mới trực tiếp trên hệ thống cho khách hàng (tự động tạo hồ sơ khách hàng nếu chưa có).',
+      parameters: {
+        type: 'object',
+        properties: {
+          productName: { type: 'string', description: 'Tên sản phẩm dịch vụ (ví dụ: Canva Pro, Netflix...)' },
+          variantName: { type: 'string', description: 'Tên gói variant (ví dụ: 1 năm, 6 tháng...)' },
+          customerName: { type: 'string', description: 'Tên khách hàng' },
+          customerPhone: { type: 'string', description: 'Số điện thoại khách hàng' },
+          customerEmail: { type: 'string', description: 'Email khách hàng (tùy chọn)' },
+          price: { type: 'number', description: 'Tùy chỉnh giá tiền (tùy chọn, mặc định lấy giá sản phẩm)' },
+          note: { type: 'string', description: 'Ghi chú cho đơn hàng (tùy chọn)' },
+        },
+        required: ['productName'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'deleteOrder',
+      description: 'Xóa hoàn toàn một đơn hàng theo mã đơn hàng.',
+      parameters: {
+        type: 'object',
+        properties: {
+          orderCode: { type: 'string', description: 'Mã đơn hàng cần xóa (ví dụ: NHANH260722-1234)' },
+        },
+        required: ['orderCode'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'createProduct',
+      description: 'Thêm sản phẩm dịch vụ mới vào danh mục hệ thống kèm gói và giá tiền.',
+      parameters: {
+        type: 'object',
+        properties: {
+          name: { type: 'string', description: 'Tên sản phẩm mới' },
+          description: { type: 'string', description: 'Mô tả sản phẩm (tùy chọn)' },
+          variantName: { type: 'string', description: 'Tên gói đầu tiên (ví dụ: 1 năm, 6 tháng)' },
+          durationValue: { type: 'number', description: 'Giá trị thời hạn (ví dụ: 1, 6, 12)' },
+          durationUnit: { type: 'string', description: 'Đơn vị thời hạn: year, month, day' },
+          price: { type: 'number', description: 'Giá bán cho gói này (VND)' },
+        },
+        required: ['name', 'price'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'deleteProduct',
+      description: 'Ngừng kinh doanh hoặc xóa một sản phẩm dịch vụ theo tên.',
+      parameters: {
+        type: 'object',
+        properties: {
+          productName: { type: 'string', description: 'Tên sản phẩm cần xóa' },
+        },
+        required: ['productName'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'createCustomer',
+      description: 'Tạo hồ sơ khách hàng mới.',
+      parameters: {
+        type: 'object',
+        properties: {
+          name: { type: 'string', description: 'Tên khách hàng' },
+          phone: { type: 'string', description: 'Số điện thoại' },
+          email: { type: 'string', description: 'Email' },
+          note: { type: 'string', description: 'Ghi chú thêm' },
+        },
+        required: ['name'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'deleteCustomer',
+      description: 'Xóa hồ sơ khách hàng theo tên hoặc số điện thoại.',
+      parameters: {
+        type: 'object',
+        properties: {
+          phoneOrName: { type: 'string', description: 'Tên hoặc số điện thoại khách hàng' },
+        },
+        required: ['phoneOrName'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
       name: 'createProject',
       description: 'Tạo một dự án mới trên hệ thống với 3 cột Kanban mặc định (Cần làm, Đang làm, Hoàn thành).',
       parameters: {
@@ -257,6 +600,20 @@ const geminiTools = [
           endDate: { type: 'string', description: 'Ngày kết thúc dự kiến định dạng YYYY-MM-DD (tùy chọn)' },
         },
         required: ['name', 'startDate'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'deleteProject',
+      description: 'Xóa một dự án khỏi hệ thống theo tên.',
+      parameters: {
+        type: 'object',
+        properties: {
+          projectName: { type: 'string', description: 'Tên dự án cần xóa' },
+        },
+        required: ['projectName'],
       },
     },
   },
