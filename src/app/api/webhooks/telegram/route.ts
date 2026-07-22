@@ -75,10 +75,8 @@ async function extractOrderDetails(text: string): Promise<{
   const geminiKey = process.env.GEMINI_API_KEY || settings?.geminiApiKey;
 
   if (geminiKey) {
-    const models = ['gemini-1.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash-8b'];
-    for (const model of models) {
-      try {
-        const systemInstruction = `Bạn là Trợ lý phân tích đơn hàng Telegram của Nhanh Media.
+    const models = ['gemini-1.5-flash', 'gemini-2.0-flash', 'gemini-1.5-pro', 'gemini-1.5-flash-8b'];
+    const systemInstruction = `Bạn là Trợ lý phân tích đơn hàng Telegram của Nhanh Media.
 Nhiệm vụ: Trích xuất các trường thông tin đơn hàng từ câu chat của người dùng dựa trên danh sách dịch vụ sẵn có sau đây:
 
 DANH SÁCH SẢN PHẨM & GÓI DỊCH VỤ TRONG HỆ THỐNG:
@@ -99,6 +97,32 @@ LƯU Ý:
 - Nếu người dùng nhập tên sản phẩm/gói không rõ ràng, cố gắng khớp với gói phù hợp nhất trong danh sách catalog.
 - Nếu hoàn toàn không thể xác định được sản phẩm nào, trả về: { "error": "Tên sản phẩm không khớp với bất kỳ dịch vụ nào trong hệ thống." }`;
 
+    for (const model of models) {
+      try {
+        // 1. Try Native REST API first
+        const nativeUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(geminiKey)}`;
+        const res = await fetch(nativeUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            systemInstruction: { parts: [{ text: systemInstruction }] },
+            contents: [{ role: 'user', parts: [{ text }] }],
+            generationConfig: { temperature: 0.1 },
+          }),
+        });
+
+        if (res.ok) {
+          const nativeData = await res.json();
+          const rawContent = nativeData.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+          if (rawContent) {
+            const jsonMatch = rawContent.match(/\{[\s\S]*\}/);
+            if (jsonMatch) {
+              return JSON.parse(jsonMatch[0]);
+            }
+          }
+        }
+
+        // 2. Fallback: Try OpenAI endpoint
         const response = await fetch('https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', {
           method: 'POST',
           headers: {
@@ -120,8 +144,7 @@ LƯU Ý:
           const rawContent = data.choices[0].message.content.trim();
           const jsonMatch = rawContent.match(/\{[\s\S]*\}/);
           if (jsonMatch) {
-            const parsed = JSON.parse(jsonMatch[0]);
-            return parsed;
+            return JSON.parse(jsonMatch[0]);
           }
         }
       } catch (err) {

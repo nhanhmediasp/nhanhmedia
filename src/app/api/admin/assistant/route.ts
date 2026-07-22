@@ -327,11 +327,127 @@ const geminiTools = [
   }
 ];
 
-// Helper to call Gemini OpenAI endpoint with automatic model fallback and 429 retry
+// Helper to call Official Native Gemini REST API (:generateContent?key=) with fallback to OpenAI endpoint
 async function callGeminiWithRetry(geminiKey: string, payload: any) {
-  const models = ['gemini-1.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash-8b'];
+  const models = ['gemini-1.5-flash', 'gemini-2.0-flash', 'gemini-1.5-pro', 'gemini-1.5-flash-8b'];
   let lastError: any = null;
 
+  // 1. Primary: Official Native Gemini REST API
+  for (const model of models) {
+    try {
+      const nativeUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(geminiKey)}`;
+      
+      const nativePayload: any = {
+        generationConfig: { temperature: payload.temperature || 0.2 },
+      };
+
+      if (payload.messages) {
+        const sysMsg = payload.messages.find((m: any) => m.role === 'system');
+        if (sysMsg) {
+          nativePayload.systemInstruction = { parts: [{ text: sysMsg.content }] };
+        }
+
+        const chatMsgs = payload.messages.filter((m: any) => m.role !== 'system');
+        nativePayload.contents = chatMsgs.map((m: any) => {
+          if (m.role === 'tool') {
+            let parsedRes = {};
+            try { parsedRes = JSON.parse(m.content); } catch { parsedRes = { result: m.content }; }
+            return {
+              role: 'function',
+              parts: [{ functionResponse: { name: m.name || 'tool', response: parsedRes } }],
+            };
+          }
+          if (m.tool_calls && m.tool_calls.length > 0) {
+            const tc = m.tool_calls[0];
+            let parsedArgs = {};
+            try { parsedArgs = JSON.parse(tc.function.arguments); } catch { parsedArgs = {}; }
+            return {
+              role: 'model',
+              parts: [{ functionCall: { name: tc.function.name, args: parsedArgs } }],
+            };
+          }
+          return {
+            role: m.role === 'assistant' ? 'model' : m.role,
+            parts: [{ text: m.content || '' }],
+          };
+        });
+      }
+
+      if (payload.tools) {
+        nativePayload.tools = [
+          {
+            functionDeclarations: payload.tools.map((t: any) => ({
+              name: t.function.name,
+              description: t.function.description,
+              parameters: t.function.parameters,
+            })),
+          },
+        ];
+      }
+
+      const res = await fetch(nativeUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(nativePayload),
+      });
+
+      if (res.ok) {
+        const nativeData = await res.json();
+        const candidate = nativeData.candidates?.[0];
+        const parts = candidate?.content?.parts || [];
+        const funcCallPart = parts.find((p: any) => p.functionCall);
+
+        if (funcCallPart && funcCallPart.functionCall) {
+          const fc = funcCallPart.functionCall;
+          return {
+            choices: [
+              {
+                message: {
+                  role: 'assistant',
+                  content: null,
+                  tool_calls: [
+                    {
+                      id: `call_${Date.now()}`,
+                      type: 'function',
+                      function: {
+                        name: fc.name,
+                        arguments: JSON.stringify(fc.args || {}),
+                      },
+                    },
+                  ],
+                },
+              },
+            ],
+          };
+        }
+
+        const textPart = parts.find((p: any) => p.text);
+        return {
+          choices: [
+            {
+              message: {
+                role: 'assistant',
+                content: textPart?.text || '',
+              },
+            },
+          ],
+        };
+      }
+
+      const errData = await res.json().catch(() => ({}));
+      const errMsg = errData.error?.message || `HTTP ${res.status}`;
+      console.warn(`[Gemini Native REST API] Model ${model} returned ${res.status}: ${errMsg}. Trying fallback...`);
+      lastError = new Error(errMsg);
+
+      if (res.status === 429) {
+        await new Promise((r) => setTimeout(r, 1000));
+      }
+    } catch (err: any) {
+      lastError = err;
+    }
+  }
+
+  // 2. Secondary Fallback: OpenAI Compatibility Endpoint
   for (const model of models) {
     try {
       const response = await fetch('https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', {
@@ -340,31 +456,18 @@ async function callGeminiWithRetry(geminiKey: string, payload: any) {
           Authorization: `Bearer ${geminiKey}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          ...payload,
-          model,
-        }),
+        body: JSON.stringify({ ...payload, model }),
       });
 
       if (response.ok) {
         return await response.json();
-      }
-
-      const errData = await response.json().catch(() => ({}));
-      const errMsg = errData.error?.message || `HTTP ${response.status}`;
-      lastError = new Error(errMsg);
-
-      console.warn(`[Gemini API] Model ${model} returned ${response.status}: ${errMsg}. Trying fallback model...`);
-
-      if (response.status === 429) {
-        await new Promise((res) => setTimeout(res, 1000));
       }
     } catch (err: any) {
       lastError = err;
     }
   }
 
-  throw lastError || new Error('Tất cả các mô hình Gemini AI đều vượt quá giới hạn hoặc báo lỗi.');
+  throw lastError || new Error('Tất cả các endpoint và mô hình Gemini AI đều không thể kết nối.');
 }
 
 export async function POST(req: Request) {
