@@ -192,8 +192,14 @@ export async function POST(req: Request) {
         status: 'success',
       });
 
-      // Gửi thông báo Telegram nếu có TELEGRAM_ADMIN_CHAT_ID
-      const teleAdminChatId = process.env.TELEGRAM_ADMIN_CHAT_ID;
+      // Gửi thông báo Telegram nếu có Admin Chat ID (Đọc từ Cài đặt Website hoặc .env)
+      const settings = await prisma.websiteSettings.findUnique({ where: { id: 'default' } });
+      const teleAdminChatId = (settings?.telegramAdminChatId && settings.telegramAdminChatId.trim())
+        ? settings.telegramAdminChatId.trim()
+        : (process.env.TELEGRAM_ADMIN_CHAT_ID && process.env.TELEGRAM_ADMIN_CHAT_ID.trim())
+        ? process.env.TELEGRAM_ADMIN_CHAT_ID.trim()
+        : null;
+
       if (teleAdminChatId) {
         const teleMsg = `<b>🎉 NHẬN THANH TOÁN TỰ ĐỘNG (SEPAY)</b>\n\n` +
           `📌 <b>Mã đơn:</b> <code>${order.orderCode}</code>\n` +
@@ -202,6 +208,7 @@ export async function POST(req: Request) {
           `📊 <b>Tổng đã nhận:</b> ${newAmountPaid.toLocaleString('vi-VN')}đ / ${currentPrice.toLocaleString('vi-VN')}đ\n` +
           `⚙️ <b>Trạng thái đơn:</b> ${newStatus === 'processing' ? '🟢 Đang xử lý' : newStatus === 'running' ? '✅ Đang chạy' : newStatus}\n` +
           `💬 <b>Nội dung CK:</b> <code>${content || ''}</code>`;
+
         await sendTelegramMessage({
           chatId: teleAdminChatId,
           text: teleMsg,
@@ -230,6 +237,27 @@ export async function POST(req: Request) {
           raw: payload,
         },
       });
+
+      // Báo Telegram Admin nếu giao dịch không khớp đơn
+      const settings = await prisma.websiteSettings.findUnique({ where: { id: 'default' } });
+      const teleAdminChatId = (settings?.telegramAdminChatId && settings.telegramAdminChatId.trim())
+        ? settings.telegramAdminChatId.trim()
+        : (process.env.TELEGRAM_ADMIN_CHAT_ID && process.env.TELEGRAM_ADMIN_CHAT_ID.trim())
+        ? process.env.TELEGRAM_ADMIN_CHAT_ID.trim()
+        : null;
+
+      if (teleAdminChatId) {
+        const teleMsg = `<b>⚠️ NHẬN TIỀN CHƯA KHỚP ĐƠN (SEPAY)</b>\n\n` +
+          `💵 <b>Số tiền vừa nhận:</b> <code>+${amount.toLocaleString('vi-VN')}đ</code>\n` +
+          `💬 <b>Nội dung CK:</b> <code>${content || ''}</code>\n` +
+          `🏦 <b>Ngân hàng:</b> ${gateway || ''} - STK: <code>${accountNumber || ''}</code>\n` +
+          `📌 <i>Giao dịch chưa được tự động gán vào đơn hàng nào. Hãy kiểm tra đối soát trên Web.</i>`;
+
+        await sendTelegramMessage({
+          chatId: teleAdminChatId,
+          text: teleMsg,
+        });
+      }
 
       return NextResponse.json({
         success: true,
