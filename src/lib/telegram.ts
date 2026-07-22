@@ -18,18 +18,23 @@ export interface SendPhotoOptions {
 }
 
 /**
- * Get active Telegram Bot Token (from env or DB WebsiteSettings)
+ * Get active Telegram Bot Token (Prioritize DB WebsiteSettings over .env)
  */
 export async function getTelegramToken(): Promise<string | null> {
-  if (process.env.TELEGRAM_BOT_TOKEN) {
-    return process.env.TELEGRAM_BOT_TOKEN;
-  }
   try {
     const settings = await prisma.websiteSettings.findUnique({ where: { id: 'default' } });
-    return settings?.telegramBotToken || null;
-  } catch {
-    return null;
+    if (settings?.telegramBotToken && settings.telegramBotToken.trim()) {
+      return settings.telegramBotToken.trim();
+    }
+  } catch (err) {
+    console.error('[Telegram] Error reading settings from DB:', err);
   }
+
+  if (process.env.TELEGRAM_BOT_TOKEN && process.env.TELEGRAM_BOT_TOKEN.trim()) {
+    return process.env.TELEGRAM_BOT_TOKEN.trim();
+  }
+
+  return null;
 }
 
 /**
@@ -55,7 +60,7 @@ export async function sendTelegramMessage(options: SendMessageOptions): Promise<
     });
 
     if (!res.ok) {
-      const err = await res.json();
+      const err = await res.json().catch(() => ({}));
       console.error('[Telegram] sendTelegramMessage failed:', err);
       return false;
     }
@@ -91,15 +96,27 @@ export async function sendTelegramPhoto(options: SendPhotoOptions): Promise<bool
     });
 
     if (!res.ok) {
-      const err = await res.json();
-      console.error('[Telegram] sendTelegramPhoto failed:', err);
-      return false;
+      const err = await res.json().catch(() => ({}));
+      console.error('[Telegram] sendTelegramPhoto failed:', err, '- Fallback to text message...');
+      
+      // Fallback: Send text message if photo fails
+      return await sendTelegramMessage({
+        chatId: options.chatId,
+        text: options.caption ? `${options.caption}\n\n🔗 <b>Mã QR VietQR:</b> ${options.photoUrl}` : options.photoUrl,
+        parseMode: options.parseMode,
+        replyMarkup: options.replyMarkup,
+      });
     }
 
     return true;
   } catch (error) {
-    console.error('[Telegram] sendTelegramPhoto error:', error);
-    return false;
+    console.error('[Telegram] sendTelegramPhoto error:', error, '- Fallback to text message...');
+    return await sendTelegramMessage({
+      chatId: options.chatId,
+      text: options.caption ? `${options.caption}\n\n🔗 <b>Mã QR VietQR:</b> ${options.photoUrl}` : options.photoUrl,
+      parseMode: options.parseMode,
+      replyMarkup: options.replyMarkup,
+    });
   }
 }
 
