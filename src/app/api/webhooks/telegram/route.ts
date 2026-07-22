@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { sendTelegramMessage, sendTelegramPhoto, answerCallbackQuery } from '@/lib/telegram';
-import { getPaymentContent } from '@/lib/sepay';
+import { getPaymentContent, extractOrderCodeFromContent } from '@/lib/sepay';
 import { calculateEndDate } from '@/app/api/orders/route';
 
 export const runtime = 'nodejs';
@@ -307,6 +307,9 @@ async function processOrderCreation(chatId: string | number, text: string) {
     const replyMarkup = {
       inline_keyboard: [
         [
+          { text: '🔄 Kiểm tra thanh toán ngay', callback_data: `cb_check_pay_${newOrder.orderCode}` },
+        ],
+        [
           { text: '📋 Danh sách đơn hàng', callback_data: 'cb_orders' },
           { text: '📦 Xem gói dịch vụ', callback_data: 'cb_products' },
         ],
@@ -325,6 +328,146 @@ async function processOrderCreation(chatId: string | number, text: string) {
       chatId,
       text: `❌ Lỗi hệ thống khi tạo đơn hàng: ${error.message || String(error)}`,
     });
+  }
+}
+
+// Handler to check real-time payment status from Telegram callback query
+async function checkOrderPaymentFromTelegram(
+  chatId: string | number,
+  callbackQueryId: string,
+  orderCode: string
+) {
+  try {
+    let order = await prisma.order.findFirst({
+      where: { orderCode: { contains: orderCode, mode: 'insensitive' } },
+      include: {
+        customer: true,
+        product: true,
+        variant: true,
+      },
+    });
+
+    if (!order) {
+      await answerCallbackQuery(callbackQueryId, `❌ Không tìm thấy đơn hàng ${orderCode}`);
+      return;
+    }
+
+    const currentPrice = order.customPrice !== null ? order.customPrice : order.price;
+
+    // 1. Check if already marked paid / processing / running in DB
+    if (order.amountPaid >= currentPrice || order.status === 'processing' || order.status === 'running') {
+      await answerCallbackQuery(callbackQueryId, `✅ Đơn hàng ${order.orderCode} đã thanh toán thành công!`);
+
+      const statusLabel = order.status === 'running' ? '✅ Đang chạy' : '🟢 Đang xử lý';
+      const msg =
+        `<b>🎉 ĐÃ XÁC NHẬN THANH TOÁN THÀNH CÔNG!</b>\n\n` +
+        `📌 <b>Mã đơn:</b> <code>${order.orderCode}</code>\n` +
+        `👤 <b>Khách hàng:</b> ${order.customer.name}\n` +
+        `📦 <b>Sản phẩm:</b> ${order.product.name} (${order.variant.name})\n` +
+        `💵 <b>Đã nhận:</b> <code>${order.amountPaid.toLocaleString('vi-VN')}đ</code> / ${currentPrice.toLocaleString('vi-VN')}đ\n` +
+        `⚙️ <b>Trạng thái:</b> ${statusLabel}`;
+
+      await sendTelegramMessage({ chatId, text: msg });
+      return;
+    }
+
+    // 2. Query SePay REST API directly to fetch real-time transactions if API key exists
+    const settings = await prisma.websiteSettings.findUnique({ where: { id: 'default' } });
+    const sepayApiKey = settings?.sepayApiKey || process.env.SEPAY_API_KEY;
+    const accountNumber = settings?.sepayAccountNumber || process.env.NEXT_PUBLIC_SEPAY_ACCOUNT_NUMBER || '1015165449';
+
+    if (sepayApiKey && sepayApiKey !== 'thay_bang_api_key_webhook_sepay') {
+      try {
+        const sepayRes = await fetch(`https://my.sepay.vn/userapi/transactions/list?account_number=${accountNumber}&limit=20`, {
+          headers: {
+            Authorization: `Bearer ${sepayApiKey}`,
+            'Content-Type': 'application/json',
+          },
+        });
+
+        if (sepayRes.ok) {
+          const sepayData = await sepayRes.json();
+          const transactions = sepayData.transactions || [];
+
+          for (const tx of transactions) {
+            const content = tx.transaction_content || tx.content || '';
+            const matchedCode = extractOrderCodeFromContent(content);
+
+            if (matchedCode && matchedCode.toUpperCase() === order.orderCode.toUpperCase()) {
+              const amount = Number(tx.amount_in || tx.amount || 0);
+              const newAmountPaid = order.amountPaid + amount;
+              const newStatus = newAmountPaid >= currentPrice ? 'processing' : order.status;
+
+              const updatedOrder = await prisma.order.update({
+                where: { id: order.id },
+                data: {
+                  amountPaid: newAmountPaid,
+                  status: newStatus,
+                },
+                include: { customer: true, product: true, variant: true },
+              });
+
+              await prisma.paymentTransaction.create({
+                data: {
+                  sepayId: String(tx.id),
+                  orderId: order.id,
+                  amount,
+                  content,
+                  code: order.orderCode,
+                  accountNumber,
+                  gateway: tx.bank_brand_name || 'SePay',
+                  transactionAt: new Date(tx.transaction_date || Date.now()),
+                  matched: true,
+                  raw: tx,
+                },
+              });
+
+              await answerCallbackQuery(callbackQueryId, `🎉 Đã tìm thấy giao dịch +${amount.toLocaleString('vi-VN')}đ!`);
+
+              const successMsg =
+                `<b>🎉 ĐÃ KHỚP THANH TOÁN MỚI TỪ SEPAY!</b>\n\n` +
+                `📌 <b>Mã đơn:</b> <code>${updatedOrder.orderCode}</code>\n` +
+                `👤 <b>Khách hàng:</b> ${updatedOrder.customer.name}\n` +
+                `📦 <b>Sản phẩm:</b> ${updatedOrder.product.name} (${updatedOrder.variant.name})\n` +
+                `💵 <b>Số tiền vừa nhận:</b> <code>+${amount.toLocaleString('vi-VN')}đ</code>\n` +
+                `📊 <b>Tổng đã thanh toán:</b> ${newAmountPaid.toLocaleString('vi-VN')}đ / ${currentPrice.toLocaleString('vi-VN')}đ\n` +
+                `⚙️ <b>Trạng thái đơn:</b> 🟢 Đang xử lý`;
+
+              await sendTelegramMessage({ chatId, text: successMsg });
+              return;
+            }
+          }
+        }
+      } catch (sepayErr) {
+        console.error('[Telegram Bot] SePay API check error:', sepayErr);
+      }
+    }
+
+    // 3. Payment not detected yet
+    await answerCallbackQuery(
+      callbackQueryId,
+      `⏳ Chưa thấy giao dịch cho đơn ${order.orderCode}. Vui lòng thử lại sau 10-30s.`
+    );
+
+    const pendingMsg =
+      `⏳ <b>CHƯA NHẬN ĐƯỢC THANH TOÁN CHO ĐƠN ${order.orderCode}</b>\n\n` +
+      `📌 <b>Mã đơn:</b> <code>${order.orderCode}</code>\n` +
+      `💵 <b>Cần thanh toán:</b> <code>${currentPrice.toLocaleString('vi-VN')}đ</code>\n` +
+      `📊 <b>Đã nhận:</b> ${order.amountPaid.toLocaleString('vi-VN')}đ\n\n` +
+      `💡 <i>Nếu bạn vừa chuyển khoản thành công, ngân hàng có thể mất 10-30 giây để xử lý. Bạn hãy bấm nút <b>🔄 Kiểm tra thanh toán ngay</b> bên dưới để kiểm tra lại!</i>`;
+
+    const retryMarkup = {
+      inline_keyboard: [
+        [
+          { text: '🔄 Kiểm tra thanh toán ngay', callback_data: `cb_check_pay_${order.orderCode}` },
+        ],
+      ],
+    };
+
+    await sendTelegramMessage({ chatId, text: pendingMsg, replyMarkup: retryMarkup });
+  } catch (err: any) {
+    console.error('[Telegram Bot] checkOrderPaymentFromTelegram error:', err);
+    await answerCallbackQuery(callbackQueryId, '❌ Lỗi khi kiểm tra thanh toán.');
   }
 }
 
@@ -500,9 +643,16 @@ export async function POST(req: Request) {
 
       if (chatId) {
         if (data === 'cb_products') {
+          await answerCallbackQuery(cb.id);
           await sendProductCatalog(chatId);
         } else if (data === 'cb_orders') {
+          await answerCallbackQuery(cb.id);
           await sendRecentOrders(chatId);
+        } else if (data && data.startsWith('cb_check_pay_')) {
+          const orderCode = data.replace('cb_check_pay_', '').trim();
+          await checkOrderPaymentFromTelegram(chatId, cb.id, orderCode);
+        } else {
+          await answerCallbackQuery(cb.id);
         }
       }
 
