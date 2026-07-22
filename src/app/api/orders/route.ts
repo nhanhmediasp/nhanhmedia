@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { createAuditLog } from '@/lib/audit';
+import { notifyTelegramAdmin } from '@/lib/telegram';
 
 // Helper to calculate end date based on start date, value and unit
 export function calculateEndDate(startDate: Date, durationValue: number, durationUnit: string): Date {
@@ -228,6 +229,17 @@ export async function POST(req: Request) {
       request: req,
       status: 'success'
     });
+
+    // Notify Telegram Admin about new order creation
+    const effectivePrice = newOrder.customPrice !== null ? newOrder.customPrice : newOrder.price;
+    const adminMsg = `<b>🛍️ ĐƠN HÀNG MỚI ĐƯỢC TẠO (WEB ADMIN)</b>\n\n` +
+      `📌 <b>Mã đơn:</b> <code>${newOrder.orderCode}</code>\n` +
+      `📦 <b>Sản phẩm:</b> ${newOrder.product.name} (${newOrder.variant.name})\n` +
+      `👤 <b>Khách hàng:</b> ${newOrder.customer.name} ${newOrder.customer.phone ? `(${newOrder.customer.phone})` : ''}\n` +
+      `💵 <b>Giá tiền:</b> <b>${effectivePrice.toLocaleString('vi-VN')}đ</b>\n` +
+      `📅 <b>Thời hạn:</b> ${new Date(newOrder.startDate).toLocaleDateString('vi-VN')} ➔ ${new Date(newOrder.endDate).toLocaleDateString('vi-VN')}`;
+
+    notifyTelegramAdmin(adminMsg).catch(() => {});
 
     return NextResponse.json({
       message: 'Tạo đơn hàng thành công!',

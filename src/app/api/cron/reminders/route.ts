@@ -4,6 +4,7 @@ import nodemailer from 'nodemailer';
 import { decrypt } from '@/lib/crypto';
 import { calculateEndDate } from '../../orders/route';
 import { formatEmailBody } from '../../orders/[id]/remind-manual/route';
+import { notifyTelegramAdmin } from '@/lib/telegram';
 
 export async function POST(req: Request) {
   return handleCron(req);
@@ -129,7 +130,7 @@ async function handleCron(req: Request) {
           statusesUpdated++;
         }
 
-        // B) Create in-app notification for order expiring
+        // B) Create in-app notification & Telegram Admin alert for order expiring
         if (createdByUserId) {
           const notifTitle = days === 0 
             ? `Đơn hàng ${order.orderCode} đã hết hạn` 
@@ -149,6 +150,21 @@ async function handleCron(req: Request) {
               }
             });
             processLogs.push(`Tạo thông báo in-app đơn hàng: "${notifTitle}"`);
+
+            // Telegram Admin Alert
+            const teleOrderMsg = days === 0
+              ? `🔴 <b>CẢNH BÁO: ĐƠN HÀNG ĐÃ HẾT HẠN!</b>\n\n` +
+                `📌 <b>Mã đơn:</b> <code>${order.orderCode}</code>\n` +
+                `👤 <b>Khách hàng:</b> ${order.customer.name} ${order.customer.phone ? `(${order.customer.phone})` : ''}\n` +
+                `📦 <b>Sản phẩm:</b> ${order.product.name} (${order.variant.name})\n` +
+                `📅 <b>Ngày hết hạn:</b> ${new Date(order.endDate).toLocaleDateString('vi-VN')}`
+              : `⚠️ <b>NHẮC HẠN: ĐƠN HÀNG SẮP HẾT HẠN (${days} NGÀY)!</b>\n\n` +
+                `📌 <b>Mã đơn:</b> <code>${order.orderCode}</code>\n` +
+                `👤 <b>Khách hàng:</b> ${order.customer.name} ${order.customer.phone ? `(${order.customer.phone})` : ''}\n` +
+                `📦 <b>Sản phẩm:</b> ${order.product.name} (${order.variant.name})\n` +
+                `📅 <b>Ngày hết hạn:</b> ${new Date(order.endDate).toLocaleDateString('vi-VN')}`;
+
+            notifyTelegramAdmin(teleOrderMsg).catch(() => {});
           }
         }
 
@@ -257,6 +273,19 @@ async function handleCron(req: Request) {
           });
           projectNotifsCreated++;
           processLogs.push(`Tạo thông báo in-app dự án: "${notifTitle}"`);
+
+          // Send Telegram Admin Alert for project deadline / overdue
+          const teleProjAlert = diffDays < 0
+            ? `🔴 <b>CẢNH BÁO: DỰ ÁN ĐÃ QUÁ HẠN!</b>\n\n` +
+              `📌 <b>Tên dự án:</b> <b>${project.name}</b>\n` +
+              `📊 <b>Tiến độ:</b> ${project.progress}%\n` +
+              `📅 <b>Hạn hoàn thành:</b> ${new Date(project.endDate!).toLocaleDateString('vi-VN')}`
+            : `⚠️ <b>NHẮC HẠN: DỰ ÁN SẮP TỚI HẠN (CÒN ${diffDays} NGÀY)!</b>\n\n` +
+              `📌 <b>Tên dự án:</b> <b>${project.name}</b>\n` +
+              `📊 <b>Tiến độ:</b> ${project.progress}%\n` +
+              `🎯 <b>Hạn hoàn thành:</b> ${new Date(project.endDate!).toLocaleDateString('vi-VN')}`;
+
+          notifyTelegramAdmin(teleProjAlert).catch(() => {});
         }
       }
     }

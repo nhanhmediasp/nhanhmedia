@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { createAuditLog } from '@/lib/audit';
+import { notifyTelegramAdmin } from '@/lib/telegram';
 
 // GET: Fetch all projects with progress and total cost calculations
 export async function GET(req: Request) {
@@ -144,6 +145,15 @@ export async function POST(req: Request) {
       status: 'success',
       newValues: newProject,
     });
+
+    // Notify Telegram Admin about new project creation
+    const projMsg = `<b>📂 DỰ ÁN MỚI ĐƯỢC TẠO</b>\n\n` +
+      `📌 <b>Tên dự án:</b> <b>${newProject.name}</b>\n` +
+      `📅 <b>Ngày bắt đầu:</b> ${new Date(newProject.startDate).toLocaleDateString('vi-VN')}\n` +
+      `${newProject.endDate ? `🎯 <b>Hạn hoàn thành:</b> ${new Date(newProject.endDate).toLocaleDateString('vi-VN')}\n` : ''}` +
+      `⚙️ <b>Trạng thái:</b> 🟢 Đang chạy`;
+
+    notifyTelegramAdmin(projMsg).catch(() => {});
 
     return NextResponse.json({ project: newProject, message: 'Tạo dự án thành công!' });
   } catch (error) {

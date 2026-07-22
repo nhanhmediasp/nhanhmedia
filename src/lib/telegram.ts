@@ -142,3 +142,30 @@ export async function answerCallbackQuery(callbackQueryId: string, text?: string
     return false;
   }
 }
+
+/**
+ * Send notification message directly to Telegram Admin Chat ID
+ */
+export async function notifyTelegramAdmin(text: string, replyMarkup?: any): Promise<boolean> {
+  try {
+    const settings = await prisma.websiteSettings.findUnique({ where: { id: 'default' } });
+    const adminChatId = (settings?.telegramAdminChatId && settings.telegramAdminChatId.trim())
+      ? settings.telegramAdminChatId.trim()
+      : (process.env.TELEGRAM_ADMIN_CHAT_ID && process.env.TELEGRAM_ADMIN_CHAT_ID.trim())
+      ? process.env.TELEGRAM_ADMIN_CHAT_ID.trim()
+      : null;
+
+    if (!adminChatId) {
+      return false;
+    }
+
+    return await sendTelegramMessage({
+      chatId: adminChatId,
+      text,
+      replyMarkup,
+    });
+  } catch (err) {
+    console.error('[Telegram] notifyTelegramAdmin error:', err);
+    return false;
+  }
+}
