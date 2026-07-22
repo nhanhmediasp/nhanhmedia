@@ -329,7 +329,7 @@ const geminiTools = [
 
 // Helper to call Official Native Gemini REST API (:generateContent?key=) with fallback to OpenAI endpoint
 async function callGeminiWithRetry(geminiKey: string, payload: any) {
-  const models = ['gemini-1.5-flash', 'gemini-2.0-flash', 'gemini-1.5-pro', 'gemini-1.5-flash-8b'];
+  const models = ['gemini-1.5-flash', 'gemini-2.0-flash', 'gemini-1.5-pro'];
   let lastError: any = null;
 
   // 1. Primary: Official Native Gemini REST API
