@@ -75,7 +75,12 @@ async function extractOrderDetails(text: string): Promise<{
   const geminiKey = process.env.GEMINI_API_KEY || settings?.geminiApiKey;
 
   if (geminiKey) {
-    const models = ['gemini-1.5-flash', 'gemini-2.0-flash', 'gemini-1.5-pro'];
+    const models = [
+      'gemini-flash-latest',
+      'gemini-3.5-flash',
+      'gemini-3.6-flash',
+      'gemini-flash-lite-latest',
+    ];
     const systemInstruction = `Bạn là Trợ lý phân tích đơn hàng Telegram của Nhanh Media.
 Nhiệm vụ: Trích xuất các trường thông tin đơn hàng từ câu chat của người dùng dựa trên danh sách dịch vụ sẵn có sau đây:
 
