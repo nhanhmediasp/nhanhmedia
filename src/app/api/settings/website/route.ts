@@ -49,6 +49,10 @@ export async function PUT(req: Request) {
       sepayAccountName,
       sepayApiKey,
       sepayWebhookSecret,
+      telegramBotToken,
+      telegramAdminChatId,
+      telegramWebhookSecret,
+      geminiApiKey,
     } = body;
 
     const oldSettings = await prisma.websiteSettings.findUnique({ where: { id: 'default' } });
@@ -75,6 +79,10 @@ export async function PUT(req: Request) {
         sepayAccountName: sepayAccountName || null,
         sepayApiKey: sepayApiKey || null,
         sepayWebhookSecret: sepayWebhookSecret || null,
+        telegramBotToken: telegramBotToken || null,
+        telegramAdminChatId: telegramAdminChatId || null,
+        telegramWebhookSecret: telegramWebhookSecret || null,
+        geminiApiKey: geminiApiKey || null,
       },
       update: {
         siteName: siteName !== undefined ? siteName : undefined,
@@ -95,6 +103,10 @@ export async function PUT(req: Request) {
         sepayAccountName: sepayAccountName !== undefined ? sepayAccountName : undefined,
         sepayApiKey: sepayApiKey !== undefined ? sepayApiKey : undefined,
         sepayWebhookSecret: sepayWebhookSecret !== undefined ? sepayWebhookSecret : undefined,
+        telegramBotToken: telegramBotToken !== undefined ? telegramBotToken : undefined,
+        telegramAdminChatId: telegramAdminChatId !== undefined ? telegramAdminChatId : undefined,
+        telegramWebhookSecret: telegramWebhookSecret !== undefined ? telegramWebhookSecret : undefined,
+        geminiApiKey: geminiApiKey !== undefined ? geminiApiKey : undefined,
       }
     });
 

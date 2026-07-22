@@ -163,7 +163,7 @@ Hãy nhập câu hỏi bên dưới hoặc chọn các mẫu gợi ý nhanh nhé
             <h1 className="text-xl font-bold tracking-tight text-slate-900 flex items-center gap-1.5">
               Trợ lý của Nhanh Media
               <span className="text-[10px] uppercase font-extrabold bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-md tracking-wider">
-                Groq AI
+                Gemini AI
               </span>
             </h1>
             <p className="text-xs text-slate-500">Phân tích dự án, doanh thu và thao tác hệ thống tự động</p>

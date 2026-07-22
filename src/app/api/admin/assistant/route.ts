@@ -241,8 +241,8 @@ async function executeTool(name: string, args: any) {
   return { success: false, message: `Công cụ "${name}" chưa được định nghĩa.` };
 }
 
-// 2. Tool Definitions for Groq (standard OpenAI tool schema)
-const groqTools = [
+// 2. Tool Definitions for Gemini (standard OpenAI tool schema)
+const geminiTools = [
   {
     type: 'function',
     function: {
@@ -392,8 +392,9 @@ export async function POST(req: Request) {
       status: o.status === 'running' ? 'Đang chạy' : o.status === 'expired_soon' ? 'Sắp hết hạn' : 'Đơn mới',
     }));
 
-    // 4. Check for API key (Groq only)
-    const groqKey = process.env.GROQ_API_KEY;
+    // 4. Check for API key (Gemini)
+    const settings = await prisma.websiteSettings.findUnique({ where: { id: 'default' } });
+    const geminiKey = process.env.GEMINI_API_KEY || settings?.geminiApiKey;
 
     const { prompt, history } = await req.json();
 
@@ -413,9 +414,9 @@ LƯU Ý QUAN TRỌNG:
 1. Khi người dùng yêu cầu thao tác (ví dụ: "Tạo dự án mới...", "Cập nhật tiến độ dự án...", "Đổi trạng thái đơn hàng..."), bạn BẮT BUỘC phải gọi công cụ (tool) tương ứng. Đừng chỉ trả lời bằng lời nói suông.
 2. Trả lời câu hỏi một cách chính xác, ngắn gọn, súc tích và bằng tiếng Việt lịch sự, chuyên nghiệp. Sử dụng định dạng Markdown đẹp mắt.`;
 
-    if (groqKey && groqKey !== 'your_groq_api_key_here') {
+    if (geminiKey && geminiKey !== 'your_gemini_api_key_here') {
       try {
-        const groqMessages = [
+        const geminiMessages = [
           { role: 'system', content: systemInstruction },
           ...(history
             ? history.map((msg: any) => ({
@@ -426,19 +427,18 @@ LƯU Ý QUAN TRỌNG:
           { role: 'user', content: prompt },
         ];
 
-        const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        const response = await fetch('https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', {
           method: 'POST',
           headers: {
-            Authorization: `Bearer ${groqKey}`,
+            Authorization: `Bearer ${geminiKey}`,
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            model: 'llama-3.3-70b-versatile',
-            messages: groqMessages,
-            tools: groqTools,
+            model: 'gemini-2.0-flash',
+            messages: geminiMessages,
+            tools: geminiTools,
             tool_choice: 'auto',
             temperature: 0.2,
-            max_tokens: 2048,
           }),
         });
 
@@ -460,16 +460,16 @@ LƯU Ý QUAN TRỌNG:
           const toolResult = await executeTool(functionName, functionArgs);
 
           // Feed result back to model for final summary
-          const secondResponse = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+          const secondResponse = await fetch('https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', {
             method: 'POST',
             headers: {
-              Authorization: `Bearer ${groqKey}`,
+              Authorization: `Bearer ${geminiKey}`,
               'Content-Type': 'application/json',
             },
             body: JSON.stringify({
-              model: 'llama-3.3-70b-versatile',
+              model: 'gemini-2.0-flash',
               messages: [
-                ...groqMessages,
+                ...geminiMessages,
                 message,
                 {
                   role: 'tool',
@@ -492,23 +492,23 @@ LƯU Ý QUAN TRỌNG:
 
         return NextResponse.json({ reply: message.content });
       } catch (err: any) {
-        console.error('Groq Assistant Agent Error:', err);
+        console.error('Gemini Assistant Agent Error:', err);
         return NextResponse.json({
-          reply: `Đã xảy ra lỗi khi thực thi lệnh qua máy chủ Groq AI: ${err.message || String(err)}.`,
+          reply: `Đã xảy ra lỗi khi thực thi lệnh qua máy chủ Gemini AI: ${err.message || String(err)}.`,
         });
       }
     } else {
       return NextResponse.json({
         reply: `Xin chào! Tôi là **Trợ lý của Nhanh Media** 🤖.
 
-Hiện tại bạn chưa thiết lập khóa API để tôi hoạt động.
+Hiện tại bạn chưa thiết lập khóa API Gemini để tôi hoạt động.
 
-### Vui lòng cấu hình Groq API (100% Miễn phí & Cực nhanh & Không chặn vùng)
-1. Truy cập **[Groq Console](https://console.groq.com/)** và đăng nhập bằng Google.
-2. Vào mục **API Keys** ở bên trái -> bấm **Create API Key**.
+### Vui lòng cấu hình Gemini API (Hoàn toàn Miễn phí & Cực nhanh)
+1. Truy cập **[Google AI Studio](https://aistudio.google.com/)** và đăng nhập bằng Google.
+2. Bấm vào nút **Get API Key** -> **Create API Key**.
 3. Copy khóa đó và dán vào file \`.env\`:
 \`\`\`env
-GROQ_API_KEY="gsk_..."
+GEMINI_API_KEY="AIzaSy..."
 \`\`\`
 
 Sau khi điền khóa trên và lưu file \`.env\`, hãy tải lại trang này để bắt đầu sử dụng nhé!`,

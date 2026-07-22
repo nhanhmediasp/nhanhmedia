@@ -1078,7 +1078,7 @@ Tôi có thể giúp bạn kiểm tra dự án, doanh thu, đơn hàng dịch v�
                   </div>
                   <div>
                     <span className="font-bold text-xs block leading-none">Trợ lý Nhanh Media</span>
-                    <span className="text-[9px] opacity-80 leading-none mt-1 block">Groq AI • Hoạt động</span>
+                    <span className="text-[9px] opacity-80 leading-none mt-1 block">Gemini AI • Hoạt động</span>
                   </div>
                 </div>
                 <div className="flex items-center gap-1">

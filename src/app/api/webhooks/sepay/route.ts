@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { extractOrderCodeFromContent } from '@/lib/sepay';
 import { createAuditLog } from '@/lib/audit';
+import { sendTelegramMessage } from '@/lib/telegram';
 import crypto from 'crypto';
 
 export const runtime = 'nodejs';
@@ -124,6 +125,7 @@ export async function POST(req: Request) {
     if (matchedOrderCode) {
       order = await prisma.order.findUnique({
         where: { orderCode: matchedOrderCode },
+        include: { customer: true },
       });
     }
 
@@ -189,6 +191,22 @@ export async function POST(req: Request) {
         request: req,
         status: 'success',
       });
+
+      // Gửi thông báo Telegram nếu có TELEGRAM_ADMIN_CHAT_ID
+      const teleAdminChatId = process.env.TELEGRAM_ADMIN_CHAT_ID;
+      if (teleAdminChatId) {
+        const teleMsg = `<b>🎉 NHẬN THANH TOÁN TỰ ĐỘNG (SEPAY)</b>\n\n` +
+          `📌 <b>Mã đơn:</b> <code>${order.orderCode}</code>\n` +
+          `👤 <b>Khách hàng:</b> ${order.customer?.name || 'Khách hàng'}\n` +
+          `💵 <b>Số tiền vừa nhận:</b> <code>+${amount.toLocaleString('vi-VN')}đ</code>\n` +
+          `📊 <b>Tổng đã nhận:</b> ${newAmountPaid.toLocaleString('vi-VN')}đ / ${currentPrice.toLocaleString('vi-VN')}đ\n` +
+          `⚙️ <b>Trạng thái đơn:</b> ${newStatus === 'processing' ? '🟢 Đang xử lý' : newStatus === 'running' ? '✅ Đang chạy' : newStatus}\n` +
+          `💬 <b>Nội dung CK:</b> <code>${content || ''}</code>`;
+        await sendTelegramMessage({
+          chatId: teleAdminChatId,
+          text: teleMsg,
+        });
+      }
 
       return NextResponse.json({
         success: true,

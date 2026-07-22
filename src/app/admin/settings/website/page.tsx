@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { Button, Card, CardHeader, CardTitle, CardContent, Input, showToast, PageHeader, MediaPicker } from '@/components/ui';
-import { Globe, Image, Shield, Save, Mail, Settings, Share2, Upload, CreditCard, ExternalLink, Copy, Check } from 'lucide-react';
+import { Globe, Image, Shield, Save, Mail, Settings, Share2, Upload, CreditCard, ExternalLink, Copy, Check, Send, Bot, Zap } from 'lucide-react';
 
 interface WebsiteSettings {
   id: string;
@@ -22,7 +22,7 @@ interface WebsiteSettings {
   loginLockDurationMins: number;
 }
 
-type Tab = 'info' | 'images' | 'security' | 'sepay';
+type Tab = 'info' | 'images' | 'security' | 'sepay' | 'telegram';
 
 export default function WebsiteSettingsPage() {
   const [activeTab, setActiveTab] = useState<Tab>('info');
@@ -63,6 +63,14 @@ export default function WebsiteSettingsPage() {
   const [sepayApiKey, setSepayApiKey] = useState('');
   const [sepayWebhookSecret, setSepayWebhookSecret] = useState('');
 
+  // Telegram & AI Chatbot Integration
+  const [telegramBotToken, setTelegramBotToken] = useState('');
+  const [telegramAdminChatId, setTelegramAdminChatId] = useState('');
+  const [telegramWebhookSecret, setTelegramWebhookSecret] = useState('');
+  const [geminiApiKey, setGeminiApiKey] = useState('');
+  const [testingWebhook, setTestingWebhook] = useState(false);
+  const [copiedTeleWebhook, setCopiedTeleWebhook] = useState(false);
+
   // Origin for dynamic webhook link
   const [origin, setOrigin] = useState('');
   const [copiedWebhook, setCopiedWebhook] = useState(false);
@@ -92,6 +100,10 @@ export default function WebsiteSettingsPage() {
         setSepayAccountName(s.sepayAccountName || '');
         setSepayApiKey(s.sepayApiKey || '');
         setSepayWebhookSecret(s.sepayWebhookSecret || '');
+        setTelegramBotToken(s.telegramBotToken || '');
+        setTelegramAdminChatId(s.telegramAdminChatId || '');
+        setTelegramWebhookSecret(s.telegramWebhookSecret || '');
+        setGeminiApiKey(s.geminiApiKey || '');
       } else {
         showToast('Không thể tải cài đặt website.', 'error');
       }
@@ -108,8 +120,6 @@ export default function WebsiteSettingsPage() {
       setOrigin(window.location.origin);
     }
   }, []);
-
-  // handleUpload removed as MediaPicker handles uploads directly
 
   const handleSave = async () => {
     setSaving(true);
@@ -136,6 +146,10 @@ export default function WebsiteSettingsPage() {
           sepayAccountName,
           sepayApiKey,
           sepayWebhookSecret,
+          telegramBotToken,
+          telegramAdminChatId,
+          telegramWebhookSecret,
+          geminiApiKey,
         }),
       });
       const data = await res.json();
@@ -151,11 +165,32 @@ export default function WebsiteSettingsPage() {
     }
   };
 
+  const handleActivateTelegramWebhook = async () => {
+    setTestingWebhook(true);
+    try {
+      // Save settings first
+      await handleSave();
+      
+      const res = await fetch('/api/webhooks/telegram?action=set_webhook');
+      const data = await res.json();
+      if (res.ok && data.result?.ok) {
+        showToast('🎉 Đã kích hoạt Telegram Webhook thành công!', 'success');
+      } else {
+        showToast(data.result?.description || data.message || 'Lỗi kích hoạt Webhook Telegram.', 'error');
+      }
+    } catch (e) {
+      showToast('Lỗi khi kích hoạt Telegram Webhook.', 'error');
+    } finally {
+      setTestingWebhook(false);
+    }
+  };
+
   const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
     { id: 'info', label: 'Thông tin Website', icon: <Globe className="w-4 h-4" /> },
     { id: 'images', label: 'Logo & Favicon', icon: <Image className="w-4 h-4" /> },
     { id: 'security', label: 'Bảo mật đăng nhập', icon: <Shield className="w-4 h-4" /> },
     { id: 'sepay', label: 'Cấu hình SePay', icon: <CreditCard className="w-4 h-4" /> },
+    { id: 'telegram', label: 'Telegram Bot', icon: <Send className="w-4 h-4" /> },
   ];
 
   return (
@@ -650,6 +685,158 @@ export default function WebsiteSettingsPage() {
                       >
                         Tài liệu tích hợp
                       </a>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          )}
+
+          {/* Tab: Cấu hình Telegram Bot */}
+          {activeTab === 'telegram' && (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <Card style={{ overflow: 'visible' }}>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Bot className="w-4 h-4 text-sky-500" />
+                    Cấu hình Telegram Bot tự động tạo đơn
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-5">
+                  <Input
+                    label="Telegram Bot Token (telegramBotToken)"
+                    type="password"
+                    placeholder="Ví dụ: 789123456:AAFx..."
+                    value={telegramBotToken}
+                    onChange={(e) => setTelegramBotToken(e.target.value)}
+                  />
+                  <p className="text-[11px] text-muted-foreground -mt-3">
+                    Lấy Token từ <strong>@BotFather</strong> trên ứng dụng Telegram.
+                  </p>
+                  
+                  <Input
+                    label="Admin Chat ID (telegramAdminChatId)"
+                    placeholder="Ví dụ: 123456789"
+                    value={telegramAdminChatId}
+                    onChange={(e) => setTelegramAdminChatId(e.target.value)}
+                  />
+                  <p className="text-[11px] text-muted-foreground -mt-3">
+                    Nhắn <code>/start</code> cho bot <strong>@userinfobot</strong> để lấy Chat ID của bạn (dùng để nhận thông báo thanh toán SePay tự động).
+                  </p>
+
+                  <Input
+                    label="Telegram Webhook Secret Token"
+                    type="password"
+                    placeholder="nhanh_media_tele_webhook_secret_2026"
+                    value={telegramWebhookSecret}
+                    onChange={(e) => setTelegramWebhookSecret(e.target.value)}
+                  />
+
+                  <div className="pt-2">
+                    <Button
+                      type="button"
+                      onClick={handleActivateTelegramWebhook}
+                      loading={testingWebhook}
+                      className="w-full bg-sky-600 hover:bg-sky-700 text-white font-bold flex items-center justify-center gap-2 py-2.5 rounded-xl shadow-md cursor-pointer"
+                    >
+                      <Zap className="w-4 h-4" />
+                      <span>Kích hoạt Webhook Telegram ngay</span>
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Card Gemini AI Chatbot API Key */}
+              <Card style={{ overflow: 'visible' }}>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Zap className="w-4 h-4 text-purple-500" />
+                    Cấu hình Trợ lý AI (Gemini API Key)
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-5">
+                  <Input
+                    label="Google Gemini API Key (geminiApiKey)"
+                    type="password"
+                    placeholder="Ví dụ: AIzaSy..."
+                    value={geminiApiKey}
+                    onChange={(e) => setGeminiApiKey(e.target.value)}
+                  />
+                  <p className="text-[11px] text-muted-foreground -mt-3">
+                    Dùng cho <strong>Trợ lý AI Quản trị Web</strong> và <strong>AI phân tích tin nhắn Telegram</strong>.
+                  </p>
+
+                  <div className="p-4 rounded-xl border border-purple-500/20 bg-purple-500/5 space-y-3">
+                    <h4 className="text-sm font-extrabold text-purple-700 dark:text-purple-400 flex items-center gap-1.5">
+                      🔑 Chưa có Gemini API Key?
+                    </h4>
+                    <p className="text-xs text-muted-foreground leading-relaxed">
+                      Bạn có thể tạo Key hoàn toàn miễn phí từ Google AI Studio trong chưa đầy 1 phút.
+                    </p>
+                    <a
+                      href="https://aistudio.google.com/"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 px-4 py-2 bg-purple-600 text-white text-xs font-bold rounded-xl shadow-md hover:bg-purple-700 hover:scale-[1.02] active:scale-[0.98] transition-all"
+                    >
+                      Lấy API Key từ Google AI Studio
+                      <ExternalLink className="w-3.5 h-3.5" />
+                    </a>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Send className="w-4 h-4 text-sky-500" />
+                    Hướng dẫn & Liên kết Webhook
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-5">
+                  <div className="p-4 rounded-xl border border-border bg-slate-50 dark:bg-zinc-900/60 space-y-2.5">
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs font-black text-muted-foreground uppercase tracking-wide">URL nhận Telegram Webhook</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigator.clipboard.writeText(`${origin}/api/webhooks/telegram`);
+                          setCopiedTeleWebhook(true);
+                          showToast('Đã sao chép URL Webhook Telegram!', 'success');
+                          setTimeout(() => setCopiedTeleWebhook(false), 2000);
+                        }}
+                        className="text-sky-600 hover:text-sky-700 flex items-center gap-1.5 text-xs font-bold cursor-pointer"
+                      >
+                        {copiedTeleWebhook ? (
+                          <>
+                            <Check className="w-3.5 h-3.5 text-green-500" />
+                            <span>Đã sao chép</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="w-3.5 h-3.5" />
+                            <span>Sao chép</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                    <div className="p-2.5 bg-white dark:bg-zinc-800 rounded-lg border border-border/80 font-mono text-[11px] break-all select-all font-bold text-slate-700 dark:text-slate-300">
+                      {origin}/api/webhooks/telegram
+                    </div>
+                    <p className="text-[11px] text-muted-foreground leading-relaxed mt-1">
+                      Đường dẫn Webhook lắng nghe tin nhắn tạo đơn và tương tác từ Telegram.
+                    </p>
+                  </div>
+
+                  <div className="p-4 rounded-xl border border-sky-500/20 bg-sky-500/5 space-y-3">
+                    <h4 className="text-sm font-extrabold text-sky-700 dark:text-sky-400 flex items-center gap-2">
+                      💡 Cú pháp chat tạo đơn trên Telegram:
+                    </h4>
+                    <div className="space-y-2 text-xs text-muted-foreground leading-relaxed font-mono bg-white dark:bg-zinc-800 p-3 rounded-lg border border-border/60">
+                      <p>• <code>Tạo đơn Canva Pro 1 năm cho Anh Tuấn 0912345678</code></p>
+                      <p>• <code>Tạo đơn Netflix 6 tháng chị Mai</code></p>
+                      <p>• <code>/goi</code> - Xem danh sách dịch vụ</p>
+                      <p>• <code>/donhang</code> - Xem các đơn hàng gần đây</p>
                     </div>
                   </div>
                 </CardContent>
