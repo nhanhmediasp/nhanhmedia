@@ -2,6 +2,36 @@ import { prisma } from '@/lib/db';
 
 const TELEGRAM_API_BASE = 'https://api.telegram.org/bot';
 
+/**
+ * Escape các ký tự đặc biệt của Telegram HTML parse_mode.
+ * BẮT BUỘC dùng cho mọi dữ liệu động (tên khách, nội dung CK, tên sản phẩm...)
+ * vì nếu không Telegram sẽ trả 400 và thông báo mất im lặng.
+ */
+export function esc(value: unknown): string {
+  if (value === null || value === undefined) return '';
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+/**
+ * Lấy Admin Chat ID đang cấu hình (ưu tiên DB, fallback .env).
+ */
+export async function getAdminChatId(): Promise<string | null> {
+  try {
+    const settings = await prisma.websiteSettings.findUnique({ where: { id: 'default' } });
+    if (settings?.telegramAdminChatId && settings.telegramAdminChatId.trim()) {
+      return settings.telegramAdminChatId.trim();
+    }
+  } catch (err) {
+    console.error('[Telegram] Error reading admin chat id from DB:', err);
+  }
+
+  const envChatId = process.env.TELEGRAM_ADMIN_CHAT_ID;
+  return envChatId && envChatId.trim() ? envChatId.trim() : null;
+}
+
 export interface SendMessageOptions {
   chatId: string | number;
   text: string;
@@ -148,12 +178,7 @@ export async function answerCallbackQuery(callbackQueryId: string, text?: string
  */
 export async function notifyTelegramAdmin(text: string, replyMarkup?: any): Promise<boolean> {
   try {
-    const settings = await prisma.websiteSettings.findUnique({ where: { id: 'default' } });
-    const adminChatId = (settings?.telegramAdminChatId && settings.telegramAdminChatId.trim())
-      ? settings.telegramAdminChatId.trim()
-      : (process.env.TELEGRAM_ADMIN_CHAT_ID && process.env.TELEGRAM_ADMIN_CHAT_ID.trim())
-      ? process.env.TELEGRAM_ADMIN_CHAT_ID.trim()
-      : null;
+    const adminChatId = await getAdminChatId();
 
     if (!adminChatId) {
       return false;

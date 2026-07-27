@@ -1,19 +1,23 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
-import { sendTelegramMessage, sendTelegramPhoto, answerCallbackQuery } from '@/lib/telegram';
+import { sendTelegramMessage, sendTelegramPhoto, answerCallbackQuery, getAdminChatId, esc } from '@/lib/telegram';
 import { getPaymentContent, extractOrderCodeFromContent } from '@/lib/sepay';
 import { calculateEndDate } from '@/app/api/orders/route';
+import { createOrderWithUniqueCode } from '@/lib/order-code';
 
 export const runtime = 'nodejs';
 
-// Generate professional order code
-function generateOrderCode(): string {
-  const now = new Date();
-  const year = String(now.getFullYear()).substring(2);
-  const month = String(now.getMonth() + 1).padStart(2, '0');
-  const day = String(now.getDate()).padStart(2, '0');
-  const rand = Math.floor(1000 + Math.random() * 9000);
-  return `NHANH${year}${month}${day}-${rand}`;
+/**
+ * Timing-safe string comparison to protect against timing attacks
+ */
+function safeCompare(a: string, b: string) {
+  if (typeof a !== 'string' || typeof b !== 'string') return false;
+  if (a.length !== b.length) return false;
+  let result = 0;
+  for (let i = 0; i < a.length; i++) {
+    result |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  }
+  return result === 0;
 }
 
 // Get fallback admin user ID for created orders
@@ -256,27 +260,29 @@ async function processOrderCreation(chatId: string | number, text: string) {
     const startDate = new Date();
     const endDate = calculateEndDate(startDate, variant.durationValue, variant.durationUnit);
 
-    // 4. Create Order in DB
-    const orderCode = generateOrderCode();
-    const newOrder = await prisma.order.create({
-      data: {
-        orderCode,
-        customerId: customer.id,
-        createdByUserId: adminUserId,
-        productId: variant.productId,
-        variantId: variant.id,
-        price: orderPrice,
-        status: 'new',
-        startDate,
-        endDate,
-        note: note || 'Tạo tự động qua Telegram Bot',
-      },
-      include: {
-        customer: true,
-        product: true,
-        variant: true,
-      },
-    });
+    // 4. Create Order in DB (mã đơn tự sinh lại nếu trùng)
+    const newOrder = await createOrderWithUniqueCode((orderCode) =>
+      prisma.order.create({
+        data: {
+          orderCode,
+          customerId: customer!.id,
+          createdByUserId: adminUserId,
+          productId: variant.productId,
+          variantId: variant.id,
+          price: orderPrice,
+          status: 'new',
+          startDate,
+          endDate,
+          note: note || 'Tạo tự động qua Telegram Bot',
+        },
+        include: {
+          customer: true,
+          product: true,
+          variant: true,
+        },
+      })
+    );
+    const orderCode = newOrder.orderCode;
 
     // 5. Get SePay Banking details
     const settings = await prisma.websiteSettings.findUnique({ where: { id: 'default' } });
@@ -290,18 +296,18 @@ async function processOrderCreation(chatId: string | number, text: string) {
     // 6. Build Rich Caption & Send QR Photo to Telegram
     const caption =
       `🎉 <b>TẠO ĐƠN HÀNG THÀNH CÔNG!</b>\n\n` +
-      `📌 <b>Mã đơn:</b> <code>${newOrder.orderCode}</code>\n` +
-      `📦 <b>Sản phẩm:</b> ${newOrder.product.name} (${newOrder.variant.name})\n` +
-      `👤 <b>Khách hàng:</b> ${newOrder.customer.name}\n` +
-      `${newOrder.customer.phone ? `📞 <b>SĐT:</b> ${newOrder.customer.phone}\n` : ''}` +
+      `📌 <b>Mã đơn:</b> <code>${esc(newOrder.orderCode)}</code>\n` +
+      `📦 <b>Sản phẩm:</b> ${esc(newOrder.product.name)} (${esc(newOrder.variant.name)})\n` +
+      `👤 <b>Khách hàng:</b> ${esc(newOrder.customer.name)}\n` +
+      `${newOrder.customer.phone ? `📞 <b>SĐT:</b> ${esc(newOrder.customer.phone)}\n` : ''}` +
       `💵 <b>Giá tiền:</b> <b>${orderPrice.toLocaleString('vi-VN')}đ</b>\n` +
       `📅 <b>Thời hạn:</b> ${startDate.toLocaleDateString('vi-VN')} ➔ ${endDate.toLocaleDateString('vi-VN')}\n\n` +
       `💳 <b>THÔNG TIN THANH TOÁN (SEPAY VIETQR):</b>\n` +
-      `• <b>Ngân hàng:</b> ${bankCode}\n` +
-      `• <b>Số tài khoản:</b> <code>${accountNumber}</code>\n` +
-      `• <b>Chủ tài khoản:</b> ${accountName}\n` +
+      `• <b>Ngân hàng:</b> ${esc(bankCode)}\n` +
+      `• <b>Số tài khoản:</b> <code>${esc(accountNumber)}</code>\n` +
+      `• <b>Chủ tài khoản:</b> ${esc(accountName)}\n` +
       `• <b>Số tiền:</b> <code>${orderPrice.toLocaleString('vi-VN')}</code>đ\n` +
-      `• <b>Nội dung CK:</b> <code>${paymentContent}</code>\n\n` +
+      `• <b>Nội dung CK:</b> <code>${esc(paymentContent)}</code>\n\n` +
       `📲 <i>Quét mã QR trên để chuyển khoản tự động. Hệ thống sẽ báo Telegram ngay khi nhận tiền!</i>`;
 
     const replyMarkup = {
@@ -338,8 +344,10 @@ async function checkOrderPaymentFromTelegram(
   orderCode: string
 ) {
   try {
-    let order = await prisma.order.findFirst({
-      where: { orderCode: { contains: orderCode, mode: 'insensitive' } },
+    // Khớp CHÍNH XÁC mã đơn. Trước đây dùng `contains` nên callback_data
+    // do client gửi (vd "cb_check_pay_NHANH") khớp bừa vào đơn khác.
+    const order = await prisma.order.findUnique({
+      where: { orderCode: orderCode.toUpperCase() },
       include: {
         customer: true,
         product: true,
@@ -361,9 +369,9 @@ async function checkOrderPaymentFromTelegram(
       const statusLabel = order.status === 'running' ? '✅ Đang chạy' : '🟢 Đang xử lý';
       const msg =
         `<b>🎉 ĐÃ XÁC NHẬN THANH TOÁN THÀNH CÔNG!</b>\n\n` +
-        `📌 <b>Mã đơn:</b> <code>${order.orderCode}</code>\n` +
-        `👤 <b>Khách hàng:</b> ${order.customer.name}\n` +
-        `📦 <b>Sản phẩm:</b> ${order.product.name} (${order.variant.name})\n` +
+        `📌 <b>Mã đơn:</b> <code>${esc(order.orderCode)}</code>\n` +
+        `👤 <b>Khách hàng:</b> ${esc(order.customer.name)}\n` +
+        `📦 <b>Sản phẩm:</b> ${esc(order.product.name)} (${esc(order.variant.name)})\n` +
         `💵 <b>Đã nhận:</b> <code>${order.amountPaid.toLocaleString('vi-VN')}đ</code> / ${currentPrice.toLocaleString('vi-VN')}đ\n` +
         `⚙️ <b>Trạng thái:</b> ${statusLabel}`;
 
@@ -389,49 +397,90 @@ async function checkOrderPaymentFromTelegram(
           const sepayData = await sepayRes.json();
           const transactions = sepayData.transactions || [];
 
+          let creditedAmount = 0;
+
           for (const tx of transactions) {
             const content = tx.transaction_content || tx.content || '';
             const matchedCode = extractOrderCodeFromContent(content);
 
-            if (matchedCode && matchedCode.toUpperCase() === order.orderCode.toUpperCase()) {
-              const amount = Number(tx.amount_in || tx.amount || 0);
-              const newAmountPaid = order.amountPaid + amount;
-              const newStatus = newAmountPaid >= currentPrice ? 'processing' : order.status;
+            if (!matchedCode || matchedCode.toUpperCase() !== order.orderCode.toUpperCase()) {
+              continue;
+            }
 
-              const updatedOrder = await prisma.order.update({
-                where: { id: order.id },
-                data: {
-                  amountPaid: newAmountPaid,
-                  status: newStatus,
-                },
-                include: { customer: true, product: true, variant: true },
-              });
+            const amount = Number(tx.amount_in || tx.amount || 0);
+            if (!Number.isFinite(amount) || amount <= 0) continue;
 
-              await prisma.paymentTransaction.create({
-                data: {
-                  sepayId: String(tx.id),
-                  orderId: order.id,
-                  amount,
-                  content,
-                  code: order.orderCode,
-                  accountNumber,
-                  gateway: tx.bank_brand_name || 'SePay',
-                  transactionAt: new Date(tx.transaction_date || Date.now()),
-                  matched: true,
-                  raw: tx,
-                },
-              });
+            const sepayId = String(tx.id);
 
-              await answerCallbackQuery(callbackQueryId, `🎉 Đã tìm thấy giao dịch +${amount.toLocaleString('vi-VN')}đ!`);
+            // Idempotency: giao dịch có thể đã được webhook SePay ghi nhận rồi.
+            // Trước đây update order TRƯỚC rồi mới create → create ném lỗi unique
+            // nhưng tiền đã bị cộng, gây cộng trùng vĩnh viễn.
+            const alreadyRecorded = await prisma.paymentTransaction.findUnique({
+              where: { sepayId },
+              select: { id: true },
+            });
+            if (alreadyRecorded) continue;
+
+            try {
+              // Ghi giao dịch + cộng tiền trong CÙNG một transaction.
+              // Dùng increment thay vì đọc-rồi-ghi để tránh mất tiền khi
+              // webhook SePay chạy song song.
+              await prisma.$transaction([
+                prisma.paymentTransaction.create({
+                  data: {
+                    sepayId,
+                    orderId: order.id,
+                    amount,
+                    content,
+                    code: order.orderCode,
+                    accountNumber,
+                    gateway: tx.bank_brand_name || 'SePay',
+                    transactionAt: new Date(tx.transaction_date || Date.now()),
+                    matched: true,
+                    raw: tx,
+                  },
+                }),
+                prisma.order.update({
+                  where: { id: order.id },
+                  data: { amountPaid: { increment: amount } },
+                }),
+              ]);
+              creditedAmount += amount;
+            } catch (txErr) {
+              // Unique violation = webhook vừa ghi trước ta trong tích tắc → bỏ qua
+              console.warn('[Telegram Bot] Bỏ qua giao dịch đã được ghi nhận:', sepayId, txErr);
+            }
+          }
+
+          if (creditedAmount > 0) {
+            // Đọc lại giá trị thật sau khi increment, rồi mới quyết định trạng thái
+            const refreshed = await prisma.order.findUnique({
+              where: { id: order.id },
+              include: { customer: true, product: true, variant: true },
+            });
+
+            if (refreshed) {
+              const paidEnough = refreshed.amountPaid >= currentPrice;
+              if (paidEnough && (refreshed.status === 'new' || refreshed.status === 'processing')) {
+                await prisma.order.update({
+                  where: { id: refreshed.id },
+                  data: { status: 'processing' },
+                });
+              }
+
+              await answerCallbackQuery(
+                callbackQueryId,
+                `🎉 Đã tìm thấy giao dịch +${creditedAmount.toLocaleString('vi-VN')}đ!`
+              );
 
               const successMsg =
                 `<b>🎉 ĐÃ KHỚP THANH TOÁN MỚI TỪ SEPAY!</b>\n\n` +
-                `📌 <b>Mã đơn:</b> <code>${updatedOrder.orderCode}</code>\n` +
-                `👤 <b>Khách hàng:</b> ${updatedOrder.customer.name}\n` +
-                `📦 <b>Sản phẩm:</b> ${updatedOrder.product.name} (${updatedOrder.variant.name})\n` +
-                `💵 <b>Số tiền vừa nhận:</b> <code>+${amount.toLocaleString('vi-VN')}đ</code>\n` +
-                `📊 <b>Tổng đã thanh toán:</b> ${newAmountPaid.toLocaleString('vi-VN')}đ / ${currentPrice.toLocaleString('vi-VN')}đ\n` +
-                `⚙️ <b>Trạng thái đơn:</b> 🟢 Đang xử lý`;
+                `📌 <b>Mã đơn:</b> <code>${esc(refreshed.orderCode)}</code>\n` +
+                `👤 <b>Khách hàng:</b> ${esc(refreshed.customer.name)}\n` +
+                `📦 <b>Sản phẩm:</b> ${esc(refreshed.product.name)} (${esc(refreshed.variant.name)})\n` +
+                `💵 <b>Số tiền vừa nhận:</b> <code>+${creditedAmount.toLocaleString('vi-VN')}đ</code>\n` +
+                `📊 <b>Tổng đã thanh toán:</b> ${refreshed.amountPaid.toLocaleString('vi-VN')}đ / ${currentPrice.toLocaleString('vi-VN')}đ\n` +
+                `⚙️ <b>Trạng thái đơn:</b> ${paidEnough ? '🟢 Đang xử lý' : '🟡 Còn thiếu'}`;
 
               await sendTelegramMessage({ chatId, text: successMsg });
               return;
@@ -450,8 +499,8 @@ async function checkOrderPaymentFromTelegram(
     );
 
     const pendingMsg =
-      `⏳ <b>CHƯA NHẬN ĐƯỢC THANH TOÁN CHO ĐƠN ${order.orderCode}</b>\n\n` +
-      `📌 <b>Mã đơn:</b> <code>${order.orderCode}</code>\n` +
+      `⏳ <b>CHƯA NHẬN ĐƯỢC THANH TOÁN CHO ĐƠN ${esc(order.orderCode)}</b>\n\n` +
+      `📌 <b>Mã đơn:</b> <code>${esc(order.orderCode)}</code>\n` +
       `💵 <b>Cần thanh toán:</b> <code>${currentPrice.toLocaleString('vi-VN')}đ</code>\n` +
       `📊 <b>Đã nhận:</b> ${order.amountPaid.toLocaleString('vi-VN')}đ\n\n` +
       `💡 <i>Nếu bạn vừa chuyển khoản thành công, ngân hàng có thể mất 10-30 giây để xử lý. Bạn hãy bấm nút <b>🔄 Kiểm tra thanh toán ngay</b> bên dưới để kiểm tra lại!</i>`;
@@ -494,11 +543,11 @@ async function sendProductCatalog(chatId: string | number) {
   let text = '📦 <b>DANH SÁCH GÓI DỊCH VỤ HIỆN CÓ:</b>\n\n';
 
   products.forEach((p, idx) => {
-    text += `<b>${idx + 1}. ${p.name}</b>\n`;
+    text += `<b>${idx + 1}. ${esc(p.name)}</b>\n`;
     p.variants.forEach((v) => {
       const priceRecord = v.prices[0];
       const price = priceRecord ? priceRecord.price : 0;
-      text += `   • ${v.name}: <code>${price.toLocaleString('vi-VN')}đ</code> / ${v.durationValue} ${v.durationUnit === 'month' ? 'tháng' : v.durationUnit === 'year' ? 'năm' : 'ngày'}\n`;
+      text += `   • ${esc(v.name)}: <code>${price.toLocaleString('vi-VN')}đ</code> / ${v.durationValue} ${v.durationUnit === 'month' ? 'tháng' : v.durationUnit === 'year' ? 'năm' : 'ngày'}\n`;
     });
     text += '\n';
   });
@@ -540,9 +589,9 @@ async function sendRecentOrders(chatId: string | number) {
       o.status === 'expired_soon' ? '⚠️ Sắp hết hạn' :
       o.status === 'expired' ? '🔴 Đã hết hạn' : o.status;
 
-    text += `<b>${idx + 1}. ${o.orderCode}</b> - ${statusLabel}\n`;
-    text += `   • Gói: ${o.product.name} (${o.variant.name})\n`;
-    text += `   • Khách: ${o.customer.name} ${o.customer.phone ? `(${o.customer.phone})` : ''}\n`;
+    text += `<b>${idx + 1}. ${esc(o.orderCode)}</b> - ${statusLabel}\n`;
+    text += `   • Gói: ${esc(o.product.name)} (${esc(o.variant.name)})\n`;
+    text += `   • Khách: ${esc(o.customer.name)} ${o.customer.phone ? `(${esc(o.customer.phone)})` : ''}\n`;
     text += `   • Giá: ${o.price.toLocaleString('vi-VN')}đ (Đã nhận: ${o.amountPaid.toLocaleString('vi-VN')}đ)\n\n`;
   });
 
@@ -575,8 +624,28 @@ async function sendMainMenu(chatId: string | number) {
   await sendTelegramMessage({ chatId, text, replyMarkup });
 }
 
-// Telegram Webhook GET (Diagnostics & Helper)
+/**
+ * Route này nằm dưới /api/webhooks/ nên middleware KHÔNG kiểm tra đăng nhập.
+ * Vì vậy các thao tác quản trị ở đây phải tự xác thực bằng admin token.
+ */
+function isAuthorizedAdminRequest(req: Request): boolean {
+  const adminToken = process.env.TELEGRAM_ADMIN_TOKEN || process.env.CRON_SECRET;
+  if (!adminToken) return false;
+
+  const { searchParams } = new URL(req.url);
+  const provided =
+    searchParams.get('token') ||
+    (req.headers.get('authorization') || '').replace(/^Bearer\s+/i, '');
+
+  return safeCompare(provided, adminToken);
+}
+
+// Telegram Webhook GET (Diagnostics & Helper) — CHỈ dành cho admin
 export async function GET(req: Request) {
+  if (!isAuthorizedAdminRequest(req)) {
+    return NextResponse.json({ error: 'Không có quyền truy cập.' }, { status: 401 });
+  }
+
   const { searchParams } = new URL(req.url);
   const action = searchParams.get('action');
 
@@ -591,10 +660,25 @@ export async function GET(req: Request) {
   }
 
   if (action === 'set_webhook') {
-    const host = req.headers.get('host');
-    const protocol = req.headers.get('x-forwarded-proto') || 'https';
-    const webhookUrl = `${protocol}://${host}/api/webhooks/telegram`;
-    const secretToken = process.env.TELEGRAM_WEBHOOK_SECRET || settings?.telegramWebhookSecret || 'nhanh_media_tele_webhook_secret_2026';
+    // KHÔNG dùng header Host: kẻ tấn công có thể gửi `Host: evil.com`
+    // để trỏ webhook của bot về server của họ.
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL;
+    if (!baseUrl) {
+      return NextResponse.json(
+        { error: 'Chưa cấu hình NEXT_PUBLIC_APP_URL trong .env (bắt buộc để đặt webhook an toàn).' },
+        { status: 400 }
+      );
+    }
+
+    const secretToken = process.env.TELEGRAM_WEBHOOK_SECRET || settings?.telegramWebhookSecret;
+    if (!secretToken) {
+      return NextResponse.json(
+        { error: 'Chưa cấu hình TELEGRAM_WEBHOOK_SECRET. Không đặt webhook khi thiếu secret.' },
+        { status: 400 }
+      );
+    }
+
+    const webhookUrl = `${baseUrl.replace(/\/+$/, '')}/api/webhooks/telegram`;
 
     const res = await fetch(`https://api.telegram.org/bot${token}/setWebhook`, {
       method: 'POST',
@@ -616,7 +700,7 @@ export async function GET(req: Request) {
   return NextResponse.json({
     botTokenConfigured: true,
     webhookInfo: data,
-    setupGuide: 'To set webhook automatically, visit: /api/webhooks/telegram?action=set_webhook',
+    setupGuide: 'To set webhook: /api/webhooks/telegram?action=set_webhook&token=<TELEGRAM_ADMIN_TOKEN>',
   });
 }
 
@@ -627,11 +711,42 @@ export async function POST(req: Request) {
     const settings = await prisma.websiteSettings.findUnique({ where: { id: 'default' } });
     const secretConfigured = process.env.TELEGRAM_WEBHOOK_SECRET || settings?.telegramWebhookSecret;
 
-    if (secretConfigured && secretHeader && secretHeader !== secretConfigured) {
+    // Bắt buộc phải cấu hình secret. Không có secret = ai cũng POST được vào
+    // endpoint này để tạo đơn hàng thật và đọc dữ liệu khách hàng.
+    if (!secretConfigured) {
+      console.error('[Telegram Webhook] TELEGRAM_WEBHOOK_SECRET chưa được cấu hình — từ chối request.');
+      return NextResponse.json({ error: 'Webhook chưa được cấu hình bảo mật.' }, { status: 503 });
+    }
+
+    // LƯU Ý: phải kiểm tra cả trường hợp THIẾU header.
+    // Điều kiện cũ `secretConfigured && secretHeader && ...` cho qua mọi
+    // request không gửi header → bypass hoàn toàn.
+    if (!secretHeader || !safeCompare(secretHeader, secretConfigured)) {
       return NextResponse.json({ error: 'Unauthorized secret token.' }, { status: 401 });
     }
 
     const update = await req.json();
+
+    // Chỉ phục vụ Admin Chat ID đã cấu hình. Nếu không, bất kỳ ai tìm được bot
+    // đều tạo được đơn hàng và xem được danh sách khách hàng.
+    const adminChatId = await getAdminChatId();
+    
+    if (!adminChatId) {
+      console.warn('[Telegram Webhook] TELEGRAM_ADMIN_CHAT_ID chưa được cấu hình. Bỏ qua yêu cầu để bảo mật.');
+      return NextResponse.json({ ok: true });
+    }
+
+    const incomingChatId =
+      update.callback_query?.message?.chat?.id ?? update.message?.chat?.id ?? null;
+
+    if (incomingChatId !== null && String(incomingChatId) !== adminChatId) {
+      console.warn(`[Telegram Webhook] Bỏ qua update từ chat lạ: ${incomingChatId}`);
+      await sendTelegramMessage({
+        chatId: incomingChatId,
+        text: '⛔️ Bot này chỉ phục vụ nội bộ Nhanh Media.',
+      }).catch(() => {});
+      return NextResponse.json({ ok: true });
+    }
 
     // 1. Handle Callback Queries (Inline Button Clicks)
     if (update.callback_query) {
@@ -639,9 +754,8 @@ export async function POST(req: Request) {
       const chatId = cb.message?.chat?.id;
       const data = cb.data;
 
-      await answerCallbackQuery(cb.id);
-
       if (chatId) {
+        // Mỗi callback_query chỉ được answer MỘT lần, gọi lần hai Telegram trả lỗi.
         if (data === 'cb_products') {
           await answerCallbackQuery(cb.id);
           await sendProductCatalog(chatId);

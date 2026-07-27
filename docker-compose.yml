@@ -1,18 +1,25 @@
-version: '3.8'
-
 services:
   db:
     image: postgres:15-alpine
     container_name: nhanh-media-db
     restart: always
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: adminpassword123
-      POSTGRES_DB: nhanh_media
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      # Bắt buộc đặt trong .env — không hardcode mật khẩu vào file được commit
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD chua duoc dat trong .env}
+      POSTGRES_DB: ${POSTGRES_DB:-nhanh_media}
+      TZ: Asia/Ho_Chi_Minh
     ports:
-      - '5432:5432'
+      # Chỉ lắng nghe trên localhost. Dùng '5432:5432' là mở cổng database
+      # ra toàn Internet nếu firewall không chặn.
+      - '127.0.0.1:5432:5432'
     volumes:
       - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-postgres}']
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
 volumes:
   pgdata:

@@ -20,19 +20,35 @@ Hệ thống quản lý thông tin khách hàng, cộng tác viên nội bộ (C
 Đảm bảo bạn đã cài đặt **Node.js** (Khuyên dùng v18 trở lên).
 
 ### 2. Thiết lập cấu hình `.env`
-Nhân bản file `.env.example` thành `.env` (Hệ thống đã tự động cấu hình sẵn giá trị mặc định cho SQLite):
+
+Dự án dùng **PostgreSQL** (không hỗ trợ SQLite). Nhân bản `.env.example` thành `.env`
+rồi điền giá trị thật — xem chú thích chi tiết trong chính file `.env.example`:
+
 ```env
-# Mặc định sử dụng SQLite để chạy ngay lập tức không cần cài đặt DB server
-DATABASE_URL="file:./dev.db"
+DATABASE_URL="postgresql://USER:PASSWORD@127.0.0.1:5432/nhanh_media?schema=public"
 
-# JWT Secret
-JWT_SECRET="nhanh_media_secret_key_for_jwt_tokens_2026_purple_theme"
+# Sinh mới cho MỖI môi trường:
+#   node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+JWT_SECRET="<hex 64 ký tự>"
+SMTP_ENCRYPTION_KEY="<hex 64 ký tự>"
+CRON_SECRET="<chuỗi ngẫu nhiên dài>"
 
-# Cron Token (Bảo vệ API tự động nhắc gia hạn)
-CRON_SECRET="nhanh_media_cron_job_secret_key_2026_v1"
+BUSINESS_TIMEZONE="Asia/Ho_Chi_Minh"
+NEXT_PUBLIC_APP_URL="https://your-domain.com"
+```
 
-# Khóa 32-byte (Dạng hex) mã hóa mật khẩu SMTP lưu trong Database
-SMTP_ENCRYPTION_KEY="d7c95a289b4b0e515d48721c5a92a543ee7d216f9fdfa7ab725841cb648b292e"
+> ⚠️ Không dùng lại giá trị mẫu trong tài liệu. `JWT_SECRET` lộ = giả mạo được
+> phiên đăng nhập admin; `SMTP_ENCRYPTION_KEY` lộ = giải mã được mật khẩu SMTP trong DB.
+
+### 2b. Khởi tạo Database
+```bash
+npx prisma migrate deploy   # DB mới
+npx prisma db seed
+```
+Nếu DB đã có sẵn bảng (tạo bằng `prisma db push` trước đây):
+```bash
+npx prisma migrate resolve --applied 0_init
+npx prisma migrate deploy
 ```
 
 ### 3. Cài đặt các gói thư viện
@@ -85,19 +101,17 @@ Hệ thống đã có sẵn 4 tài khoản test đại diện cho 4 cấp phân 
 
 ---
 
-## 🛠️ Chuyển đổi sang PostgreSQL (Tùy chọn)
+## 🛠️ Chạy PostgreSQL cục bộ bằng Docker (Tùy chọn cho môi trường dev)
 
-Nếu bạn muốn cấu hình chạy thực tế với cơ sở dữ liệu **PostgreSQL**:
-
-1. Chạy cơ sở dữ liệu PostgreSQL cục bộ bằng Docker (Đã cấu hình sẵn file `docker-compose.yml`):
+1. Sửa `docker-compose.yml`, đổi `POSTGRES_PASSWORD` thành mật khẩu của bạn,
+   rồi khởi động:
    ```bash
    docker-compose up -d
    ```
-2. Thay đổi cấu hình `DATABASE_URL` trong file `.env` sang link PostgreSQL của bạn.
-3. Thay đổi dòng `provider = "sqlite"` thành `provider = "postgresql"` trong file [prisma/schema.prisma](file:///E:/AI/prisma/schema.prisma).
-4. Thực thi migrate và seed lại:
+2. Trỏ `DATABASE_URL` trong `.env` tới database vừa tạo.
+3. Thực thi migrate và seed:
    ```bash
-   npx prisma migrate dev --name init-postgres
+   npx prisma migrate deploy
    npx prisma db seed
    ```
 

@@ -12,8 +12,8 @@ export async function GET(req: Request) {
         SELECT 
           "supplier_id" as "supplierId",
           COUNT(*)::int as "orderCount",
-          COALESCE(SUM(COALESCE(custom_price, price)), 0)::float as "totalRevenue",
-          COALESCE(SUM(import_price), 0)::float as "totalCost",
+          COALESCE(SUM(COALESCE(custom_price, price)) FILTER (WHERE status NOT IN ('cancelled', 'refunded')), 0)::float as "totalRevenue",
+          COALESCE(SUM(import_price) FILTER (WHERE status NOT IN ('cancelled', 'refunded')), 0)::float as "totalCost",
           COUNT(CASE WHEN status = 'cancelled' THEN 1 END)::int as "cancelledCount",
           COALESCE(SUM(refund_amount), 0)::float as "totalRefundAmount"
         FROM orders

@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { extractOrderCodeFromContent } from '@/lib/sepay';
 import { createAuditLog } from '@/lib/audit';
-import { sendTelegramMessage } from '@/lib/telegram';
+import { sendTelegramMessage, getAdminChatId, esc } from '@/lib/telegram';
 import crypto from 'crypto';
 
 export const runtime = 'nodejs';
@@ -118,15 +118,33 @@ export async function POST(req: Request) {
     }
 
     // 4. Try matching to an order
-    // OrderCode can be present either in extracted 'code' field or inside 'content' description
-    const matchedOrderCode = code ? String(code) : extractOrderCodeFromContent(content);
-    
+    // SePay có thể trả về 'code' theo pattern riêng của họ (không phải mã đơn của
+    // mình). Trước đây khi có 'code' thì bỏ luôn không decode 'content' nữa →
+    // tiền vào mà không khớp được đơn. Giờ thử lần lượt tất cả ứng viên.
+    const candidateCodes = [
+      code ? String(code).trim().toUpperCase() : null,
+      extractOrderCodeFromContent(code ? String(code) : null),
+      extractOrderCodeFromContent(content),
+    ].filter((c): c is string => Boolean(c));
+
     let order = null;
-    if (matchedOrderCode) {
-      order = await prisma.order.findUnique({
-        where: { orderCode: matchedOrderCode },
+    let matchedOrderCode: string | null = null;
+
+    for (const candidate of candidateCodes) {
+      const found = await prisma.order.findUnique({
+        where: { orderCode: candidate },
         include: { customer: true },
       });
+      if (found) {
+        order = found;
+        matchedOrderCode = found.orderCode;
+        break;
+      }
+    }
+
+    // Không khớp đơn nào: vẫn lưu mã đã trích được (nếu có) để đối soát thủ công
+    if (!matchedOrderCode && candidateCodes.length > 0) {
+      matchedOrderCode = candidateCodes[0];
     }
 
     // 5. Save transaction and update order (if matched) in a Prisma transaction
@@ -140,15 +158,12 @@ export async function POST(req: Request) {
       const shouldUpdateStatus = newAmountPaid >= currentPrice && (order.status === 'new' || order.status === 'processing');
       const newStatus = shouldUpdateStatus ? 'processing' : order.status;
 
-      // Run database updates in transaction to ensure integrity
-      const [updatedOrder, createdTx] = await prisma.$transaction([
-        prisma.order.update({
-          where: { id: order.id },
-          data: {
-            amountPaid: newAmountPaid,
-            status: newStatus,
-          },
-        }),
+      // Run database updates in transaction to ensure integrity.
+      // Dùng `increment` thay vì ghi đè giá trị đã đọc trước đó: nếu hai webhook
+      // về cùng lúc, cách cũ sẽ làm mất một khoản tiền.
+      // paymentTransaction.create đứng TRƯỚC để unique(sepayId) chặn ghi trùng
+      // trước khi tiền được cộng.
+      const [createdTx, updatedOrder] = await prisma.$transaction([
         prisma.paymentTransaction.create({
           data: {
             sepayId: String(sepayId),
@@ -163,7 +178,27 @@ export async function POST(req: Request) {
             raw: payload,
           },
         }),
+        prisma.order.update({
+          where: { id: order.id },
+          data: {
+            amountPaid: { increment: amount },
+            status: newStatus,
+          },
+        }),
       ]);
+
+      // Số tiền thật sau khi cộng (có thể khác dự tính nếu có webhook chạy song song)
+      const newAmountPaidActual = updatedOrder.amountPaid;
+
+      // Chốt lại trạng thái dựa trên số tiền thật
+      let finalStatus = updatedOrder.status;
+      if (newAmountPaidActual >= currentPrice && updatedOrder.status === 'new') {
+        const corrected = await prisma.order.update({
+          where: { id: order.id },
+          data: { status: 'processing' },
+        });
+        finalStatus = corrected.status;
+      }
 
       // Ghi nhận Audit Log
       await createAuditLog({
@@ -179,35 +214,30 @@ export async function POST(req: Request) {
         entityType: 'Order',
         entityId: order.id,
         entityName: order.orderCode,
-        description: `Đã nhận thanh toán tự động qua SePay: +${amount.toLocaleString('vi-VN')}đ cho đơn ${order.orderCode}. Tổng đã nhận: ${newAmountPaid.toLocaleString('vi-VN')}đ / ${currentPrice.toLocaleString('vi-VN')}đ. Trạng thái: ${newStatus === 'processing' && order.status !== 'processing' ? 'Chuyển sang Đang xử lý' : 'Giữ nguyên'}.`,
+        description: `Đã nhận thanh toán tự động qua SePay: +${amount.toLocaleString('vi-VN')}đ cho đơn ${order.orderCode}. Tổng đã nhận: ${newAmountPaidActual.toLocaleString('vi-VN')}đ / ${currentPrice.toLocaleString('vi-VN')}đ. Trạng thái: ${finalStatus !== order.status ? `Chuyển sang ${finalStatus}` : 'Giữ nguyên'}.`,
         oldValues: {
           amountPaid: oldAmountPaid,
           status: order.status,
         },
         newValues: {
-          amountPaid: newAmountPaid,
-          status: newStatus,
+          amountPaid: newAmountPaidActual,
+          status: finalStatus,
         },
         request: req,
         status: 'success',
       });
 
       // Gửi thông báo Telegram nếu có Admin Chat ID (Đọc từ Cài đặt Website hoặc .env)
-      const settings = await prisma.websiteSettings.findUnique({ where: { id: 'default' } });
-      const teleAdminChatId = (settings?.telegramAdminChatId && settings.telegramAdminChatId.trim())
-        ? settings.telegramAdminChatId.trim()
-        : (process.env.TELEGRAM_ADMIN_CHAT_ID && process.env.TELEGRAM_ADMIN_CHAT_ID.trim())
-        ? process.env.TELEGRAM_ADMIN_CHAT_ID.trim()
-        : null;
+      const teleAdminChatId = await getAdminChatId();
 
       if (teleAdminChatId) {
         const teleMsg = `<b>🎉 NHẬN THANH TOÁN TỰ ĐỘNG (SEPAY)</b>\n\n` +
-          `📌 <b>Mã đơn:</b> <code>${order.orderCode}</code>\n` +
-          `👤 <b>Khách hàng:</b> ${order.customer?.name || 'Khách hàng'}\n` +
+          `📌 <b>Mã đơn:</b> <code>${esc(order.orderCode)}</code>\n` +
+          `👤 <b>Khách hàng:</b> ${esc(order.customer?.name || 'Khách hàng')}\n` +
           `💵 <b>Số tiền vừa nhận:</b> <code>+${amount.toLocaleString('vi-VN')}đ</code>\n` +
-          `📊 <b>Tổng đã nhận:</b> ${newAmountPaid.toLocaleString('vi-VN')}đ / ${currentPrice.toLocaleString('vi-VN')}đ\n` +
-          `⚙️ <b>Trạng thái đơn:</b> ${newStatus === 'processing' ? '🟢 Đang xử lý' : newStatus === 'running' ? '✅ Đang chạy' : newStatus}\n` +
-          `💬 <b>Nội dung CK:</b> <code>${content || ''}</code>`;
+          `📊 <b>Tổng đã nhận:</b> ${newAmountPaidActual.toLocaleString('vi-VN')}đ / ${currentPrice.toLocaleString('vi-VN')}đ\n` +
+          `⚙️ <b>Trạng thái đơn:</b> ${finalStatus === 'processing' ? '🟢 Đang xử lý' : finalStatus === 'running' ? '✅ Đang chạy' : esc(finalStatus)}\n` +
+          `💬 <b>Nội dung CK:</b> <code>${esc(content || '')}</code>`;
 
         await sendTelegramMessage({
           chatId: teleAdminChatId,
@@ -239,18 +269,13 @@ export async function POST(req: Request) {
       });
 
       // Báo Telegram Admin nếu giao dịch không khớp đơn
-      const settings = await prisma.websiteSettings.findUnique({ where: { id: 'default' } });
-      const teleAdminChatId = (settings?.telegramAdminChatId && settings.telegramAdminChatId.trim())
-        ? settings.telegramAdminChatId.trim()
-        : (process.env.TELEGRAM_ADMIN_CHAT_ID && process.env.TELEGRAM_ADMIN_CHAT_ID.trim())
-        ? process.env.TELEGRAM_ADMIN_CHAT_ID.trim()
-        : null;
+      const teleAdminChatId = await getAdminChatId();
 
       if (teleAdminChatId) {
         const teleMsg = `<b>⚠️ NHẬN TIỀN CHƯA KHỚP ĐƠN (SEPAY)</b>\n\n` +
           `💵 <b>Số tiền vừa nhận:</b> <code>+${amount.toLocaleString('vi-VN')}đ</code>\n` +
-          `💬 <b>Nội dung CK:</b> <code>${content || ''}</code>\n` +
-          `🏦 <b>Ngân hàng:</b> ${gateway || ''} - STK: <code>${accountNumber || ''}</code>\n` +
+          `💬 <b>Nội dung CK:</b> <code>${esc(content || '')}</code>\n` +
+          `🏦 <b>Ngân hàng:</b> ${esc(gateway || '')} - STK: <code>${esc(accountNumber || '')}</code>\n` +
           `📌 <i>Giao dịch chưa được tự động gán vào đơn hàng nào. Hãy kiểm tra đối soát trên Web.</i>`;
 
         await sendTelegramMessage({

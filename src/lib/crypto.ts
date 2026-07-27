@@ -3,13 +3,26 @@ import crypto from 'crypto';
 const ALGORITHM = 'aes-256-cbc';
 const IV_LENGTH = 16; // For AES, this is always 16
 
-// Retrieve encryption key from env, fallback to a safe default if not provided (for development)
+// Lấy khoá mã hoá từ env.
+// Ở production BẮT BUỘC phải cấu hình SMTP_ENCRYPTION_KEY: khoá dự phòng vốn
+// được hash từ một chuỗi cố định nằm trong source, nên bất kỳ ai đọc được repo
+// đều giải mã được mật khẩu SMTP đang lưu trong database.
 const getEncryptionKey = (): Buffer => {
   const hexKey = process.env.SMTP_ENCRYPTION_KEY;
   if (hexKey && hexKey.length === 64) {
     return Buffer.from(hexKey, 'hex');
   }
-  // Fallback safe key (hash of a default string to make it 32 bytes)
+
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error(
+      'SMTP_ENCRYPTION_KEY chưa được cấu hình (cần chuỗi hex 64 ký tự). ' +
+        'Sinh khoá bằng: node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'hex\'))"'
+    );
+  }
+
+  console.warn(
+    '[crypto] SMTP_ENCRYPTION_KEY chưa cấu hình — đang dùng khoá dev. KHÔNG dùng cấu hình này ở production.'
+  );
   return crypto.createHash('sha256').update('nhanh_media_fallback_key_2026').digest();
 };
 

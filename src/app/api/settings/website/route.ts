@@ -2,8 +2,26 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { createAuditLog } from '@/lib/audit';
 
-export async function GET() {
+/** Các trường bí mật: chỉ trả về cờ "đã cấu hình hay chưa", không trả giá trị thật. */
+const SECRET_FIELDS = [
+  'sepayApiKey',
+  'sepayWebhookSecret',
+  'telegramBotToken',
+  'telegramWebhookSecret',
+  'geminiApiKey',
+] as const;
+
+const SECRET_MASK = '********';
+
+export async function GET(req: Request) {
   try {
+    // PUT đã kiểm tra admin nhưng GET thì chưa — mà GET trả về nguyên
+    // sepayApiKey / telegramBotToken / geminiApiKey dạng plaintext.
+    const role = req.headers.get('x-user-role');
+    if (role !== 'admin') {
+      return NextResponse.json({ error: 'Chỉ Admin mới có thể xem cài đặt website.' }, { status: 403 });
+    }
+
     let settings = await prisma.websiteSettings.findUnique({
       where: { id: 'default' }
     });
@@ -15,7 +33,14 @@ export async function GET() {
       });
     }
 
-    return NextResponse.json({ settings });
+    // Che giá trị bí mật. UI chỉ cần biết đã cấu hình hay chưa;
+    // khi lưu, trường nào giữ nguyên mask thì PUT sẽ bỏ qua không ghi đè.
+    const masked: Record<string, unknown> = { ...settings };
+    for (const field of SECRET_FIELDS) {
+      masked[field] = settings[field] ? SECRET_MASK : null;
+    }
+
+    return NextResponse.json({ settings: masked });
   } catch (error) {
     console.error('GET website settings error:', error);
     return NextResponse.json({ error: 'Lỗi tải cài đặt website.' }, { status: 500 });
@@ -55,6 +80,11 @@ export async function PUT(req: Request) {
       geminiApiKey,
     } = body;
 
+    // Nếu client gửi lại đúng chuỗi mask (do GET đã che), nghĩa là admin không
+    // sửa trường đó → giữ nguyên giá trị cũ thay vì ghi đè bằng "********".
+    const keepIfMasked = (value: unknown) =>
+      value === SECRET_MASK ? undefined : (value as string | null | undefined);
+
     const oldSettings = await prisma.websiteSettings.findUnique({ where: { id: 'default' } });
 
     const settings = await prisma.websiteSettings.upsert({
@@ -77,12 +107,12 @@ export async function PUT(req: Request) {
         sepayAccountNumber: sepayAccountNumber || null,
         sepayBankCode: sepayBankCode || null,
         sepayAccountName: sepayAccountName || null,
-        sepayApiKey: sepayApiKey || null,
-        sepayWebhookSecret: sepayWebhookSecret || null,
-        telegramBotToken: telegramBotToken || null,
+        sepayApiKey: keepIfMasked(sepayApiKey) || null,
+        sepayWebhookSecret: keepIfMasked(sepayWebhookSecret) || null,
+        telegramBotToken: keepIfMasked(telegramBotToken) || null,
         telegramAdminChatId: telegramAdminChatId || null,
-        telegramWebhookSecret: telegramWebhookSecret || null,
-        geminiApiKey: geminiApiKey || null,
+        telegramWebhookSecret: keepIfMasked(telegramWebhookSecret) || null,
+        geminiApiKey: keepIfMasked(geminiApiKey) || null,
       },
       update: {
         siteName: siteName !== undefined ? siteName : undefined,
@@ -101,12 +131,12 @@ export async function PUT(req: Request) {
         sepayAccountNumber: sepayAccountNumber !== undefined ? sepayAccountNumber : undefined,
         sepayBankCode: sepayBankCode !== undefined ? sepayBankCode : undefined,
         sepayAccountName: sepayAccountName !== undefined ? sepayAccountName : undefined,
-        sepayApiKey: sepayApiKey !== undefined ? sepayApiKey : undefined,
-        sepayWebhookSecret: sepayWebhookSecret !== undefined ? sepayWebhookSecret : undefined,
-        telegramBotToken: telegramBotToken !== undefined ? telegramBotToken : undefined,
+        sepayApiKey: keepIfMasked(sepayApiKey),
+        sepayWebhookSecret: keepIfMasked(sepayWebhookSecret),
+        telegramBotToken: keepIfMasked(telegramBotToken),
         telegramAdminChatId: telegramAdminChatId !== undefined ? telegramAdminChatId : undefined,
-        telegramWebhookSecret: telegramWebhookSecret !== undefined ? telegramWebhookSecret : undefined,
-        geminiApiKey: geminiApiKey !== undefined ? geminiApiKey : undefined,
+        telegramWebhookSecret: keepIfMasked(telegramWebhookSecret),
+        geminiApiKey: keepIfMasked(geminiApiKey),
       }
     });
 
@@ -134,7 +164,12 @@ export async function PUT(req: Request) {
       status: 'success',
     });
 
-    return NextResponse.json({ message: 'Đã lưu cài đặt website thành công!', settings });
+    const maskedResponse: Record<string, unknown> = { ...settings };
+    for (const field of SECRET_FIELDS) {
+      maskedResponse[field] = settings[field] ? SECRET_MASK : null;
+    }
+
+    return NextResponse.json({ message: 'Đã lưu cài đặt website thành công!', settings: maskedResponse });
   } catch (error: any) {
     console.error('PUT website settings error:', error);
     return NextResponse.json({ error: `Lỗi máy chủ khi lưu cài đặt: ${error?.message || error}` }, { status: 500 });

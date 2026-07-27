@@ -3,6 +3,29 @@ import type { NextRequest } from 'next/server';
 import { verifyTokenEdge, getAuthToken } from './lib/auth-edge';
 import { TOKEN_COOKIE_NAME } from './lib/auth';
 
+/**
+ * Chỉ các đuôi file tĩnh này mới được bỏ qua kiểm tra đăng nhập.
+ *
+ * Trước đây điều kiện là `pathname.includes('.')`, nghĩa là BẤT KỲ đường dẫn nào
+ * chứa dấu chấm cũng bỏ qua middleware — kể cả /api/... với tham số động chứa
+ * dấu chấm. Nhiều route /api/admin/* không tự kiểm tra quyền mà chỉ dựa vào
+ * middleware, nên đây là lỗ hổng chờ ngày phát nổ.
+ */
+const STATIC_FILE_EXTENSIONS = new Set([
+  'ico', 'png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'avif',
+  'css', 'js', 'mjs', 'map',
+  'woff', 'woff2', 'ttf', 'otf', 'eot',
+  'txt', 'xml', 'webmanifest', 'json',
+  'mp4', 'webm', 'mp3', 'pdf',
+]);
+
+function isStaticAsset(pathname: string): boolean {
+  const lastSegment = pathname.substring(pathname.lastIndexOf('/') + 1);
+  const dotIndex = lastSegment.lastIndexOf('.');
+  if (dotIndex <= 0) return false;
+  return STATIC_FILE_EXTENSIONS.has(lastSegment.substring(dotIndex + 1).toLowerCase());
+}
+
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
@@ -38,7 +61,7 @@ export async function middleware(req: NextRequest) {
     pathname.startsWith('/api/cron') || // Cron job has its own token protection
     pathname.startsWith('/api/public/') || // Public settings API
     pathname.startsWith('/api/webhooks/') || // Webhooks like SePay have their own API key / signature verification
-    pathname.includes('.') || // Static files like favicon.ico, logo.png
+    (!pathname.startsWith('/api/') && isStaticAsset(pathname)) || // Static files like favicon.ico, logo.png
     pathname === '/favicon.ico'
   ) {
     return NextResponse.next({
@@ -56,6 +79,17 @@ export async function middleware(req: NextRequest) {
   if (user) {
     // Force only Admin role
     if (user.role !== 'admin') {
+      // API phải trả JSON 403, không redirect (fetch() sẽ đi theo redirect và
+      // nhận về HTML trang login → client báo lỗi parse khó hiểu).
+      if (pathname.startsWith('/api/')) {
+        const response = new NextResponse(
+          JSON.stringify({ error: 'Không có quyền truy cập.' }),
+          { status: 403, headers: { 'Content-Type': 'application/json' } }
+        );
+        response.cookies.delete(TOKEN_COOKIE_NAME);
+        return response;
+      }
+
       const response = NextResponse.redirect(new NextUrl('/login', req.url));
       response.cookies.delete(TOKEN_COOKIE_NAME);
       return response;

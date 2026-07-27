@@ -17,7 +17,7 @@ export async function POST(
     }
 
     const body = await req.json();
-    const { variantId, startDateOption, customPrice } = body;
+    const { variantId, startDateOption, customPrice, amountPaid: amountPaidInput } = body;
 
     if (!variantId || !startDateOption) {
       return NextResponse.json({ error: 'Thiếu thông tin gia hạn bắt buộc.' }, { status: 400 });
@@ -76,12 +76,31 @@ export async function POST(
 
     const newEndDate = calculateEndDate(renewalStartDate, variant.durationValue, variant.durationUnit);
 
+    // Số tiền đã thu cho KỲ MỚI.
+    // Trước đây `amountPaid` của kỳ cũ được giữ nguyên trong khi `price` bị ghi đè
+    // bằng giá gói mới → đơn vừa gia hạn chưa thu đồng nào vẫn bị coi là đã thanh
+    // toán đủ (amountPaid >= price), khiến webhook SePay và nút "Kiểm tra thanh
+    // toán" trên Telegram đều báo nhầm là đã thu tiền.
+    // Mặc định coi như đã thu đủ (khớp với việc set status = 'running'),
+    // client có thể truyền amountPaid để ghi nhận thu một phần.
+    const parsedAmountPaid =
+      amountPaidInput === undefined || amountPaidInput === null || amountPaidInput === ''
+        ? renewalRevenue
+        : Number(amountPaidInput);
+
+    const newAmountPaid =
+      Number.isFinite(parsedAmountPaid) && parsedAmountPaid >= 0 ? parsedAmountPaid : renewalRevenue;
+
+    // Chưa thu đủ thì không thể coi là đang chạy
+    const newStatus = newAmountPaid >= renewalRevenue ? 'running' : 'processing';
+
     const oldValues = {
       variantId: order.variantId,
       endDate: order.endDate,
       status: order.status,
       price: order.price,
-      customPrice: order.customPrice
+      customPrice: order.customPrice,
+      amountPaid: order.amountPaid,
     };
 
     // 4. Record renewal and update order in a transaction
@@ -104,10 +123,12 @@ export async function POST(
         data: {
           variantId: variantId,
           endDate: newEndDate,
-          status: 'running', // Reset status to running (đang chạy) since it is renewed!
-          // Note: we can keep original order price, or update it. Let's update order details to match current package:
+          status: newStatus,
+          // Giá đơn được ghi đè theo gói mới, nên công nợ cũng phải tính lại
+          // theo kỳ mới thay vì mang số tiền của kỳ trước sang.
           price: finalPrice,
           customPrice: finalCustomPrice,
+          amountPaid: newAmountPaid,
         },
       });
     });
@@ -128,7 +149,8 @@ export async function POST(
           endDate: updatedOrder.endDate,
           status: updatedOrder.status,
           price: updatedOrder.price,
-          customPrice: updatedOrder.customPrice
+          customPrice: updatedOrder.customPrice,
+          amountPaid: updatedOrder.amountPaid,
         },
         request: req,
         status: 'success'

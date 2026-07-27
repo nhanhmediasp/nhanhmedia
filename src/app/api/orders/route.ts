@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { createAuditLog } from '@/lib/audit';
-import { notifyTelegramAdmin } from '@/lib/telegram';
+import { notifyTelegramAdmin, esc } from '@/lib/telegram';
+import { createOrderWithUniqueCode } from '@/lib/order-code';
 
 // Helper to calculate end date based on start date, value and unit
 export function calculateEndDate(startDate: Date, durationValue: number, durationUnit: string): Date {
@@ -20,16 +21,6 @@ export function calculateEndDate(startDate: Date, durationValue: number, duratio
       endDate.setMonth(startDate.getMonth() + durationValue);
   }
   return endDate;
-}
-
-// Generate professional order code
-function generateOrderCode(): string {
-  const now = new Date();
-  const year = String(now.getFullYear()).substring(2);
-  const month = String(now.getMonth() + 1).padStart(2, '0');
-  const day = String(now.getDate()).padStart(2, '0');
-  const rand = Math.floor(1000 + Math.random() * 9000);
-  return `NHANH${year}${month}${day}-${rand}`;
 }
 
 export async function GET(req: Request) {
@@ -63,13 +54,15 @@ export async function GET(req: Request) {
     if (productId) whereClause.productId = productId;
 
     if (searchTerm) {
+      // PostgreSQL: `contains` sinh ra LIKE (CÓ phân biệt hoa/thường),
+      // khác với SQLite/MySQL. Bắt buộc có mode: 'insensitive' (→ ILIKE).
       whereClause.OR = [
-        { orderCode: { contains: searchTerm } },
+        { orderCode: { contains: searchTerm, mode: 'insensitive' } },
         {
           customer: {
             OR: [
-              { name: { contains: searchTerm } },
-              { phone: { contains: searchTerm } },
+              { name: { contains: searchTerm, mode: 'insensitive' } },
+              { phone: { contains: searchTerm, mode: 'insensitive' } },
             ],
           },
         },
@@ -183,30 +176,32 @@ export async function POST(req: Request) {
     const parsedStartDate = new Date(startDate);
     const parsedEndDate = calculateEndDate(parsedStartDate, variant.durationValue, variant.durationUnit);
 
-    // 4. Create Order
-    const newOrder = await prisma.order.create({
-      data: {
-        orderCode: generateOrderCode(),
-        customerId: customer.id,
-        createdByUserId: userId,
-        productId,
-        variantId,
-        price: finalPrice,
-        customPrice: finalCustomPrice,
-        importPrice: finalImportPrice,
-        status: 'new',
-        startDate: parsedStartDate,
-        endDate: parsedEndDate,
-        note: note ? note.trim() : null,
-        internalNote: internalNote ? internalNote.trim() : null,
-        accountInfo: isAdmin && accountInfo ? accountInfo.trim() : null,
-      },
-      include: {
-        customer: true,
-        product: true,
-        variant: true,
-      },
-    });
+    // 4. Create Order (tự sinh lại mã nếu trùng thay vì ném lỗi 500)
+    const newOrder = await createOrderWithUniqueCode((orderCode) =>
+      prisma.order.create({
+        data: {
+          orderCode,
+          customerId: customer!.id,
+          createdByUserId: userId,
+          productId,
+          variantId,
+          price: finalPrice,
+          customPrice: finalCustomPrice,
+          importPrice: finalImportPrice,
+          status: 'new',
+          startDate: parsedStartDate,
+          endDate: parsedEndDate,
+          note: note ? note.trim() : null,
+          internalNote: internalNote ? internalNote.trim() : null,
+          accountInfo: isAdmin && accountInfo ? accountInfo.trim() : null,
+        },
+        include: {
+          customer: true,
+          product: true,
+          variant: true,
+        },
+      })
+    );
 
     await createAuditLog({
       action: 'CREATE_ORDER',
@@ -233,9 +228,9 @@ export async function POST(req: Request) {
     // Notify Telegram Admin about new order creation
     const effectivePrice = newOrder.customPrice !== null ? newOrder.customPrice : newOrder.price;
     const adminMsg = `<b>🛍️ ĐƠN HÀNG MỚI ĐƯỢC TẠO (WEB ADMIN)</b>\n\n` +
-      `📌 <b>Mã đơn:</b> <code>${newOrder.orderCode}</code>\n` +
-      `📦 <b>Sản phẩm:</b> ${newOrder.product.name} (${newOrder.variant.name})\n` +
-      `👤 <b>Khách hàng:</b> ${newOrder.customer.name} ${newOrder.customer.phone ? `(${newOrder.customer.phone})` : ''}\n` +
+      `📌 <b>Mã đơn:</b> <code>${esc(newOrder.orderCode)}</code>\n` +
+      `📦 <b>Sản phẩm:</b> ${esc(newOrder.product.name)} (${esc(newOrder.variant.name)})\n` +
+      `👤 <b>Khách hàng:</b> ${esc(newOrder.customer.name)} ${newOrder.customer.phone ? `(${esc(newOrder.customer.phone)})` : ''}\n` +
       `💵 <b>Giá tiền:</b> <b>${effectivePrice.toLocaleString('vi-VN')}đ</b>\n` +
       `📅 <b>Thời hạn:</b> ${new Date(newOrder.startDate).toLocaleDateString('vi-VN')} ➔ ${new Date(newOrder.endDate).toLocaleDateString('vi-VN')}`;
 

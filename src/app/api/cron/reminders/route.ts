@@ -4,7 +4,8 @@ import nodemailer from 'nodemailer';
 import { decrypt } from '@/lib/crypto';
 import { calculateEndDate } from '../../orders/route';
 import { formatEmailBody } from '../../orders/[id]/remind-manual/route';
-import { notifyTelegramAdmin } from '@/lib/telegram';
+import { notifyTelegramAdmin, esc } from '@/lib/telegram';
+import { addDays, startOfBusinessDay } from '@/lib/datetime';
 
 export async function POST(req: Request) {
   return handleCron(req);
@@ -25,9 +26,14 @@ async function handleCron(req: Request) {
       clientToken = authHeader.substring(7);
     }
 
-    const cronSecret = process.env.CRON_SECRET || 'nhanh_media_cron_job_secret_key_2026_v1';
+    // KHÔNG dùng giá trị mặc định hardcode: ai đọc được source là gọi được cron.
+    const cronSecret = process.env.CRON_SECRET;
+    if (!cronSecret) {
+      console.error('[Cron] CRON_SECRET chưa được cấu hình trong .env — từ chối request.');
+      return NextResponse.json({ error: 'Cron chưa được cấu hình bảo mật.' }, { status: 503 });
+    }
 
-    if (clientToken !== cronSecret) {
+    if (!clientToken || clientToken.length !== cronSecret.length || clientToken !== cronSecret) {
       return NextResponse.json({ error: 'Không có quyền truy cập.' }, { status: 401 });
     }
 
@@ -74,18 +80,30 @@ async function handleCron(req: Request) {
     let statusesUpdated = 0;
     const processLogs: string[] = [];
 
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    // Mốc "hôm nay" theo giờ Việt Nam (server aaPanel/Docker thường chạy UTC)
+    const today = startOfBusinessDay();
+
+    // ── 0) Quét bù các đơn ĐÃ quá hạn nhưng chưa được đánh dấu ───────────────
+    // Vòng lặp nhắc hạn bên dưới chỉ khớp đúng ngày `today + days`, nên nếu cron
+    // chết/lỗi một ngày thì đơn hết hạn hôm đó sẽ không bao giờ chuyển 'expired'.
+    const sweptExpired = await prisma.order.updateMany({
+      where: {
+        endDate: { lt: today },
+        status: { notIn: ['expired', 'cancelled', 'refunded'] },
+      },
+      data: { status: 'expired' },
+    });
+    if (sweptExpired.count > 0) {
+      statusesUpdated += sweptExpired.count;
+      processLogs.push(`Quét bù: đánh dấu hết hạn ${sweptExpired.count} đơn bị bỏ sót.`);
+    }
 
     for (const reminder of activeReminders) {
       const days = reminder.daysBefore;
-      
+
       // Calculate target date range (endDate must be on this day)
-      const targetStart = new Date(today);
-      targetStart.setDate(today.getDate() + days);
-      
-      const targetEnd = new Date(targetStart);
-      targetEnd.setHours(23, 59, 59, 999);
+      const targetStart = addDays(today, days);
+      const targetEnd = new Date(targetStart.getTime() + 86_400_000 - 1);
 
       // Map daysBefore to template type (Optional for email, not required for in-app notification)
       let templateType = 'reminder_3_days';
@@ -102,7 +120,7 @@ async function handleCron(req: Request) {
       const orders = await prisma.order.findMany({
         where: {
           endDate: { gte: targetStart, lte: targetEnd },
-          status: { notIn: ['cancelled', 'expired'] }, // Skip cancelled/already marked expired
+          status: { notIn: ['cancelled', 'expired', 'refunded'] }, // Bỏ qua đơn hủy/hoàn tiền/đã đánh dấu hết hạn
         },
         include: {
           customer: true,
@@ -136,8 +154,11 @@ async function handleCron(req: Request) {
             ? `Đơn hàng ${order.orderCode} đã hết hạn` 
             : `Đơn hàng ${order.orderCode} sắp hết hạn (${days} ngày)`;
 
+          // Dedupe theo NGÀY, không phải "một lần duy nhất mãi mãi".
+          // Cách cũ chỉ so `title` nên khi đơn được gia hạn sang chu kỳ sau,
+          // thông báo cùng tiêu đề sẽ bị bỏ qua vĩnh viễn.
           const existingNotification = await prisma.notification.findFirst({
-            where: { title: notifTitle }
+            where: { title: notifTitle, createdAt: { gte: today } },
           });
 
           if (!existingNotification) {
@@ -154,14 +175,14 @@ async function handleCron(req: Request) {
             // Telegram Admin Alert
             const teleOrderMsg = days === 0
               ? `🔴 <b>CẢNH BÁO: ĐƠN HÀNG ĐÃ HẾT HẠN!</b>\n\n` +
-                `📌 <b>Mã đơn:</b> <code>${order.orderCode}</code>\n` +
-                `👤 <b>Khách hàng:</b> ${order.customer.name} ${order.customer.phone ? `(${order.customer.phone})` : ''}\n` +
-                `📦 <b>Sản phẩm:</b> ${order.product.name} (${order.variant.name})\n` +
+                `📌 <b>Mã đơn:</b> <code>${esc(order.orderCode)}</code>\n` +
+                `👤 <b>Khách hàng:</b> ${esc(order.customer.name)} ${order.customer.phone ? `(${esc(order.customer.phone)})` : ''}\n` +
+                `📦 <b>Sản phẩm:</b> ${esc(order.product.name)} (${esc(order.variant.name)})\n` +
                 `📅 <b>Ngày hết hạn:</b> ${new Date(order.endDate).toLocaleDateString('vi-VN')}`
               : `⚠️ <b>NHẮC HẠN: ĐƠN HÀNG SẮP HẾT HẠN (${days} NGÀY)!</b>\n\n` +
-                `📌 <b>Mã đơn:</b> <code>${order.orderCode}</code>\n` +
-                `👤 <b>Khách hàng:</b> ${order.customer.name} ${order.customer.phone ? `(${order.customer.phone})` : ''}\n` +
-                `📦 <b>Sản phẩm:</b> ${order.product.name} (${order.variant.name})\n` +
+                `📌 <b>Mã đơn:</b> <code>${esc(order.orderCode)}</code>\n` +
+                `👤 <b>Khách hàng:</b> ${esc(order.customer.name)} ${order.customer.phone ? `(${esc(order.customer.phone)})` : ''}\n` +
+                `📦 <b>Sản phẩm:</b> ${esc(order.product.name)} (${esc(order.variant.name)})\n` +
                 `📅 <b>Ngày hết hạn:</b> ${new Date(order.endDate).toLocaleDateString('vi-VN')}`;
 
             notifyTelegramAdmin(teleOrderMsg).catch(() => {});
@@ -240,8 +261,7 @@ async function handleCron(req: Request) {
     let projectNotifsCreated = 0;
 
     for (const project of runningProjects) {
-      const deadline = new Date(project.endDate!);
-      deadline.setHours(0, 0, 0, 0);
+      const deadline = startOfBusinessDay(new Date(project.endDate!));
 
       const diffTime = deadline.getTime() - today.getTime();
       const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
@@ -258,8 +278,10 @@ async function handleCron(req: Request) {
       }
 
       if (notifTitle && createdByUserId) {
+        // Dự án quá hạn/sắp hạn: nhắc lại tối đa 1 lần mỗi 3 ngày thay vì
+        // chỉ đúng một lần duy nhất trong suốt vòng đời dự án.
         const existing = await prisma.notification.findFirst({
-          where: { title: notifTitle }
+          where: { title: notifTitle, createdAt: { gte: addDays(today, -3) } },
         });
 
         if (!existing) {
@@ -277,11 +299,11 @@ async function handleCron(req: Request) {
           // Send Telegram Admin Alert for project deadline / overdue
           const teleProjAlert = diffDays < 0
             ? `🔴 <b>CẢNH BÁO: DỰ ÁN ĐÃ QUÁ HẠN!</b>\n\n` +
-              `📌 <b>Tên dự án:</b> <b>${project.name}</b>\n` +
+              `📌 <b>Tên dự án:</b> <b>${esc(project.name)}</b>\n` +
               `📊 <b>Tiến độ:</b> ${project.progress}%\n` +
               `📅 <b>Hạn hoàn thành:</b> ${new Date(project.endDate!).toLocaleDateString('vi-VN')}`
             : `⚠️ <b>NHẮC HẠN: DỰ ÁN SẮP TỚI HẠN (CÒN ${diffDays} NGÀY)!</b>\n\n` +
-              `📌 <b>Tên dự án:</b> <b>${project.name}</b>\n` +
+              `📌 <b>Tên dự án:</b> <b>${esc(project.name)}</b>\n` +
               `📊 <b>Tiến độ:</b> ${project.progress}%\n` +
               `🎯 <b>Hạn hoàn thành:</b> ${new Date(project.endDate!).toLocaleDateString('vi-VN')}`;
 

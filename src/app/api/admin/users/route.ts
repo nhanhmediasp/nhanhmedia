@@ -21,11 +21,12 @@ export async function GET(req: Request) {
         orderBy: { createdAt: 'desc' },
       }),
       prisma.$queryRaw<{ createdByUserId: string; orderCount: number; revenue: number }[]>`
-        SELECT 
+        SELECT
           "created_by_user_id" as "createdByUserId",
           COUNT(*)::int as "orderCount",
           COALESCE(SUM(COALESCE(custom_price, price)), 0)::float as "revenue"
         FROM orders
+        WHERE status NOT IN ('cancelled', 'refunded')
         GROUP BY "created_by_user_id"
       `,
       prisma.$queryRaw<{ renewedByUserId: string; revenue: number }[]>`

@@ -46,10 +46,10 @@ export async function GET(req: Request) {
     // Search query on description, actorName, actorEmail
     if (search) {
       whereClause.OR = [
-        { description: { contains: search } },
-        { actorName: { contains: search } },
-        { actorEmail: { contains: search } },
-        { entityName: { contains: search } }
+        { description: { contains: search, mode: 'insensitive' } },
+        { actorName: { contains: search, mode: 'insensitive' } },
+        { actorEmail: { contains: search, mode: 'insensitive' } },
+        { entityName: { contains: search, mode: 'insensitive' } }
       ];
     }
 

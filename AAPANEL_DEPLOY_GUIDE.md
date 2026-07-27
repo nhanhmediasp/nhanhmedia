@@ -27,30 +27,59 @@ Tài liệu này hướng dẫn chi tiết từng bước để triển khai d�
 
 ---
 
-## 🗄️ Bước 2: Chuẩn bị Database (Chọn 1 trong 2 cách)
+## 🗄️ Bước 2: Chuẩn bị Database (PostgreSQL)
 
-Dự án sử dụng Prisma ORM. Bạn có hai lựa chọn Database chính:
+> ⚠️ Dự án **chỉ hỗ trợ PostgreSQL**. Đừng đổi provider sang `sqlite`: nhiều truy vấn
+> thống kê dùng cú pháp riêng của Postgres (`::float`, `::int`, `FILTER (WHERE ...)`)
+> và tìm kiếm dùng `mode: 'insensitive'` (ILIKE) — chạy SQLite sẽ lỗi ngay.
 
-### Cách A: Sử dụng PostgreSQL (Khuyên dùng cho Production)
-1. **Nếu dùng Database trên aaPanel (Local VPS)**:
+1. **Database trên aaPanel (Local VPS)** — khuyên dùng:
    * Vào **App Store** → Mở **PostgreSQL Manager**.
-   * Thêm database mới: Đặt tên database, tên user và mật khẩu.
-   * Ví dụ Connection String: `postgresql://db_user:db_password@127.0.0.1:5432/db_name?schema=public`
-2. **Nếu dùng Neon.tech (Đám mây miễn phí - Nhanh nhất)**:
-   * Xem hướng dẫn tạo tại [DEPLOY_GUIDE.md](file:///e:/GEMINI/AI/DEPLOY_GUIDE.md#L3).
-   * Lấy Connection String có dạng: `postgresql://USER:PASSWORD@ep-xxx.ap-southeast-1.aws.neon.tech/nhanh_media?sslmode=require`
+   * Thêm database mới: đặt tên database, tên user và mật khẩu.
+   * Connection String: `postgresql://db_user:db_password@127.0.0.1:5432/db_name?schema=public`
+2. **Neon.tech (đám mây miễn phí)**:
+   * Connection String dạng: `postgresql://USER:PASSWORD@ep-xxx.aws.neon.tech/nhanh_media?sslmode=require`
 
-### Cách B: Sử dụng SQLite (Đơn giản nhất, không cần cài Database Server)
-> **Lưu ý:** Để dùng SQLite, bạn cần chuyển đổi cấu hình provider trong Prisma schema:
-1. Mở file [prisma/schema.prisma](file:///e:/GEMINI/AI/prisma/schema.prisma).
-2. Sửa dòng 2 từ `"postgresql"` thành `"sqlite"`:
-   ```prisma
-   datasource db {
-     provider = "sqlite"
-     url      = env("DATABASE_URL")
-   }
-   ```
-3. Đổi biến `DATABASE_URL` trong file `.env` thành: `DATABASE_URL="file:./dev.db"`
+### Giới hạn kết nối (quan trọng khi chạy PM2 nhiều instance)
+
+PostgreSQL mặc định `max_connections = 100`. Mỗi tiến trình Node mở tối đa
+`DB_CONNECTION_LIMIT` kết nối (mặc định **10**). Hãy đảm bảo:
+
+```
+DB_CONNECTION_LIMIT × số_instance_PM2  <  max_connections
+```
+
+Ví dụ chạy 4 instance PM2 → đặt `DB_CONNECTION_LIMIT="10"` là an toàn (40 < 100).
+Nếu gặp lỗi `too many clients already`, giảm `DB_CONNECTION_LIMIT` hoặc giảm số instance.
+
+---
+
+## 🧱 Bước 2b: Áp dụng Migration
+
+Dự án dùng Prisma Migrate. Có 2 tình huống:
+
+### Database MỚI (chưa có bảng nào)
+```bash
+npx prisma migrate deploy
+npx tsx prisma/seed.ts      # tạo tài khoản admin + dữ liệu mẫu
+```
+
+### Database ĐANG CHẠY (trước đây tạo bằng `prisma db push`)
+Đánh dấu migration nền là "đã áp dụng" để Prisma không cố tạo lại bảng,
+sau đó chỉ chạy phần index bổ sung:
+
+```bash
+npx prisma migrate resolve --applied 0_init
+npx prisma migrate deploy
+```
+
+> `20260726000000_add_performance_indexes` dùng `CREATE INDEX IF NOT EXISTS`
+> nên chạy lại nhiều lần vẫn an toàn.
+
+Kiểm tra kết quả:
+```bash
+npx prisma migrate status
+```
 
 ---
 

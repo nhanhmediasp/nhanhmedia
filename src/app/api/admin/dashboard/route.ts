@@ -1,6 +1,15 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { Prisma } from '@prisma/client';
+import { revenueOrderFilter, revenueSqlCondition } from '@/lib/revenue';
+import {
+  addDays,
+  endOfBusinessDay,
+  endOfBusinessMonth,
+  formatBusinessDayKey,
+  startOfBusinessDay,
+  startOfBusinessMonth,
+} from '@/lib/datetime';
 
 /**
  * GET /api/admin/dashboard?section=critical  → KPIs + counts + 5 recent orders (~50-150ms)
@@ -20,23 +29,27 @@ export async function GET(req: Request) {
 
     console.time(`[dashboard:${section}] total`);
 
+    // Mốc ngày/tháng tính theo giờ Việt Nam, không theo giờ hệ điều hành của
+    // server (aaPanel/Docker thường chạy UTC → lệch 7 tiếng).
     const now = new Date();
-    const startOfToday      = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
-    const endOfToday        = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
-    const startOfMonth      = new Date(now.getFullYear(), now.getMonth(), 1);
-    const endOfMonth        = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
-    const startOfLast15Days = new Date(startOfToday.getTime() - 14 * 86_400_000);
-    const startOfLast7Days  = new Date(startOfToday.getTime() - 6 * 86_400_000);
-    const startOfPrev7Days  = new Date(startOfToday.getTime() - 13 * 86_400_000);
-    const endOfPrev7Days    = new Date(startOfToday.getTime() - 7 * 86_400_000 + 86_399_999);
-    const startOf7DaysAgo   = new Date(startOfToday.getTime() - 7 * 86_400_000);
+    const startOfToday      = startOfBusinessDay(now);
+    const endOfToday        = endOfBusinessDay(now);
+    const startOfMonth      = startOfBusinessMonth(now);
+    const endOfMonth        = endOfBusinessMonth(now);
+    const startOfLast15Days = addDays(startOfToday, -14);
+    const startOfLast7Days  = addDays(startOfToday, -6);
+    const startOfPrev7Days  = addDays(startOfToday, -13);
+    const endOfPrev7Days    = new Date(addDays(startOfToday, -7).getTime() + 86_399_999);
+    const startOf7DaysAgo   = addDays(startOfToday, -7);
     const endOf7DaysAgo     = new Date(startOf7DaysAgo.getTime() + 86_399_999);
 
     // ── Helper: SUM(COALESCE(custom_price, price)) trong khoảng thời gian ──
     const revenueQuery = (gte: Date, lte: Date) =>
       prisma.$queryRaw<{ total: number }[]>(
         Prisma.sql`SELECT COALESCE(SUM(COALESCE(custom_price, price)), 0)::float AS total
-                   FROM orders WHERE created_at >= ${gte} AND created_at <= ${lte}`
+                   FROM orders
+                   WHERE created_at >= ${gte} AND created_at <= ${lte}
+                     AND ${revenueSqlCondition()}`
       );
 
     // ── Helper: Project budget & costs ──
@@ -131,7 +144,7 @@ export async function GET(req: Request) {
           // ⑧ Product expenses this month
           prisma.order.aggregate({
             _sum: { importPrice: true },
-            where: { createdAt: { gte: startOfMonth, lte: endOfMonth } }
+            where: { createdAt: { gte: startOfMonth, lte: endOfMonth }, ...revenueOrderFilter }
           }),
         ])
       : null;
@@ -147,6 +160,7 @@ export async function GET(req: Request) {
                COALESCE(SUM(COALESCE(o.custom_price, o.price)), 0)::float AS total
         FROM orders o
         JOIN products p ON p.id = o.product_id
+        WHERE ${revenueSqlCondition('o')}
         GROUP BY p.id, p.name
         ORDER BY total DESC
         LIMIT 5
@@ -159,6 +173,7 @@ export async function GET(req: Request) {
                COALESCE(SUM(COALESCE(o.custom_price, o.price)), 0)::float AS total
         FROM orders o
         JOIN users u ON u.id = o.created_by_user_id
+        WHERE ${revenueSqlCondition('o')}
         GROUP BY u.id, u.name, u.role
         ORDER BY total DESC
         LIMIT 5
@@ -168,7 +183,7 @@ export async function GET(req: Request) {
       ? Promise.all([
           // ① Daily orders (15 ngày) – chỉ select field cần thiết
           prisma.order.findMany({
-            where:   { createdAt: { gte: startOfLast15Days, lte: endOfToday } },
+            where:   { createdAt: { gte: startOfLast15Days, lte: endOfToday }, ...revenueOrderFilter },
             select:  { createdAt: true, price: true, customPrice: true, importPrice: true },
             orderBy: { createdAt: 'asc' },
           }),
@@ -316,9 +331,8 @@ export async function GET(req: Request) {
       const [dailyOrders, dailyRenewals, topProductsRaw, topCreatorsRaw, statusGroupBy] = chartsResults;
       const [dailyProjects, dailyWebsiteCosts, dailyToolCosts, topProjectsRaw, projectStatusGroupBy] = projectChartsResults;
 
-      // Daily chart
-      const formatDayKey = (d: Date) =>
-        `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`;
+      // Daily chart — nhãn ngày theo giờ VN để khớp với mốc query ở trên
+      const formatDayKey = formatBusinessDayKey;
 
       const dailyMap = new Map<string, {
         productRevenue: number;
@@ -327,7 +341,7 @@ export async function GET(req: Request) {
         projectCosts: number;
       }>();
 
-      const cursor = new Date(startOfLast15Days);
+      let cursor = new Date(startOfLast15Days);
       while (cursor <= endOfToday) {
         dailyMap.set(formatDayKey(cursor), {
           productRevenue: 0,
@@ -335,7 +349,7 @@ export async function GET(req: Request) {
           productCosts: 0,
           projectCosts: 0,
         });
-        cursor.setDate(cursor.getDate() + 1);
+        cursor = addDays(cursor, 1);
       }
 
       for (const o of dailyOrders) {

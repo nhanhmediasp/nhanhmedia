@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
+import { createOrderWithUniqueCode } from '@/lib/order-code';
 
 async function getAdminUserId(): Promise<string> {
   const adminUser = await prisma.user.findFirst({
@@ -9,12 +10,6 @@ async function getAdminUserId(): Promise<string> {
   if (adminUser) return adminUser.id;
   const anyUser = await prisma.user.findFirst({ select: { id: true } });
   return anyUser ? anyUser.id : 'system';
-}
-
-function generateOrderCode(): string {
-  const dateStr = new Date().toISOString().slice(2, 10).replace(/-/g, '');
-  const rand = Math.floor(1000 + Math.random() * 9000);
-  return `NHANH${dateStr}-${rand}`;
 }
 
 function calculateEndDate(startDate: Date, durationValue: number, durationUnit: string): Date {
@@ -86,27 +81,28 @@ async function executeTool(name: string, args: any) {
 
       const startDate = new Date();
       const endDate = calculateEndDate(startDate, selectedVariant.durationValue, selectedVariant.durationUnit);
-      const orderCode = generateOrderCode();
 
-      const newOrder = await prisma.order.create({
-        data: {
-          orderCode,
-          customerId: customer.id,
-          createdByUserId: adminUserId,
-          productId: product.id,
-          variantId: selectedVariant.id,
-          price: finalPrice,
-          status: 'new',
-          startDate,
-          endDate,
-          note: note || 'Tạo tự động qua Trợ lý AI Web',
-        },
-        include: {
-          customer: true,
-          product: true,
-          variant: true,
-        },
-      });
+      const newOrder = await createOrderWithUniqueCode((orderCode) =>
+        prisma.order.create({
+          data: {
+            orderCode,
+            customerId: customer!.id,
+            createdByUserId: adminUserId,
+            productId: product.id,
+            variantId: selectedVariant.id,
+            price: finalPrice,
+            status: 'new',
+            startDate,
+            endDate,
+            note: note || 'Tạo tự động qua Trợ lý AI Web',
+          },
+          include: {
+            customer: true,
+            product: true,
+            variant: true,
+          },
+        })
+      );
 
       return {
         success: true,

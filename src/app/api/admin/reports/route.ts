@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { Prisma } from '@prisma/client';
+import { NON_REVENUE_ORDER_STATUSES, revenueSqlCondition } from '@/lib/revenue';
 
 /**
  * GET /api/admin/reports
@@ -59,6 +60,13 @@ export async function GET(req: Request) {
       } : {}),
     };
 
+    // Dùng cho MỌI phép tính tiền (SUM / groupBy / biểu đồ): loại đơn hủy & hoàn tiền.
+    // `orderWhere` gốc vẫn giữ nguyên cho bảng chi tiết + tổng số bản ghi,
+    // vì admin cần nhìn thấy cả đơn hủy trong danh sách.
+    const revenueOrderWhere: Prisma.OrderWhereInput = statusFilter
+      ? orderWhere
+      : { ...orderWhere, status: { notIn: [...NON_REVENUE_ORDER_STATUSES] } };
+
     const renewalWhere: Prisma.OrderRenewalWhereInput = {
       ...(creatorId  ? { renewedByUserId: creatorId            } : {}),
       ...(supplierId ? { order: { supplierId: supplierId }      } : {}),
@@ -87,6 +95,9 @@ export async function GET(req: Request) {
     if (supplierId)     whereParts.push(Prisma.sql`supplier_id = ${supplierId}`);
     if (startFilterDate) whereParts.push(Prisma.sql`created_at >= ${startFilterDate}`);
     if (endFilterDate)   whereParts.push(Prisma.sql`created_at <= ${endFilterDate}`);
+    // Không tính đơn đã hủy / đã hoàn tiền vào doanh thu.
+    // Nếu người dùng chủ động lọc theo một status cụ thể thì tôn trọng lựa chọn đó.
+    if (!statusFilter)   whereParts.push(revenueSqlCondition());
 
     const rawWhere = whereParts.length > 0
       ? Prisma.sql`WHERE ${Prisma.join(whereParts, ' AND ')}`
@@ -106,9 +117,9 @@ export async function GET(req: Request) {
           prisma.orderRenewal.aggregate({ _sum: { price: true }, where: renewalWhere }),
           prisma.order.aggregate({
             _sum: { importPrice: true },
-            where: { ...orderWhere, importPrice: { not: null } },
+            where: { ...revenueOrderWhere, importPrice: { not: null } },
           }),
-          prisma.order.count({ where: { ...orderWhere, importPrice: { not: null } } }),
+          prisma.order.count({ where: { ...revenueOrderWhere, importPrice: { not: null } } }),
           prisma.order.findMany({
             where: orderWhere,
             take: pageSize,
@@ -131,7 +142,7 @@ export async function GET(req: Request) {
           }),
           prisma.order.count({ where: orderWhere }),
           prisma.order.findMany({
-            where: { ...orderWhere, createdAt: { gte: chartStart, lte: chartEnd } },
+            where: { ...revenueOrderWhere, createdAt: { gte: chartStart, lte: chartEnd } },
             select: { createdAt: true, price: true, customPrice: true, importPrice: true },
             orderBy: { createdAt: 'asc' },
           }),
@@ -142,21 +153,21 @@ export async function GET(req: Request) {
           }),
           prisma.order.groupBy({
             by: ['productId'],
-            where: orderWhere,
+            where: revenueOrderWhere,
             _sum: { price: true, customPrice: true },
             orderBy: { _sum: { price: 'desc' } },
             take: 5,
           }),
           prisma.order.groupBy({
             by: ['createdByUserId'],
-            where: orderWhere,
+            where: revenueOrderWhere,
             _sum: { price: true, customPrice: true },
             orderBy: { _sum: { price: 'desc' } },
             take: 5,
           }),
           prisma.order.groupBy({
             by: ['customerId'],
-            where: orderWhere,
+            where: revenueOrderWhere,
             _sum: { price: true, customPrice: true },
             _count: { id: true },
             orderBy: { _sum: { price: 'desc' } },

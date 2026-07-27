@@ -48,3 +48,12 @@ next-env.d.ts
 .env.production
 prisma/.env
 .codegraph/
+# Leftover SQLite database (project uses PostgreSQL)
+prisma/dev.db
+prisma/*.db
+
+# Local test/debug artifacts
+gen-admin-token.ts
+test-security.ts
+malicious.txt
+replacements.txt

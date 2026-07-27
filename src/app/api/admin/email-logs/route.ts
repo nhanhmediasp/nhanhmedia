@@ -29,10 +29,10 @@ export async function GET(req: Request) {
     // Search query on emailTo, subject, body
     if (search) {
       whereClause.OR = [
-        { emailTo: { contains: search } },
-        { subject: { contains: search } },
-        { body: { contains: search } },
-        { customer: { name: { contains: search } } },
+        { emailTo: { contains: search, mode: 'insensitive' } },
+        { subject: { contains: search, mode: 'insensitive' } },
+        { body: { contains: search, mode: 'insensitive' } },
+        { customer: { name: { contains: search, mode: 'insensitive' } } },
       ];
     }
 

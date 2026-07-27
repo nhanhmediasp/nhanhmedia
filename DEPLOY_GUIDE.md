@@ -93,7 +93,7 @@ Sau khi deploy xong, chạy lệnh sau trên máy local để seed admin/CTV và
 # Sau đó chạy:
 npx prisma db seed
 
-# Nhớ đổi lại DATABASE_URL về sqlite sau khi seed xong!
+# Nhớ đổi lại DATABASE_URL về database local sau khi seed xong!
 ```
 
 ---

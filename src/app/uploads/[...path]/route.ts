@@ -56,10 +56,18 @@ export async function GET(
       const fileBuffer = await fs.readFile(realTargetPath);
       const contentType = getMimeType(realTargetPath);
 
+      // SVG là XML có thể chứa <script> → nếu trả về image/svg+xml cùng origin
+      // thì đó là stored XSS. Ép Content-Security-Policy sandbox + tắt sniffing.
+      const isSvg = contentType === 'image/svg+xml';
+
       return new NextResponse(fileBuffer, {
         headers: {
           'Content-Type': contentType,
           'Cache-Control': 'public, max-age=31536000, immutable',
+          'X-Content-Type-Options': 'nosniff',
+          ...(isSvg
+            ? { 'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; sandbox" }
+            : {}),
         },
       });
     } catch (err) {
