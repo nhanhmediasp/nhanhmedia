@@ -7,14 +7,11 @@ export async function GET(req: Request) {
     const userId = req.headers.get('x-user-id');
     const role = req.headers.get('x-user-role');
 
-    if (!userId || !role) {
-      return NextResponse.json({ error: 'Không xác định được người dùng.' }, { status: 401 });
+    if (!userId || role !== 'admin') {
+      return NextResponse.json({ error: 'Chỉ quản trị viên mới có quyền truy cập.' }, { status: 403 });
     }
 
-    const isAdmin = role === 'admin';
-
     const customers = await prisma.customer.findMany({
-      where: isAdmin ? {} : { createdByUserId: userId },
       select: {
         id: true,
         name: true,
@@ -117,8 +114,9 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   try {
     const userId = req.headers.get('x-user-id');
-    if (!userId) {
-      return NextResponse.json({ error: 'Chưa đăng nhập.' }, { status: 401 });
+    const role = req.headers.get('x-user-role');
+    if (!userId || role !== 'admin') {
+      return NextResponse.json({ error: 'Chỉ quản trị viên mới có quyền tạo khách hàng.' }, { status: 403 });
     }
 
     const { name, phone, facebook, zalo, email, note, source, manualRating, internalNotes } = await req.json();

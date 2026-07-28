@@ -487,7 +487,7 @@ export default function ProjectDetailPage({ params }: { params: Promise<{ id: st
     
     // Fetch customers
     try {
-      const res = await fetch('/api/admin/customers');
+      const res = await fetch('/api/customers');
       if (res.ok) {
         const data = await res.json();
         setProjectCustomers(data.customers || []);

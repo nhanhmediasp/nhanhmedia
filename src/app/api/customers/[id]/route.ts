@@ -11,8 +11,8 @@ export async function GET(
     const userId = req.headers.get('x-user-id');
     const role = req.headers.get('x-user-role');
 
-    if (!userId || !role) {
-      return NextResponse.json({ error: 'Không xác định được người dùng.' }, { status: 401 });
+    if (!userId || role !== 'admin') {
+      return NextResponse.json({ error: 'Chỉ quản trị viên mới có quyền truy cập.' }, { status: 403 });
     }
 
     const customer = await prisma.customer.findUnique({
@@ -34,11 +34,6 @@ export async function GET(
 
     if (!customer) {
       return NextResponse.json({ error: 'Khách hàng không tồn tại.' }, { status: 404 });
-    }
-
-    // Permission check: admins can view all, others can only view customers they created
-    if (role !== 'admin' && customer.createdByUserId !== userId) {
-      return NextResponse.json({ error: 'Bạn không có quyền xem khách hàng này.' }, { status: 403 });
     }
 
     const orderCount = customer.orders.length;
@@ -118,8 +113,8 @@ export async function PUT(
     const userId = req.headers.get('x-user-id');
     const role = req.headers.get('x-user-role');
 
-    if (!userId || !role) {
-      return NextResponse.json({ error: 'Không xác định được người dùng.' }, { status: 401 });
+    if (!userId || role !== 'admin') {
+      return NextResponse.json({ error: 'Chỉ quản trị viên mới có quyền chỉnh sửa.' }, { status: 403 });
     }
 
     const { name, phone, facebook, zalo, email, note, source, manualRating, internalNotes } = await req.json();
@@ -135,11 +130,6 @@ export async function PUT(
 
     if (!customer) {
       return NextResponse.json({ error: 'Khách hàng không tồn tại.' }, { status: 404 });
-    }
-
-    // Permissions check: admin can edit any, user can edit only their own
-    if (role !== 'admin' && customer.createdByUserId !== userId) {
-      return NextResponse.json({ error: 'Bạn không có quyền chỉnh sửa khách hàng này.' }, { status: 403 });
     }
 
     // Check if new phone is unique (exclude current customer)

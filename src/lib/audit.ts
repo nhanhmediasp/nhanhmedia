@@ -121,7 +121,7 @@ export async function createAuditLog(options: AuditLogOptions) {
             id: headerId,
             name: decodeHeaderValue(headerName),
             email: headerEmail || '',
-            role: headerRole || 'member'
+            role: headerRole || 'admin'
           };
         }
       }

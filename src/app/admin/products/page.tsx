@@ -212,8 +212,6 @@ export default function AdminProductsPage() {
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                           {product.variants.map((v) => {
                             const memberPrice = v.prices.find((p) => p.role === 'member')?.price || 0;
-                            const colPrice = v.prices.find((p) => p.role === 'collaborator')?.price || 0;
-                            const agencyPrice = v.prices.find((p) => p.role === 'agency')?.price || 0;
 
                             return (
                               <div key={v.id} className="bg-muted/40 border border-border p-3.5 rounded-xl space-y-2">

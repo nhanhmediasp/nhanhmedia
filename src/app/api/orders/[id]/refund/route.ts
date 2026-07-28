@@ -10,8 +10,8 @@ export async function POST(
     const userId = req.headers.get('x-user-id');
     const role = req.headers.get('x-user-role');
 
-    if (!userId || !role) {
-      return NextResponse.json({ error: 'Chưa đăng nhập.' }, { status: 401 });
+    if (!userId || role !== 'admin') {
+      return NextResponse.json({ error: 'Chỉ quản trị viên mới có quyền hoàn tiền.' }, { status: 403 });
     }
 
     // 1. Fetch order details
@@ -25,12 +25,6 @@ export async function POST(
 
     if (order.status === 'refunded') {
       return NextResponse.json({ error: 'Đơn hàng này đã được xử lý hoàn tiền / bảo hành.' }, { status: 400 });
-    }
-
-    const isAdmin = role === 'admin';
-
-    if (!isAdmin) {
-      return NextResponse.json({ error: 'Chỉ có Quản trị viên (Admin) mới có quyền thực hiện bảo hành.' }, { status: 403 });
     }
 
     // 2. Perform refund calculations

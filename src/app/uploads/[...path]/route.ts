@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { promises as fs } from 'fs';
-import { join, resolve } from 'path';
+import { isAbsolute, join, relative, resolve } from 'path';
 
 const MIME_TYPES: Record<string, string> = {
   png: 'image/png',
@@ -48,7 +48,12 @@ export async function GET(
       // File doesn't exist, will be handled by readFile catch
     }
 
-    if (!realTargetPath.startsWith(realUploadDir)) {
+    const relativeTarget = relative(realUploadDir, realTargetPath);
+    if (
+      relativeTarget === '..' ||
+      relativeTarget.startsWith(`..${process.platform === 'win32' ? '\\' : '/'}`) ||
+      isAbsolute(relativeTarget)
+    ) {
       return new NextResponse('Access Denied', { status: 403 });
     }
 

@@ -36,8 +36,8 @@ export async function POST(
     const userId = req.headers.get('x-user-id');
     const role = req.headers.get('x-user-role');
 
-    if (!userId || !role) {
-      return NextResponse.json({ error: 'Chưa đăng nhập.' }, { status: 401 });
+    if (!userId || role !== 'admin') {
+      return NextResponse.json({ error: 'Chỉ quản trị viên mới có quyền gửi nhắc nhở.' }, { status: 403 });
     }
 
     // 1. Fetch order details

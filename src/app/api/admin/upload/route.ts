@@ -26,19 +26,14 @@ function isValidImageSignature(buffer: Buffer, ext: string): boolean {
   if (ext === 'ico') {
     return hex === '00000100';
   }
-  if (ext === 'svg') {
-    // Check if it looks like XML/SVG text
-    const text = buffer.toString('utf8', 0, Math.min(buffer.length, 120)).trim().toLowerCase();
-    return text.startsWith('<svg') || text.startsWith('<?xml') || text.includes('<svg');
-  }
   return false;
 }
 
 export async function POST(req: Request) {
   try {
     const role = req.headers.get('x-user-role');
-    if (!role || role === 'guest') {
-      return NextResponse.json({ error: 'Bạn cần đăng nhập để thực hiện hành động này.' }, { status: 401 });
+    if (role !== 'admin') {
+      return NextResponse.json({ error: 'Chỉ quản trị viên mới có quyền tải tệp.' }, { status: 403 });
     }
 
     const formData = await req.formData();
@@ -56,7 +51,9 @@ export async function POST(req: Request) {
     // 2. Validate file extension
     const originalName = basename(file.name);
     const ext = originalName.split('.').pop()?.toLowerCase() || '';
-    const allowedExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'ico', 'svg'];
+    // SVG có thể chứa script và thường được Nginx phục vụ trực tiếp từ public/,
+    // bỏ qua CSP của Next.js. Chỉ cho phép định dạng ảnh raster an toàn.
+    const allowedExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'ico'];
     if (!allowedExtensions.includes(ext)) {
       return NextResponse.json({ error: 'Định dạng file không được hỗ trợ.' }, { status: 400 });
     }
@@ -99,8 +96,8 @@ export async function POST(req: Request) {
 export async function GET(req: Request) {
   try {
     const role = req.headers.get('x-user-role');
-    if (!role || role === 'guest') {
-      return NextResponse.json({ error: 'Bạn cần đăng nhập để thực hiện hành động này.' }, { status: 401 });
+    if (role !== 'admin') {
+      return NextResponse.json({ error: 'Chỉ quản trị viên mới có quyền tải tệp.' }, { status: 403 });
     }
 
     const uploadDir = join(process.cwd(), 'public', 'uploads');
@@ -142,8 +139,8 @@ export async function GET(req: Request) {
 export async function DELETE(req: Request) {
   try {
     const role = req.headers.get('x-user-role');
-    if (!role || role === 'guest') {
-      return NextResponse.json({ error: 'Bạn cần đăng nhập để thực hiện hành động này.' }, { status: 401 });
+    if (role !== 'admin') {
+      return NextResponse.json({ error: 'Chỉ quản trị viên mới có quyền xóa tệp.' }, { status: 403 });
     }
 
     const { searchParams } = new URL(req.url);
@@ -173,4 +170,3 @@ export async function DELETE(req: Request) {
     return NextResponse.json({ error: `Lỗi máy chủ khi xóa file: ${error?.message || error}` }, { status: 500 });
   }
 }
-

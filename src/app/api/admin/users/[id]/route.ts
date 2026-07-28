@@ -158,8 +158,21 @@ export async function PUT(
       updateData.status = 'active'; // Enforce active status
     }
 
-    // If new password is provided, hash and update
-    if (password && password.trim() !== '') {
+    if (
+      updateData.role === 'admin' &&
+      !user.passwordHash &&
+      (!password || !password.trim())
+    ) {
+      return NextResponse.json(
+        { error: 'Tài khoản admin bắt buộc phải có mật khẩu.' },
+        { status: 400 }
+      );
+    }
+
+    // Chỉ admin có thông tin đăng nhập; các bản ghi nhân sự khác không có mật khẩu.
+    if (updateData.role !== 'admin') {
+      updateData.passwordHash = null;
+    } else if (password && password.trim() !== '') {
       updateData.passwordHash = hashPassword(password);
     }
 

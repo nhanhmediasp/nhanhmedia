@@ -101,6 +101,12 @@ export async function POST(req: Request) {
     if (!name || !userRole) {
       return NextResponse.json({ error: 'Thiếu các thông tin bắt buộc (Tên và vai trò).' }, { status: 400 });
     }
+    if (userRole === 'admin' && (!password || !password.trim())) {
+      return NextResponse.json({ error: 'Tài khoản admin bắt buộc phải có mật khẩu.' }, { status: 400 });
+    }
+    if (userRole === 'admin' && (!email || !email.trim())) {
+      return NextResponse.json({ error: 'Tài khoản admin bắt buộc phải có email đăng nhập.' }, { status: 400 });
+    }
 
     const finalEmail = email && email.trim() !== ''
       ? email.toLowerCase().trim()
@@ -115,7 +121,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Email đã được sử dụng.' }, { status: 400 });
     }
 
-    const passwordHash = password && password.trim() !== '' ? hashPassword(password) : null;
+    const passwordHash = userRole === 'admin' ? hashPassword(password) : null;
 
     const newUser = await prisma.user.create({
       data: {

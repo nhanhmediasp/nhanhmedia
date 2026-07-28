@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
-import { calculateEndDate } from '../route';
+import { calculateEndDate } from '@/lib/datetime';
 import { createAuditLog } from '@/lib/audit';
 
 export async function GET(
@@ -12,11 +12,9 @@ export async function GET(
     const userId = req.headers.get('x-user-id');
     const role = req.headers.get('x-user-role');
 
-    if (!userId || !role) {
-      return NextResponse.json({ error: 'Không xác định được người dùng.' }, { status: 401 });
+    if (!userId || role !== 'admin') {
+      return NextResponse.json({ error: 'Chỉ quản trị viên mới có quyền truy cập.' }, { status: 403 });
     }
-
-    const isAdmin = role === 'admin';
 
     const order = await prisma.order.findUnique({
       where: { id },
@@ -52,17 +50,6 @@ export async function GET(
       return NextResponse.json({ error: 'Đơn hàng không tồn tại.' }, { status: 404 });
     }
 
-    // Permission check: users can only view their own orders
-    if (!isAdmin && order.createdByUserId !== userId) {
-      return NextResponse.json({ error: 'Bạn không có quyền xem đơn hàng này.' }, { status: 403 });
-    }
-
-    // Hide importPrice, accountInfo and auditLogs from non-admin
-    if (!isAdmin) {
-      const { importPrice, accountInfo, ...rest } = order as any;
-      return NextResponse.json({ order: rest, auditLogs: [] });
-    }
-
     const auditLogs = await prisma.auditLog.findMany({
       where: {
         entityId: id,
@@ -89,8 +76,8 @@ export async function PUT(
     const userId = req.headers.get('x-user-id');
     const role = req.headers.get('x-user-role');
 
-    if (!userId || !role) {
-      return NextResponse.json({ error: 'Không xác định được người dùng.' }, { status: 401 });
+    if (!userId || role !== 'admin') {
+      return NextResponse.json({ error: 'Chỉ quản trị viên mới có quyền chỉnh sửa.' }, { status: 403 });
     }
 
     const body = await req.json();
@@ -104,61 +91,102 @@ export async function PUT(
       return NextResponse.json({ error: 'Đơn hàng không tồn tại.' }, { status: 404 });
     }
 
-    const isAdmin = role === 'admin';
-
-    if (!isAdmin && order.createdByUserId !== userId) {
-      return NextResponse.json({ error: 'Bạn không có quyền chỉnh sửa đơn hàng này.' }, { status: 403 });
+    if (note !== undefined && note !== null && typeof note !== 'string') {
+      return NextResponse.json({ error: 'Ghi chú không hợp lệ.' }, { status: 400 });
     }
 
     const updateData: any = {
       note: note !== undefined ? (note ? note.trim() : null) : order.note,
     };
 
-    if (amountPaid !== undefined) {
-      updateData.amountPaid = amountPaid === '' || amountPaid === null ? 0 : parseFloat(amountPaid);
+    if (
+        [internalNote, accountInfo].some(
+          (value) => value !== undefined && value !== null && typeof value !== 'string'
+        )
+      ) {
+      return NextResponse.json({ error: 'Thông tin nội bộ không hợp lệ.' }, { status: 400 });
     }
 
-    if (isAdmin) {
-      updateData.internalNote = internalNote !== undefined ? (internalNote ? internalNote.trim() : null) : order.internalNote;
-      updateData.accountInfo = accountInfo !== undefined ? (accountInfo ? accountInfo.trim() : null) : order.accountInfo;
-      updateData.status = status || order.status;
+    updateData.internalNote = internalNote !== undefined ? (internalNote ? internalNote.trim() : null) : order.internalNote;
+    updateData.accountInfo = accountInfo !== undefined ? (accountInfo ? accountInfo.trim() : null) : order.accountInfo;
 
-      if (startDate) {
-        updateData.startDate = new Date(startDate);
-      }
+    if (status !== undefined) {
+        const allowedStatuses = new Set([
+          'new',
+          'processing',
+          'running',
+          'expired_soon',
+          'expired',
+          'cancelled',
+          'refunded',
+        ]);
+        if (typeof status !== 'string' || !allowedStatuses.has(status)) {
+          return NextResponse.json({ error: 'Trạng thái đơn hàng không hợp lệ.' }, { status: 400 });
+        }
+        updateData.status = status;
+    }
 
-      if (endDate) {
-        updateData.endDate = new Date(endDate);
-      } else if (startDate && !endDate) {
+    if (amountPaid !== undefined) {
+        const parsedAmountPaid =
+          amountPaid === '' || amountPaid === null ? 0 : Number(amountPaid);
+        if (!Number.isFinite(parsedAmountPaid) || parsedAmountPaid < 0) {
+          return NextResponse.json({ error: 'Số tiền đã nhận không hợp lệ.' }, { status: 400 });
+        }
+        updateData.amountPaid = parsedAmountPaid;
+    }
+
+    if (startDate) {
+        const parsedStartDate = new Date(startDate);
+        if (Number.isNaN(parsedStartDate.getTime())) {
+          return NextResponse.json({ error: 'Ngày bắt đầu không hợp lệ.' }, { status: 400 });
+        }
+        updateData.startDate = parsedStartDate;
+    }
+
+    if (endDate) {
+        const parsedEndDate = new Date(endDate);
+        if (Number.isNaN(parsedEndDate.getTime())) {
+          return NextResponse.json({ error: 'Ngày kết thúc không hợp lệ.' }, { status: 400 });
+        }
+        updateData.endDate = parsedEndDate;
+    } else if (startDate && !endDate) {
         const variant = await prisma.productVariant.findUnique({ where: { id: order.variantId } });
         if (variant) {
-          updateData.endDate = calculateEndDate(new Date(startDate), variant.durationValue, variant.durationUnit);
+          updateData.endDate = calculateEndDate(updateData.startDate, variant.durationValue, variant.durationUnit);
         }
-      }
+    }
 
-      if (customPrice !== undefined) {
-        updateData.customPrice = customPrice === '' ? null : parseFloat(customPrice);
-      }
+    if (customPrice !== undefined) {
+        const parsedCustomPrice = customPrice === '' || customPrice === null
+          ? null
+          : Number(customPrice);
+        if (
+          parsedCustomPrice !== null &&
+          (!Number.isFinite(parsedCustomPrice) || parsedCustomPrice < 0)
+        ) {
+          return NextResponse.json({ error: 'Giá bán tùy chỉnh không hợp lệ.' }, { status: 400 });
+        }
+        updateData.customPrice = parsedCustomPrice;
+    }
 
-      if (importPrice !== undefined) {
-        updateData.importPrice = importPrice === '' || importPrice === null ? null : parseFloat(importPrice);
-      }
+    if (importPrice !== undefined) {
+        const parsedImportPrice = importPrice === '' || importPrice === null
+          ? null
+          : Number(importPrice);
+        if (
+          parsedImportPrice !== null &&
+          (!Number.isFinite(parsedImportPrice) || parsedImportPrice < 0)
+        ) {
+          return NextResponse.json({ error: 'Giá nhập không hợp lệ.' }, { status: 400 });
+        }
+        updateData.importPrice = parsedImportPrice;
+    }
 
-      if (supplierId !== undefined) {
+    if (supplierId !== undefined) {
+        if (supplierId !== null && typeof supplierId !== 'string') {
+          return NextResponse.json({ error: 'Nhà cung cấp không hợp lệ.' }, { status: 400 });
+        }
         updateData.supplierId = supplierId === '' || supplierId === null ? null : supplierId;
-      }
-    } else {
-      // Non-admin: can only cancel (if new/processing) or update note
-      if (status === 'cancelled') {
-        if (order.status === 'new' || order.status === 'processing') {
-          updateData.status = 'cancelled';
-        } else {
-          return NextResponse.json(
-            { error: 'Không thể hủy đơn hàng khi dịch vụ đang hoạt động hoặc đã hết hạn.' },
-            { status: 400 }
-          );
-        }
-      }
     }
 
     const updatedOrder = await prisma.order.update({
@@ -227,15 +255,6 @@ export async function PUT(
       request: req,
       status: 'success'
     });
-
-    // Hide importPrice from non-admin
-    if (!isAdmin) {
-      const { importPrice: _, ...rest } = updatedOrder as any;
-      return NextResponse.json({
-        message: 'Cập nhật đơn hàng thành công!',
-        order: rest,
-      });
-    }
 
     return NextResponse.json({
       message: 'Cập nhật đơn hàng thành công!',

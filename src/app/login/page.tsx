@@ -16,7 +16,7 @@ export default function LoginPage() {
 
   React.useEffect(() => {
     if (user) {
-      router.push(user.role === 'admin' ? '/admin/dashboard' : '/dashboard');
+      router.replace('/admin/dashboard');
     }
   }, [user, router]);
 
@@ -37,7 +37,7 @@ export default function LoginPage() {
       if (res.ok) {
         showToast(data.message || 'Đăng nhập thành công!', 'success');
         login(data.user);
-        router.push(data.user.role === 'admin' ? '/admin/dashboard' : '/dashboard');
+        router.replace('/admin/dashboard');
       } else {
         showToast(data.error || 'Đăng nhập thất bại.', 'error');
       }
@@ -53,7 +53,7 @@ export default function LoginPage() {
   const featureList = [
     { icon: <BarChart3 className="w-5 h-5" />, title: 'Báo cáo thời gian thực', desc: 'Theo dõi doanh thu & đơn hàng ngay lập tức' },
     { icon: <Users className="w-5 h-5" />,     title: 'Quản lý khách hàng',     desc: 'Thông tin & lịch sử đơn hàng tập trung' },
-    { icon: <Shield className="w-5 h-5" />,    title: 'Bảo mật đa lớp',         desc: 'Phân quyền theo vai trò, JWT bảo vệ' },
+    { icon: <Shield className="w-5 h-5" />,    title: 'Khu vực quản trị riêng', desc: 'Chỉ tài khoản quản trị viên được truy cập' },
   ];
 
   if (user) {

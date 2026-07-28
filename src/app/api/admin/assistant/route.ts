@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { createOrderWithUniqueCode } from '@/lib/order-code';
+import { calculateEndDate } from '@/lib/datetime';
 
 async function getAdminUserId(): Promise<string> {
   const adminUser = await prisma.user.findFirst({
@@ -10,18 +11,6 @@ async function getAdminUserId(): Promise<string> {
   if (adminUser) return adminUser.id;
   const anyUser = await prisma.user.findFirst({ select: { id: true } });
   return anyUser ? anyUser.id : 'system';
-}
-
-function calculateEndDate(startDate: Date, durationValue: number, durationUnit: string): Date {
-  const end = new Date(startDate);
-  if (durationUnit === 'day') {
-    end.setDate(end.getDate() + durationValue);
-  } else if (durationUnit === 'year') {
-    end.setFullYear(end.getFullYear() + durationValue);
-  } else {
-    end.setMonth(end.getMonth() + durationValue);
-  }
-  return end;
 }
 
 // 1. Tool execution logic (Manipulating Database)

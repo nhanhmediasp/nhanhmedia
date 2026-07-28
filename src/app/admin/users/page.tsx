@@ -84,21 +84,19 @@ export default function AdminUsersPage() {
   const [emailTargetUser, setEmailTargetUser] = useState<UserItem | null>(null);
   const [emailSubject, setEmailSubject] = useState('');
   const [emailMessage, setEmailMessage] = useState('');
-  const [isResetPasswordMail, setIsResetPasswordMail] = useState(false);
   const [sendingEmail, setSendingEmail] = useState(false);
 
   const handleOpenEmailModal = (u: UserItem) => {
     setEmailTargetUser(u);
     setEmailSubject('Thông báo từ Ban quản trị Nhanh Media');
     setEmailMessage('');
-    setIsResetPasswordMail(false);
     setIsEmailModalOpen(true);
   };
 
   const handleSendEmail = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!emailTargetUser) return;
-    if (!isResetPasswordMail && !emailMessage.trim()) {
+    if (!emailMessage.trim()) {
       showToast('Vui lòng nhập nội dung email.', 'error');
       return;
     }
@@ -110,8 +108,7 @@ export default function AdminUsersPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           subject: emailSubject,
-          message: emailMessage,
-          isResetPassword: isResetPasswordMail
+          message: emailMessage
         })
       });
       const data = await res.json();
@@ -494,6 +491,17 @@ export default function AdminUsersPage() {
                   />
                 </div>
 
+                {userRole === 'admin' && (
+                  <Input
+                    label={editId ? 'Mật khẩu mới (để trống nếu không đổi)' : 'Mật khẩu đăng nhập *'}
+                    type="password"
+                    placeholder="Nhập mật khẩu quản trị"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required={!editId}
+                  />
+                )}
+
                 <Input
                   label="Ghi chú (Kỹ năng, mô tả...)"
                   placeholder="Ví dụ: Designer Figma, Lập trình React..."
@@ -539,49 +547,26 @@ export default function AdminUsersPage() {
             
             <form onSubmit={handleSendEmail}>
               <div className="p-6 space-y-4">
-                <div className="flex items-center gap-2 mb-2 bg-slate-50 dark:bg-zinc-800/40 p-3 rounded-xl border border-border">
-                  <input
-                    type="checkbox"
-                    id="isResetPasswordMail"
-                    checked={isResetPasswordMail}
-                    onChange={(e) => setIsResetPasswordMail(e.target.checked)}
-                    className="w-4 h-4 rounded text-primary border-border focus:ring-primary cursor-pointer"
-                  />
-                  <label htmlFor="isResetPasswordMail" className="text-xs font-bold text-slate-700 dark:text-slate-350 cursor-pointer">
-                    Gửi liên kết đặt lại mật khẩu nhanh
+                <Input
+                  label="Tiêu đề Email *"
+                  placeholder="Nhập tiêu đề email..."
+                  value={emailSubject}
+                  onChange={(e) => setEmailSubject(e.target.value)}
+                  required
+                />
+                <div className="space-y-1">
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">
+                    Nội dung Email *
                   </label>
+                  <textarea
+                    rows={6}
+                    placeholder="Nhập nội dung thư gửi..."
+                    value={emailMessage}
+                    onChange={(e) => setEmailMessage(e.target.value)}
+                    required
+                    className="w-full px-3.5 py-2.5 text-sm bg-input border border-border rounded-xl text-foreground focus:outline-none focus:border-primary focus:ring-2 focus:ring-ring"
+                  />
                 </div>
-
-                {!isResetPasswordMail && (
-                  <>
-                    <Input
-                      label="Tiêu đề Email *"
-                      placeholder="Nhập tiêu đề email..."
-                      value={emailSubject}
-                      onChange={(e) => setEmailSubject(e.target.value)}
-                      required
-                    />
-                    <div className="space-y-1">
-                      <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">
-                        Nội dung Email *
-                      </label>
-                      <textarea
-                        rows={6}
-                        placeholder="Nhập nội dung thư gửi..."
-                        value={emailMessage}
-                        onChange={(e) => setEmailMessage(e.target.value)}
-                        required
-                        className="w-full px-3.5 py-2.5 text-sm bg-input border border-border rounded-xl text-foreground focus:outline-none focus:border-primary focus:ring-2 focus:ring-ring"
-                      />
-                    </div>
-                  </>
-                )}
-
-                {isResetPasswordMail && (
-                  <p className="text-xs text-amber-500 leading-normal bg-amber-500/5 p-3 rounded-lg border border-amber-500/10">
-                    Hệ thống sẽ tự động sinh mã Token đặt lại mật khẩu bảo mật (hết hạn trong 15 phút) và gửi email trực tiếp cho CTV {emailTargetUser.email}.
-                  </p>
-                )}
               </div>
 
               <div className="px-6 py-4 bg-muted/50 border-t border-border flex justify-end gap-3">

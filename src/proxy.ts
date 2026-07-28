@@ -26,7 +26,7 @@ function isStaticAsset(pathname: string): boolean {
   return STATIC_FILE_EXTENSIONS.has(lastSegment.substring(dotIndex + 1).toLowerCase());
 }
 
-export async function middleware(req: NextRequest) {
+export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
   // Defense-in-depth: Deny direct access to environment/git folders
@@ -55,9 +55,6 @@ export async function middleware(req: NextRequest) {
     pathname.startsWith('/_next') ||
     pathname === '/api/auth/login' ||
     pathname === '/api/auth/logout' ||
-    pathname === '/api/auth/register' ||
-    pathname === '/api/auth/forgot-password' ||
-    pathname === '/api/auth/reset-password' ||
     pathname.startsWith('/api/cron') || // Cron job has its own token protection
     pathname.startsWith('/api/public/') || // Public settings API
     pathname.startsWith('/api/webhooks/') || // Webhooks like SePay have their own API key / signature verification
@@ -77,7 +74,7 @@ export async function middleware(req: NextRequest) {
 
   // 3. User is authenticated
   if (user) {
-    // Force only Admin role
+    // The application is admin-only. Reject and clear every non-admin session.
     if (user.role !== 'admin') {
       // API phải trả JSON 403, không redirect (fetch() sẽ đi theo redirect và
       // nhận về HTML trang login → client báo lỗi parse khó hiểu).
@@ -95,30 +92,8 @@ export async function middleware(req: NextRequest) {
       return response;
     }
 
-    // If trying to access login or guest pages, redirect to admin dashboard
-    if (
-      pathname === '/login' ||
-      pathname === '/' ||
-      pathname === '/register' ||
-      pathname === '/forgot-password' ||
-      pathname === '/reset-password'
-    ) {
+    if (pathname === '/login' || pathname === '/') {
       return NextResponse.redirect(new NextUrl('/admin/dashboard', req.url));
-    }
-
-    // Protect Admin routes
-    if (pathname.startsWith('/admin') || pathname.startsWith('/api/admin')) {
-      if (user.role !== 'admin') {
-        if (pathname.startsWith('/api/')) {
-          return new NextResponse(
-            JSON.stringify({ error: 'Không có quyền truy cập.' }),
-            { status: 403, headers: { 'Content-Type': 'application/json' } }
-          );
-        }
-        const response = NextResponse.redirect(new NextUrl('/login', req.url));
-        response.cookies.delete(TOKEN_COOKIE_NAME);
-        return response;
-      }
     }
 
     // Set user headers for easy access in API routes / Server Components (verified data)
@@ -135,15 +110,6 @@ export async function middleware(req: NextRequest) {
   }
 
   // 4. User is NOT authenticated
-  // Redirect register, forgot-password, and reset-password to login (disabled)
-  if (
-    pathname === '/register' ||
-    pathname === '/forgot-password' ||
-    pathname === '/reset-password'
-  ) {
-    return NextResponse.redirect(new NextUrl('/login', req.url));
-  }
-
   // Allow login page access
   if (pathname === '/login') {
     return NextResponse.next({

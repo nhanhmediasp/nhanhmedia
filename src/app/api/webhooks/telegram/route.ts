@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { sendTelegramMessage, sendTelegramPhoto, answerCallbackQuery, getAdminChatId, esc } from '@/lib/telegram';
 import { getPaymentContent, extractOrderCodeFromContent } from '@/lib/sepay';
-import { calculateEndDate } from '@/app/api/orders/route';
+import { calculateEndDate } from '@/lib/datetime';
 import { createOrderWithUniqueCode } from '@/lib/order-code';
 
 export const runtime = 'nodejs';

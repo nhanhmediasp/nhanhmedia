@@ -3,15 +3,6 @@ import * as bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
 
-// Helper to encrypt mock SMTP passwords or key values if needed
-// For seeding we can use plain or mock values since it's just a seed
-function mockEncrypt(text: string) {
-  // Simple mock encryption for seed that our crypto library can match, 
-  // or just write a basic placeholder. We'll use a standard format:
-  // "iv:encryptedText"
-  return "d9a46a5b6c2d1e3f:mock_encrypted_smtp_password";
-}
-
 async function main() {
   console.log('Start seeding...');
 
@@ -48,7 +39,7 @@ async function main() {
     data: {
       name: 'Trần Thị Thành Viên',
       email: 'member@example.com',
-      passwordHash,
+      passwordHash: null,
       phone: '0912345678',
       role: 'member',
       status: 'active',
@@ -60,7 +51,7 @@ async function main() {
     data: {
       name: 'Lê Văn CTV',
       email: 'ctv@example.com',
-      passwordHash,
+      passwordHash: null,
       phone: '0901234567',
       role: 'collaborator',
       status: 'active',
@@ -72,7 +63,7 @@ async function main() {
     data: {
       name: 'Phạm Đại Lý',
       email: 'agency@example.com',
-      passwordHash,
+      passwordHash: null,
       phone: '0933333333',
       role: 'agency',
       status: 'active',
@@ -107,8 +98,6 @@ async function main() {
   await prisma.productVariantPrice.createMany({
     data: [
       { variantId: variantA1.id, role: 'member', price: 200000 },
-      { variantId: variantA1.id, role: 'collaborator', price: 180000 },
-      { variantId: variantA1.id, role: 'agency', price: 150000 },
     ],
   });
 
@@ -125,8 +114,6 @@ async function main() {
   await prisma.productVariantPrice.createMany({
     data: [
       { variantId: variantA3.id, role: 'member', price: 550000 },
-      { variantId: variantA3.id, role: 'collaborator', price: 500000 },
-      { variantId: variantA3.id, role: 'agency', price: 420000 },
     ],
   });
 
@@ -143,8 +130,6 @@ async function main() {
   await prisma.productVariantPrice.createMany({
     data: [
       { variantId: variantA12.id, role: 'member', price: 2000000 },
-      { variantId: variantA12.id, role: 'collaborator', price: 1800000 },
-      { variantId: variantA12.id, role: 'agency', price: 1500000 },
     ],
   });
 
@@ -172,8 +157,6 @@ async function main() {
   await prisma.productVariantPrice.createMany({
     data: [
       { variantId: variantB1.id, role: 'member', price: 5000000 },
-      { variantId: variantB1.id, role: 'collaborator', price: 4500000 },
-      { variantId: variantB1.id, role: 'agency', price: 4000000 },
     ],
   });
 
@@ -190,8 +173,6 @@ async function main() {
   await prisma.productVariantPrice.createMany({
     data: [
       { variantId: variantB3.id, role: 'member', price: 14000000 },
-      { variantId: variantB3.id, role: 'collaborator', price: 12500000 },
-      { variantId: variantB3.id, role: 'agency', price: 11000000 },
     ],
   });
 
@@ -332,7 +313,7 @@ async function main() {
       smtpHost: 'smtp.mailtrap.io',
       smtpPort: 2525,
       smtpUser: 'smtp_user_test',
-      smtpPasswordEncrypted: mockEncrypt('smtp_password_test'),
+      smtpPasswordEncrypted: 'd9a46a5b6c2d1e3f:mock_encrypted_smtp_password',
       smtpSecure: false,
       fromName: 'Nhanh Media Support',
       fromEmail: 'noreply@nhanhmedia.vn',

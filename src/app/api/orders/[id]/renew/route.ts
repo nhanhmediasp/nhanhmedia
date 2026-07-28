@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
-import { calculateEndDate } from '../../route';
+import { calculateEndDate } from '@/lib/datetime';
 import { createAuditLog } from '@/lib/audit';
 
 export async function POST(
@@ -12,14 +12,18 @@ export async function POST(
     const userId = req.headers.get('x-user-id');
     const role = req.headers.get('x-user-role');
 
-    if (!userId || !role) {
-      return NextResponse.json({ error: 'Chưa đăng nhập.' }, { status: 401 });
+    if (!userId || role !== 'admin') {
+      return NextResponse.json({ error: 'Chỉ quản trị viên mới có quyền gia hạn.' }, { status: 403 });
     }
 
     const body = await req.json();
     const { variantId, startDateOption, customPrice, amountPaid: amountPaidInput } = body;
 
-    if (!variantId || !startDateOption) {
+    if (
+      typeof variantId !== 'string' ||
+      !variantId ||
+      (startDateOption !== 'old_end_date' && startDateOption !== 'today')
+    ) {
       return NextResponse.json({ error: 'Thiếu thông tin gia hạn bắt buộc.' }, { status: 400 });
     }
 
@@ -32,32 +36,48 @@ export async function POST(
       return NextResponse.json({ error: 'Đơn hàng không tồn tại.' }, { status: 404 });
     }
 
-    const isAdmin = role === 'admin';
-
-    // Permission check: users can only renew their own orders
-    if (!isAdmin && order.createdByUserId !== userId) {
-      return NextResponse.json({ error: 'Bạn không có quyền gia hạn đơn hàng này.' }, { status: 403 });
-    }
-
     // 2. Fetch variant and calculate pricing
     const variant = await prisma.productVariant.findUnique({
       where: { id: variantId },
       include: {
+        product: {
+          select: { id: true, status: true },
+        },
         prices: {
-          where: { role: role === 'admin' ? 'member' : role },
+          where: { role: 'member' },
         },
       },
     });
 
-    if (!variant) {
+    if (
+      !variant ||
+      variant.productId !== order.productId ||
+      variant.status !== 'active' ||
+      variant.product.status !== 'active'
+    ) {
       return NextResponse.json({ error: 'Gói gia hạn không tồn tại.' }, { status: 400 });
     }
 
     const rolePriceRecord = variant.prices[0];
-    const originalPrice = rolePriceRecord ? rolePriceRecord.price : 0;
+    if (!rolePriceRecord) {
+      return NextResponse.json(
+        { error: 'Gói gia hạn chưa có giá bán mặc định.' },
+        { status: 400 }
+      );
+    }
+    const originalPrice = rolePriceRecord.price;
 
     const finalPrice = originalPrice;
-    const finalCustomPrice = isAdmin && customPrice !== undefined && customPrice !== '' ? parseFloat(customPrice) : null;
+    const finalCustomPrice =
+      customPrice !== undefined && customPrice !== ''
+        ? Number(customPrice)
+        : null;
+    if (
+      finalCustomPrice !== null &&
+      (!Number.isFinite(finalCustomPrice) || finalCustomPrice < 0)
+    ) {
+      return NextResponse.json({ error: 'Giá gia hạn không hợp lệ.' }, { status: 400 });
+    }
     const renewalRevenue = finalCustomPrice !== null ? finalCustomPrice : finalPrice;
 
     // 3. Determine start date and calculate new end date
@@ -76,20 +96,17 @@ export async function POST(
 
     const newEndDate = calculateEndDate(renewalStartDate, variant.durationValue, variant.durationUnit);
 
-    // Số tiền đã thu cho KỲ MỚI.
-    // Trước đây `amountPaid` của kỳ cũ được giữ nguyên trong khi `price` bị ghi đè
-    // bằng giá gói mới → đơn vừa gia hạn chưa thu đồng nào vẫn bị coi là đã thanh
-    // toán đủ (amountPaid >= price), khiến webhook SePay và nút "Kiểm tra thanh
-    // toán" trên Telegram đều báo nhầm là đã thu tiền.
-    // Mặc định coi như đã thu đủ (khớp với việc set status = 'running'),
-    // client có thể truyền amountPaid để ghi nhận thu một phần.
     const parsedAmountPaid =
-      amountPaidInput === undefined || amountPaidInput === null || amountPaidInput === ''
-        ? renewalRevenue
-        : Number(amountPaidInput);
+      amountPaidInput !== undefined &&
+      amountPaidInput !== null &&
+      amountPaidInput !== ''
+        ? Number(amountPaidInput)
+        : renewalRevenue;
 
-    const newAmountPaid =
-      Number.isFinite(parsedAmountPaid) && parsedAmountPaid >= 0 ? parsedAmountPaid : renewalRevenue;
+    if (!Number.isFinite(parsedAmountPaid) || parsedAmountPaid < 0) {
+      return NextResponse.json({ error: 'Số tiền đã thu không hợp lệ.' }, { status: 400 });
+    }
+    const newAmountPaid = parsedAmountPaid;
 
     // Chưa thu đủ thì không thể coi là đang chạy
     const newStatus = newAmountPaid >= renewalRevenue ? 'running' : 'processing';
@@ -111,7 +128,7 @@ export async function POST(
           orderId: id,
           oldEndDate: order.endDate,
           newEndDate: newEndDate,
-          variantId: variantId,
+          variantId: variant.id,
           price: renewalRevenue,
           renewedByUserId: userId,
         },
@@ -121,7 +138,7 @@ export async function POST(
       await tx.order.update({
         where: { id },
         data: {
-          variantId: variantId,
+          variantId: variant.id,
           endDate: newEndDate,
           status: newStatus,
           // Giá đơn được ghi đè theo gói mới, nên công nợ cũng phải tính lại

@@ -50,6 +50,54 @@ export function addDays(date: Date, days: number): Date {
   return new Date(date.getTime() + days * 86_400_000);
 }
 
+/**
+ * Cộng thời hạn dịch vụ nhưng giữ nguyên "ngày trong tháng" khi có thể.
+ *
+ * Date#setMonth mặc định làm 31/01 + 1 tháng thành 03/03. Với thời hạn dịch vụ,
+ * kết quả đúng phải là ngày cuối của tháng đích (28/29/02). Quy tắc tương tự
+ * được áp dụng cho 29/02 + 1 năm.
+ */
+export function calculateEndDate(
+  startDate: Date,
+  durationValue: number,
+  durationUnit: string
+): Date {
+  if (
+    Number.isNaN(startDate.getTime()) ||
+    !Number.isInteger(durationValue) ||
+    durationValue <= 0
+  ) {
+    throw new RangeError('Ngày bắt đầu hoặc thời hạn dịch vụ không hợp lệ.');
+  }
+
+  const endDate = new Date(startDate);
+  const originalDay = endDate.getDate();
+  const unit = durationUnit.toLowerCase();
+
+  if (unit === 'day') {
+    endDate.setDate(originalDay + durationValue);
+    return endDate;
+  }
+
+  // Đặt ngày về 1 trước khi đổi tháng/năm để tránh Date tự tràn sang tháng kế.
+  endDate.setDate(1);
+  if (unit === 'year') {
+    endDate.setFullYear(endDate.getFullYear() + durationValue);
+  } else if (unit === 'month') {
+    endDate.setMonth(endDate.getMonth() + durationValue);
+  } else {
+    throw new RangeError('Đơn vị thời hạn dịch vụ không hợp lệ.');
+  }
+
+  const lastDayOfTargetMonth = new Date(
+    endDate.getFullYear(),
+    endDate.getMonth() + 1,
+    0
+  ).getDate();
+  endDate.setDate(Math.min(originalDay, lastDayOfTargetMonth));
+  return endDate;
+}
+
 /** 00:00 giờ VN của ngày đầu tháng chứa `date`. */
 export function startOfBusinessMonth(date: Date = new Date()): Date {
   const { year, month } = getBusinessDateParts(date);

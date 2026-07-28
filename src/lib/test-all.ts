@@ -1,5 +1,5 @@
 import { hashPassword, comparePassword, signToken, verifyToken } from './auth';
-import { calculateEndDate } from '../app/api/orders/route';
+import { calculateEndDate } from './datetime';
 import { formatEmailBody } from '../app/api/orders/[id]/remind-manual/route';
 import { encrypt, decrypt } from './crypto';
 
@@ -42,7 +42,7 @@ function testAuth() {
     id: 'user-uuid-123456',
     name: 'Nguyễn Văn Test',
     email: 'test@example.com',
-    role: 'collaborator',
+    role: 'admin',
   };
 
   const token = signToken(payload);
@@ -78,6 +78,18 @@ function testPricingAndDates() {
   console.log(' - 1 Year Expiry:', end1Year.toISOString());
   if (end1Year.getFullYear() !== 2027) throw new Error('FAILED: Date calculation for 1 year!');
 
+  // Cuối tháng không được tràn sang tháng kế tiếp.
+  const endOfFebruary = calculateEndDate(new Date('2026-01-31T12:00:00.000Z'), 1, 'month');
+  if (endOfFebruary.getFullYear() !== 2026 || endOfFebruary.getMonth() !== 1 || endOfFebruary.getDate() !== 28) {
+    throw new Error('FAILED: End-of-month calculation!');
+  }
+
+  // Ngày nhuận + 1 năm phải chốt ở 28/02.
+  const leapYearEnd = calculateEndDate(new Date('2024-02-29T12:00:00.000Z'), 1, 'year');
+  if (leapYearEnd.getFullYear() !== 2025 || leapYearEnd.getMonth() !== 1 || leapYearEnd.getDate() !== 28) {
+    throw new Error('FAILED: Leap-year calculation!');
+  }
+
   console.log(' - Date Arithmetic testing PASSED');
 }
 
@@ -92,7 +104,7 @@ function testEmailTemplates() {
     orderCode: 'NM260619-9482',
     startDate: '19/06/2026',
     endDate: '19/09/2026',
-    creatorName: 'Lê CTV',
+    creatorName: 'Nguyễn Admin',
     companyName: 'Nhanh Media Co',
   });
   
@@ -103,7 +115,7 @@ function testEmailTemplates() {
     !formatted.includes('Cloud Hosting VPS') ||
     !formatted.includes('NM260619-9482') ||
     !formatted.includes('19/09/2026') ||
-    !formatted.includes('Lê CTV') ||
+    !formatted.includes('Nguyễn Admin') ||
     !formatted.includes('Nhanh Media Co')
   ) {
     throw new Error('FAILED: Email template string replacements are incorrect!');
@@ -129,9 +141,9 @@ function runAll() {
     console.log('==================================================');
     console.log('SUCCESS: ALL AUTOMATED TESTS COMPLETED SUCCESSFULLY!');
     console.log('==================================================');
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('\nTESTING SUITE FAILURE DETECTED!');
-    console.error(error.message);
+    console.error(error instanceof Error ? error.message : String(error));
     process.exit(1);
   }
 }

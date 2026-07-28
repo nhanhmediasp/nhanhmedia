@@ -3,33 +3,17 @@ import { prisma } from '@/lib/db';
 import { createAuditLog } from '@/lib/audit';
 import { notifyTelegramAdmin, esc } from '@/lib/telegram';
 import { createOrderWithUniqueCode } from '@/lib/order-code';
+import { calculateEndDate } from '@/lib/datetime';
 
-// Helper to calculate end date based on start date, value and unit
-export function calculateEndDate(startDate: Date, durationValue: number, durationUnit: string): Date {
-  const endDate = new Date(startDate);
-  switch (durationUnit.toLowerCase()) {
-    case 'day':
-      endDate.setDate(startDate.getDate() + durationValue);
-      break;
-    case 'month':
-      endDate.setMonth(startDate.getMonth() + durationValue);
-      break;
-    case 'year':
-      endDate.setFullYear(startDate.getFullYear() + durationValue);
-      break;
-    default:
-      endDate.setMonth(startDate.getMonth() + durationValue);
-  }
-  return endDate;
-}
+export { calculateEndDate };
 
 export async function GET(req: Request) {
   try {
     const userId = req.headers.get('x-user-id');
     const role = req.headers.get('x-user-role');
 
-    if (!userId || !role) {
-      return NextResponse.json({ error: 'Không xác định được người dùng.' }, { status: 401 });
+    if (!userId || role !== 'admin') {
+      return NextResponse.json({ error: 'Chỉ quản trị viên mới có quyền truy cập.' }, { status: 403 });
     }
 
     const { searchParams } = new URL(req.url);
@@ -39,13 +23,9 @@ export async function GET(req: Request) {
     const productId = searchParams.get('productId');
     const searchTerm = searchParams.get('searchTerm');
 
-    const isAdmin = role === 'admin';
-
     const whereClause: any = {};
 
-    if (!isAdmin) {
-      whereClause.createdByUserId = userId;
-    } else if (createdByUserId) {
+    if (createdByUserId) {
       whereClause.createdByUserId = createdByUserId;
     }
 
@@ -82,15 +62,6 @@ export async function GET(req: Request) {
       orderBy: { createdAt: 'desc' },
     });
 
-    // Hide importPrice and accountInfo from non-admin users
-    if (!isAdmin) {
-      const sanitized = orders.map((o) => {
-        const { importPrice, accountInfo, ...rest } = o as any;
-        return rest;
-      });
-      return NextResponse.json({ orders: sanitized });
-    }
-
     return NextResponse.json({ orders });
   } catch (error) {
     console.error('Get orders error:', error);
@@ -103,8 +74,8 @@ export async function POST(req: Request) {
     const userId = req.headers.get('x-user-id');
     const role = req.headers.get('x-user-role');
 
-    if (!userId || !role) {
-      return NextResponse.json({ error: 'Chưa đăng nhập.' }, { status: 401 });
+    if (!userId || role !== 'admin') {
+      return NextResponse.json({ error: 'Chỉ quản trị viên mới có quyền tạo đơn hàng.' }, { status: 403 });
     }
 
     const body = await req.json();
@@ -120,35 +91,80 @@ export async function POST(req: Request) {
       note,
       internalNote,
       accountInfo,
-      customPrice,   // Only admin can customize this
-      importPrice,   // Only admin can set import price
+      customPrice,
+      importPrice,
     } = body;
 
-    if (!productId || !variantId || !customerName || !startDate) {
+    if (
+      typeof productId !== 'string' ||
+      typeof variantId !== 'string' ||
+      typeof customerName !== 'string' ||
+      !customerName.trim() ||
+      (typeof startDate !== 'string' && typeof startDate !== 'number')
+    ) {
       return NextResponse.json({ error: 'Thiếu các thông tin bắt buộc.' }, { status: 400 });
     }
 
-    // 1. Fetch variant and its role price
+    const optionalTextFields = [
+      customerPhone,
+      customerFacebook,
+      customerZalo,
+      customerEmail,
+      note,
+      internalNote,
+      accountInfo,
+    ];
+    if (optionalTextFields.some((value) => value !== undefined && value !== null && typeof value !== 'string')) {
+      return NextResponse.json({ error: 'Thông tin đơn hàng không hợp lệ.' }, { status: 400 });
+    }
+
+    // Giá "member" là giá bán mặc định cũ, được giữ để tương thích dữ liệu hiện có.
     const variant = await prisma.productVariant.findUnique({
       where: { id: variantId },
       include: {
+        product: {
+          select: { id: true, status: true },
+        },
         prices: {
-          where: { role: role === 'admin' ? 'member' : role },
+          where: { role: 'member' },
         },
       },
     });
 
-    if (!variant) {
+    if (
+      !variant ||
+      variant.productId !== productId ||
+      variant.status !== 'active' ||
+      variant.product.status !== 'active'
+    ) {
       return NextResponse.json({ error: 'Gói dịch vụ không tồn tại.' }, { status: 400 });
     }
 
     const rolePriceRecord = variant.prices[0];
-    const originalPrice = rolePriceRecord ? rolePriceRecord.price : 0;
+    if (!rolePriceRecord) {
+      return NextResponse.json(
+        { error: 'Gói dịch vụ chưa có giá bán mặc định.' },
+        { status: 400 }
+      );
+    }
+    const originalPrice = rolePriceRecord.price;
 
-    const isAdmin = role === 'admin';
     const finalPrice = originalPrice;
-    const finalCustomPrice = isAdmin && customPrice !== undefined && customPrice !== '' ? parseFloat(customPrice) : null;
-    const finalImportPrice = isAdmin && importPrice !== undefined && importPrice !== '' ? parseFloat(importPrice) : null;
+    const finalCustomPrice =
+      customPrice !== undefined && customPrice !== ''
+        ? Number(customPrice)
+        : null;
+    const finalImportPrice =
+      importPrice !== undefined && importPrice !== ''
+        ? Number(importPrice)
+        : null;
+
+    if (
+      (finalCustomPrice !== null && (!Number.isFinite(finalCustomPrice) || finalCustomPrice < 0)) ||
+      (finalImportPrice !== null && (!Number.isFinite(finalImportPrice) || finalImportPrice < 0))
+    ) {
+      return NextResponse.json({ error: 'Giá tiền không hợp lệ.' }, { status: 400 });
+    }
 
     // 2. Resolve Customer
     let customer = null;
@@ -174,6 +190,9 @@ export async function POST(req: Request) {
 
     // 3. Calculate End Date
     const parsedStartDate = new Date(startDate);
+    if (Number.isNaN(parsedStartDate.getTime())) {
+      return NextResponse.json({ error: 'Ngày bắt đầu không hợp lệ.' }, { status: 400 });
+    }
     const parsedEndDate = calculateEndDate(parsedStartDate, variant.durationValue, variant.durationUnit);
 
     // 4. Create Order (tự sinh lại mã nếu trùng thay vì ném lỗi 500)
@@ -183,8 +202,8 @@ export async function POST(req: Request) {
           orderCode,
           customerId: customer!.id,
           createdByUserId: userId,
-          productId,
-          variantId,
+          productId: variant.productId,
+          variantId: variant.id,
           price: finalPrice,
           customPrice: finalCustomPrice,
           importPrice: finalImportPrice,
@@ -193,7 +212,7 @@ export async function POST(req: Request) {
           endDate: parsedEndDate,
           note: note ? note.trim() : null,
           internalNote: internalNote ? internalNote.trim() : null,
-          accountInfo: isAdmin && accountInfo ? accountInfo.trim() : null,
+          accountInfo: accountInfo ? accountInfo.trim() : null,
         },
         include: {
           customer: true,

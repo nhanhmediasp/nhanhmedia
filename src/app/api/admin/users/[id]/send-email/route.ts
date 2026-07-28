@@ -1,11 +1,8 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
-import jwt from 'jsonwebtoken';
 import nodemailer from 'nodemailer';
 import { decrypt } from '@/lib/crypto';
 import { createAuditLog } from '@/lib/audit';
-
-const JWT_SECRET = process.env.JWT_SECRET || 'nhanh_media_fallback_jwt_secret_key_2026';
 
 export async function POST(
   req: Request,
@@ -21,7 +18,7 @@ export async function POST(
     }
 
     const body = await req.json();
-    const { subject, message, isResetPassword } = body;
+    const { subject, message } = body;
 
     // 1. Fetch recipient user details
     const recipient = await prisma.user.findUnique({
@@ -45,35 +42,17 @@ export async function POST(
     }
 
     // 3. Construct email content
-    let finalSubject = subject || 'Thông báo từ Ban quản trị Nhanh Media';
-    let htmlContent = '';
-
-    if (isResetPassword) {
-      // Generate a reset token (expires in 15 minutes)
-      const token = jwt.sign(
-        { userId: recipient.id, email: recipient.email, purpose: 'reset-password' },
-        JWT_SECRET,
-        { expiresIn: '15m' }
-      );
-      
-      const origin = req.headers.get('origin') || 'http://localhost:3000';
-      const resetUrl = `${origin}/reset-password?token=${token}`;
-
-      finalSubject = 'Yêu cầu thiết lập lại mật khẩu - Admin Nhanh Media';
-      htmlContent = `<p>Xin chào <strong>${recipient.name}</strong>,</p>
-                     <p>Admin của <strong>Nhanh Media</strong> đã tạo liên kết khôi phục mật khẩu cho bạn.</p>
-                     <p>Vui lòng click vào liên kết dưới đây để thiết lập mật khẩu mới (Liên kết này có hiệu lực trong vòng <strong>15 phút</strong>):</p>
-                     <p><a href="${resetUrl}" style="display:inline-block;background:#a145ab;color:#fff;padding:10px 20px;text-decoration:none;border-radius:8px;font-weight:bold;">Đặt lại mật khẩu mới</a></p>
-                     <p>Trân trọng,<br>Admin Nhanh Media</p>`;
-    } else {
-      if (!message) {
-        return NextResponse.json({ error: 'Nội dung email không được bỏ trống.' }, { status: 400 });
-      }
-      htmlContent = `<p>Xin chào <strong>${recipient.name}</strong>,</p>
-                     <div>${message.replace(/\n/g, '<br>')}</div>
-                     <br>
-                     <p>Trân trọng,<br>Ban quản trị Nhanh Media</p>`;
+    if (!message || typeof message !== 'string') {
+      return NextResponse.json({ error: 'Nội dung email không được bỏ trống.' }, { status: 400 });
     }
+    const finalSubject =
+      typeof subject === 'string' && subject.trim()
+        ? subject.trim()
+        : 'Thông báo từ Ban quản trị Nhanh Media';
+    const htmlContent = `<p>Xin chào <strong>${recipient.name}</strong>,</p>
+                         <div>${message.replace(/\n/g, '<br>')}</div>
+                         <br>
+                         <p>Trân trọng,<br>Ban quản trị Nhanh Media</p>`;
 
     // 4. Setup nodemailer transporter
     const smtpPassword = decrypt(smtpSettings.smtpPasswordEncrypted);
@@ -102,15 +81,13 @@ export async function POST(
     const actor = actorId ? await prisma.user.findUnique({ where: { id: actorId } }) : null;
     await createAuditLog({
       actor: actor ? { id: actor.id, name: actor.name, email: actor.email, role: actor.role } : undefined,
-      action: isResetPassword ? 'SEND_ADMIN_RESET_PASSWORD' : 'SEND_ADMIN_CUSTOM_EMAIL',
-      actionLabel: isResetPassword ? 'Gửi link reset mật khẩu từ Admin' : 'Gửi email tùy chọn từ Admin',
+      action: 'SEND_ADMIN_CUSTOM_EMAIL',
+      actionLabel: 'Gửi email tùy chọn từ Admin',
       module: 'users',
       entityType: 'User',
       entityId: recipient.id,
       entityName: recipient.email,
-      description: isResetPassword
-        ? `Admin đã gửi liên kết đặt lại mật khẩu cho CTV ${recipient.name} (${recipient.email})`
-        : `Admin đã gửi email tùy chỉnh cho CTV ${recipient.name} (${recipient.email}) với tiêu đề: "${finalSubject}"`,
+      description: `Admin đã gửi email tùy chỉnh cho nhân sự ${recipient.name} (${recipient.email}) với tiêu đề: "${finalSubject}"`,
       request: req,
       status: 'success'
     });

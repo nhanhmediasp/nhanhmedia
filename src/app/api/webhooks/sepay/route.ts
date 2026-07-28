@@ -77,6 +77,10 @@ export async function POST(req: Request) {
       payload = await req.json();
     }
 
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+      return NextResponse.json({ error: 'Dữ liệu webhook không hợp lệ.' }, { status: 400 });
+    }
+
     const {
       id: sepayId,
       transferType,
@@ -87,6 +91,12 @@ export async function POST(req: Request) {
       gateway,
       transactionDate,
     } = payload;
+
+    const normalizedSepayId =
+      sepayId === null || sepayId === undefined ? '' : String(sepayId).trim();
+    if (!normalizedSepayId || normalizedSepayId.length > 191) {
+      return NextResponse.json({ error: 'Mã giao dịch SePay không hợp lệ.' }, { status: 400 });
+    }
 
     // We only process incoming money ("in")
     if (transferType !== 'in') {
@@ -101,7 +111,7 @@ export async function POST(req: Request) {
 
     // 3. Idempotency Check: prevent duplicate webhook processing
     const existingTx = await prisma.paymentTransaction.findUnique({
-      where: { sepayId: String(sepayId) },
+      where: { sepayId: normalizedSepayId },
     });
 
     if (existingTx) {
@@ -166,7 +176,7 @@ export async function POST(req: Request) {
       const [createdTx, updatedOrder] = await prisma.$transaction([
         prisma.paymentTransaction.create({
           data: {
-            sepayId: String(sepayId),
+            sepayId: normalizedSepayId,
             orderId: order.id,
             amount,
             content,
@@ -255,7 +265,7 @@ export async function POST(req: Request) {
       // Create unmatched transaction
       const createdTx = await prisma.paymentTransaction.create({
         data: {
-          sepayId: String(sepayId),
+          sepayId: normalizedSepayId,
           orderId: null,
           amount,
           content,

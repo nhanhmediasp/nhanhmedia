@@ -1,27 +1,24 @@
 import type { Metadata, Viewport } from 'next';
-import { Inter } from 'next/font/google';
+import { unstable_rethrow } from 'next/navigation';
+import { connection } from 'next/server';
 import './globals.css';
 import { AuthProvider } from '@/components/AuthContext';
 import Navigation from '@/components/Navigation';
 import { ToastContainer } from '@/components/ui';
 import { prisma } from '@/lib/db';
 
-const inter = Inter({
-  subsets: ['latin'],
-  weight: ['300', '400', '500', '600', '700', '800', '900'],
-  variable: '--font-inter',
-  display: 'swap',
-});
-
 export async function generateMetadata(): Promise<Metadata> {
   try {
+    // Metadata lấy từ PostgreSQL phải chạy theo request, không được làm bước
+    // `next build` phụ thuộc vào khả năng kết nối DB production.
+    await connection();
     const settings = await prisma.websiteSettings.findUnique({
       where: { id: 'default' },
     });
 
     return {
       title: settings?.siteName || 'Hệ thống Quản lý Dịch vụ - Nhanh Media',
-      description: settings?.siteDescription || 'Website quản lý khách hàng, cộng tác viên nội bộ, đại lý và đơn hàng dịch vụ của Nhanh Media.',
+      description: settings?.siteDescription || 'Hệ thống quản trị khách hàng, dự án và đơn hàng dịch vụ của Nhanh Media.',
       icons: {
         icon: settings?.faviconUrl || '/favicon.ico',
       },
@@ -31,10 +28,12 @@ export async function generateMetadata(): Promise<Metadata> {
       },
     };
   } catch (error) {
+    // Không nuốt tín hiệu nội bộ mà Next dùng để chuyển route sang dynamic.
+    unstable_rethrow(error);
     console.error('generateMetadata error:', error);
     return {
       title: 'Hệ thống Quản lý Dịch vụ - Nhanh Media',
-      description: 'Website quản lý khách hàng, cộng tác viên nội bộ, đại lý và đơn hàng dịch vụ của Nhanh Media.',
+      description: 'Hệ thống quản trị khách hàng, dự án và đơn hàng dịch vụ của Nhanh Media.',
       icons: {
         icon: '/favicon.ico',
       },
@@ -58,7 +57,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="vi" className={`h-full ${inter.variable}`} suppressHydrationWarning>
+    <html lang="vi" className="h-full" suppressHydrationWarning>
       <body className="min-h-full flex flex-col antialiased" suppressHydrationWarning>
         <AuthProvider>
           <Navigation>{children}</Navigation>

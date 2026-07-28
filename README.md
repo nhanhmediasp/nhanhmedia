@@ -1,14 +1,14 @@
-# Hệ thống Quản trị Khách hàng, Cộng tác viên và Đơn hàng Dịch vụ - Nhanh Media
+# Hệ thống Quản trị Nội bộ - Nhanh Media
 
-Hệ thống quản lý thông tin khách hàng, cộng tác viên nội bộ (CTV), đại lý và đơn hàng kích hoạt dịch vụ cho **Nhanh Media** (Tông màu tím chủ đạo). Được phát triển bằng **Next.js (App Router)**, **TypeScript**, **Tailwind CSS v4**, và **Prisma ORM**.
+Hệ thống admin-only để quản lý khách hàng, nhân sự, dự án và đơn hàng dịch vụ cho **Nhanh Media**. Chỉ tài khoản có vai trò `admin` được phép đăng nhập.
 
 ---
 
 ## 🚀 Công nghệ sử dụng
-- **Frontend/Backend**: Next.js + TypeScript (App Router, Route Handlers, Middlewares).
+- **Frontend/Backend**: Next.js + TypeScript (App Router, Route Handlers, Proxy).
 - **Styling**: Tailwind CSS v4 với thiết kế Premium (Glassmorphic, Gradient, Responsive đầy đủ cho Desktop/Tablet/Mobile).
 - **Icons**: Lucide React.
-- **ORM & Database**: Prisma ORM + SQLite (Mặc định chạy ngay không cần cài đặt) hoặc PostgreSQL.
+- **ORM & Database**: Prisma ORM + PostgreSQL.
 - **Security**: Custom JWT Cookie-based Session + Hóa mật khẩu bằng `bcryptjs` + Mã hóa mật khẩu SMTP bằng `AES-256-CBC`.
 - **Email**: Nodemailer gửi thư cảnh báo qua SMTP cấu hình linh hoạt trong Admin Dashboard.
 
@@ -58,7 +58,7 @@ npm install
 ```
 
 ### 4. Khởi tạo Cơ sở Dữ liệu & Tạo Dữ liệu mẫu (Seeding)
-Tự động đồng bộ cấu hình Schema và điền dữ liệu mẫu (Admin, CTV, Đại lý, sản phẩm và đơn hàng ví dụ) chỉ bằng 2 dòng lệnh:
+Tự động đồng bộ schema và tạo dữ liệu phát triển:
 ```bash
 npx prisma migrate dev --name init
 npx prisma db seed
@@ -79,25 +79,12 @@ Truy cập ứng dụng tại địa chỉ: [http://localhost:3000](http://local
 
 ---
 
-## 🔐 Tài khoản Kiểm thử (Mật khẩu mặc định: `123456`)
+## 🔐 Tài khoản quản trị
 
-Hệ thống đã có sẵn 4 tài khoản test đại diện cho 4 cấp phân quyền:
-
-1. **Quản trị viên (Admin)**
-   - **Email**: `admin@example.com`
-   - **Quyền hạn**: Toàn quyền cấu hình SMTP, mốc nhắc hạn, quản lý sản phẩm, chỉnh sửa giá thủ công, xem toàn bộ báo cáo doanh thu hệ thống và tất cả khách hàng.
-
-2. **Thành viên (Member)**
-   - **Email**: `member@example.com`
-   - **Quyền hạn**: Đăng nhập trang User, mua sản phẩm với mức **Giá Thành viên**, tự tạo và quản lý khách hàng & đơn hàng của riêng mình.
-
-3. **Cộng tác viên (CTV)**
-   - **Email**: `ctv@example.com`
-   - **Quyền hạn**: Đăng nhập trang User, mua sản phẩm với mức **Giá Cộng tác viên**, tự quản lý khách hàng của riêng mình và theo dõi doanh thu cá nhân.
-
-4. **Đại lý (Agency)**
-   - **Email**: `agency@example.com`
-   - **Quyền hạn**: Đăng nhập trang User, mua sản phẩm với mức **Giá Đại lý (Thường ưu đãi nhất)**, tự tạo đơn và theo dõi doanh thu cá nhân.
+Không ghi tài khoản hoặc mật khẩu thật vào repository. Hãy tạo tài khoản `admin`
+bằng seed dành cho môi trường phát triển hoặc trực tiếp trong PostgreSQL khi triển khai.
+Các bản ghi nhân sự với vai trò khác vẫn có thể được admin quản lý và phân công dự án,
+nhưng không có quyền đăng nhập website.
 
 ---
 
