@@ -29,6 +29,9 @@ interface OverviewStats {
   projectRevenueMonth:    number;
   expensesMonth:          number;
   profitMonth:            number;
+  revenueAllTime:         number;
+  expensesAllTime:        number;
+  profitAllTime:          number;
 }
 
 interface RecentOrder {
@@ -172,23 +175,23 @@ export default function AdminDashboardPage() {
         {stats ? (
           <>
             <StatCard
-              title="Doanh thu tháng này"
-              value={formatVND(stats.revenueMonth)}
-              description={`SP: ${formatVND(stats.productRevenueMonth || 0)} | DA: ${formatVND(stats.projectRevenueMonth || 0)}`}
+              title="Tổng doanh thu"
+              value={formatVND(stats.revenueAllTime ?? stats.revenueMonth)}
+              description={`Tháng này: ${formatVND(stats.revenueMonth)} · SP: ${formatVND(stats.productRevenueMonth || 0)} | DA: ${formatVND(stats.projectRevenueMonth || 0)}`}
               icon={<DollarSign className="w-5.5 h-5.5" />}
               iconColor="primary"
             />
             <StatCard
-              title="Chi phí tháng này"
-              value={formatVND(stats.expensesMonth || 0)}
-              description="Gồm giá nhập SP & chi phí DA"
+              title="Tổng chi phí"
+              value={formatVND(stats.expensesAllTime ?? (stats.expensesMonth || 0))}
+              description={`Tháng này: ${formatVND(stats.expensesMonth || 0)} · Gồm giá nhập SP & chi phí DA`}
               icon={<TrendingUp className="w-5.5 h-5.5" style={{ color: '#ef4444' }} />}
               iconColor="danger"
             />
             <StatCard
-              title="Lợi nhuận tháng này"
-              value={formatVND(stats.profitMonth || 0)}
-              description="Doanh thu trừ Chi phí"
+              title="Tổng lợi nhuận"
+              value={formatVND(stats.profitAllTime ?? (stats.profitMonth || 0))}
+              description={`Tháng này: ${formatVND(stats.profitMonth || 0)} · Doanh thu trừ chi phí`}
               icon={<TrendingUp className="w-5.5 h-5.5" />}
               iconColor="success"
             />

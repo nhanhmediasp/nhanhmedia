@@ -6,7 +6,6 @@ import { AuthProvider } from '@/components/AuthContext';
 import Navigation from '@/components/Navigation';
 import { ToastContainer } from '@/components/ui';
 import { prisma } from '@/lib/db';
-
 export async function generateMetadata(): Promise<Metadata> {
   try {
     // Metadata lấy từ PostgreSQL phải chạy theo request, không được làm bước

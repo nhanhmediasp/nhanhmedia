@@ -89,6 +89,9 @@ export async function GET(req: Request) {
           // ② Revenue this month
           revenueQuery(startOfMonth, endOfMonth),
           prisma.orderRenewal.aggregate({ _sum: { price: true }, where: { createdAt: { gte: startOfMonth, lte: endOfMonth } } }),
+          // Revenue accumulated since the beginning of the system.
+          revenueQuery(new Date(0), endOfToday),
+          prisma.orderRenewal.aggregate({ _sum: { price: true }, where: { createdAt: { gte: new Date(0), lte: endOfToday } } }),
           // ③ Revenue last 7 days
           revenueQuery(startOfLast7Days, endOfToday),
           prisma.orderRenewal.aggregate({ _sum: { price: true }, where: { createdAt: { gte: startOfLast7Days, lte: endOfToday } } }),
@@ -131,20 +134,26 @@ export async function GET(req: Request) {
           projectStatsQuery(startOfToday, endOfToday),
           // ② This Month
           projectStatsQuery(startOfMonth, endOfMonth),
-          // ③ Last 7 Days
+          // ③ All time
+          projectStatsQuery(new Date(0), endOfToday),
+          // ④ Last 7 Days
           projectStatsQuery(startOfLast7Days, endOfToday),
-          // ④ Prev 7 Days
+          // ⑤ Prev 7 Days
           projectStatsQuery(startOfPrev7Days, endOfPrev7Days),
-          // ⑤ 7 Days ago
+          // ⑥ 7 Days ago
           projectStatsQuery(startOf7DaysAgo, endOf7DaysAgo),
-          // ⑥ Total projects count
+          // ⑦ Total projects count
           prisma.project.count(),
-          // ⑦ Total running projects count
+          // ⑧ Total running projects count
           prisma.project.count({ where: { status: 'running' } }),
-          // ⑧ Product expenses this month
+          // ⑨ Product expenses this month
           prisma.order.aggregate({
             _sum: { importPrice: true },
             where: { createdAt: { gte: startOfMonth, lte: endOfMonth }, ...revenueOrderFilter }
+          }),
+          prisma.order.aggregate({
+            _sum: { importPrice: true },
+            where: { createdAt: { gte: new Date(0), lte: endOfToday }, ...revenueOrderFilter }
           }),
         ])
       : null;
@@ -254,6 +263,7 @@ export async function GET(req: Request) {
       const [
         todayRevRaw, todayRenewAgg,
         monthRevRaw, monthRenewAgg,
+        allTimeRevRaw, allTimeRenewAgg,
         last7RevRaw, last7RenewAgg,
         prev7RevRaw, prev7RenewAgg,
         daysAgoRevRaw, daysAgoRenewAgg,
@@ -262,14 +272,15 @@ export async function GET(req: Request) {
       ] = criticalResults;
 
       const [
-        projToday, projMonth, projLast7, projPrev7, proj7DaysAgo,
-        totalProjects, runningProjectsCount, productExpensesMonthAgg
+        projToday, projMonth, projAllTime, projLast7, projPrev7, proj7DaysAgo,
+        totalProjects, runningProjectsCount, productExpensesMonthAgg, productExpensesAllTimeAgg
       ] = projectResults as any;
 
       const toNum = (raw: { total: number }[]) => Number(raw[0]?.total ?? 0);
       
       const productRevenueToday = toNum(todayRevRaw) + (todayRenewAgg._sum.price ?? 0);
       const productRevenueMonth = toNum(monthRevRaw) + (monthRenewAgg._sum.price ?? 0);
+      const productRevenueAllTime = toNum(allTimeRevRaw) + (allTimeRenewAgg._sum.price ?? 0);
       const projectRevenueToday = projToday.budget;
       const projectRevenueMonth = projMonth.budget;
 
@@ -283,6 +294,8 @@ export async function GET(req: Request) {
       const projectExpensesMonth = projMonth.costs;
       const expensesMonth = productExpensesMonth + projectExpensesMonth;
       const profitMonth = revMonth - expensesMonth;
+      const revenueAllTime = productRevenueAllTime + projAllTime.budget;
+      const expensesAllTime = (productExpensesAllTimeAgg._sum.importPrice ?? 0) + projAllTime.costs;
 
       const calcGrowth = (cur: number, prev: number) =>
         prev === 0 ? (cur > 0 ? 100 : 0) : ((cur - prev) / prev) * 100;
@@ -304,9 +317,12 @@ export async function GET(req: Request) {
         projectRevenueMonth,
         expensesMonth,
         profitMonth,
+        revenueAllTime,
+        expensesAllTime,
+        profitAllTime: revenueAllTime - expensesAllTime,
       };
 
-      recentOrdersData = (recentOrdersRaw as typeof criticalResults[13]).map(o => ({
+      recentOrdersData = (recentOrdersRaw as typeof criticalResults[15]).map(o => ({
         createdAt:    o.createdAt,
         orderCode:    o.orderCode,
         customerName: o.customer.name,
