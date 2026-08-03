@@ -1,8 +1,8 @@
-@import url('https://fonts.googleapis.com/css2?family=Lexend:wght@100..900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800;900&display=swap');
 @import "tailwindcss";
 
 :root {
-  --font-lexend: 'Lexend', sans-serif;
+  --font-be-vietnam-pro: 'Be Vietnam Pro', sans-serif;
 
   /* ── Brand ── */
   --primary: #a145ab;
@@ -17,9 +17,9 @@
   --card-border: rgba(108, 117, 147, 0.10);
 
   /* ── Text ── */
-  --foreground: #566a7f;
+  --foreground: #334155;
   --heading: #1e293b;
-  --card-foreground: #566a7f;
+  --card-foreground: #334155;
 
   /* ── Status ── */
   --success: #22c55e;
@@ -31,12 +31,12 @@
   --border: rgba(108, 117, 147, 0.12);
   --input: #ffffff;
   --muted: #f8f9fc;
-  --muted-foreground: #a0aec0;
+  --muted-foreground: #64748b;
   --ring: rgba(161, 69, 171, 0.20);
 
   /* ── Sidebar ── */
   --sidebar-bg: #ffffff;
-  --sidebar-fg: #697a8d;
+  --sidebar-fg: #475569;
   --sidebar-border: rgba(108, 117, 147, 0.10);
   --sidebar-active: #a145ab;
 
@@ -49,7 +49,7 @@
 
 /* ──────────── Tailwind theme bridge ──────────── */
 @theme inline {
-  --font-sans: var(--font-lexend), system-ui, sans-serif;
+  --font-sans: var(--font-be-vietnam-pro), system-ui, sans-serif;
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-heading: var(--heading);
@@ -88,11 +88,35 @@ html {
 body {
   background-color: var(--background);
   color: var(--foreground);
-  font-family: var(--font-lexend), system-ui, sans-serif;
+  font-family: var(--font-be-vietnam-pro), system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   font-size: 14px;
   line-height: 1.6;
+}
+
+/* Keep secondary copy readable against the light dashboard surfaces. */
+.text-muted-foreground {
+  color: #64748b !important;
+}
+
+.text-slate-400 {
+  color: #64748b !important;
+}
+
+.text-slate-500 {
+  color: #475569 !important;
+}
+
+/* Some legacy components still pass these muted colors through inline styles. */
+[style*="#a1acb8"],
+[style*="#a0aec0"] {
+  color: #64748b !important;
+}
+
+[style*="#697a8d"],
+[style*="#566a7f"] {
+  color: #475569 !important;
 }
 
 /* ──────────── Utility Shadows ──────────── */

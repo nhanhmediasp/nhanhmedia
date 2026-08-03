@@ -21,11 +21,11 @@ export const Button = forwardRef(
 
     const variantStyles: Record<string, React.CSSProperties> = {
       primary:   { background: 'linear-gradient(135deg,#c060c8 0%,#a145ab 100%)', color: '#fff', boxShadow: '0 4px 14px rgba(161,69,171,0.35)' },
-      secondary: { background: 'rgba(108,117,147,0.08)', color: '#566a7f', border: '1px solid rgba(108,117,147,0.12)' },
-      outline:   { background: 'transparent', color: '#566a7f', border: '1px solid rgba(108,117,147,0.18)' },
+      secondary: { background: 'rgba(108,117,147,0.08)', color: '#334155', border: '1px solid rgba(108,117,147,0.12)' },
+      outline:   { background: 'transparent', color: '#334155', border: '1px solid rgba(108,117,147,0.18)' },
       danger:    { background: 'linear-gradient(135deg,#f87171 0%,#ef4444 100%)', color: '#fff', boxShadow: '0 4px 14px rgba(239,68,68,0.30)' },
       success:   { background: 'linear-gradient(135deg,#4ade80 0%,#22c55e 100%)', color: '#fff', boxShadow: '0 4px 14px rgba(34,197,94,0.28)' },
-      ghost:     { background: 'transparent', color: '#566a7f' },
+      ghost:     { background: 'transparent', color: '#334155' },
     };
 
     const sizes: Record<string, string> = {
@@ -72,13 +72,13 @@ export const Input = forwardRef(
     return (
       <div className="w-full">
         {label && (
-          <label className="block text-xs font-bold uppercase tracking-wider mb-1.5" style={{ color: '#697a8d' }}>
+          <label className="block text-xs font-bold uppercase tracking-wider mb-1.5" style={{ color: '#475569' }}>
             {label}
           </label>
         )}
         <div className="relative flex items-center">
           {leftIcon && (
-            <span className="absolute left-3 z-10 flex items-center pointer-events-none" style={{ color: '#a1acb8' }}>
+            <span className="absolute left-3 z-10 flex items-center pointer-events-none" style={{ color: '#64748b' }}>
               {leftIcon}
             </span>
           )}
@@ -88,7 +88,7 @@ export const Input = forwardRef(
             style={{
               background: '#fff',
               border: error ? '1.5px solid #ef4444' : '1.5px solid rgba(108,117,147,0.18)',
-              color: '#1e293b',
+              color: '#0f172a',
               boxShadow: '0 1px 3px rgba(108,117,147,0.06)',
             }}
             onFocus={(e) => {
@@ -125,7 +125,7 @@ export const Select = forwardRef(
     return (
       <div className="w-full">
         {label && (
-          <label className="block text-xs font-bold uppercase tracking-wider mb-2" style={{ color: '#697a8d' }}>
+          <label className="block text-xs font-bold uppercase tracking-wider mb-2" style={{ color: '#475569' }}>
             {label}
           </label>
         )}
@@ -135,7 +135,7 @@ export const Select = forwardRef(
           style={{
             background: '#fff',
             border: error ? '1.5px solid #ef4444' : '1.5px solid rgba(108,117,147,0.18)',
-            color: '#1e293b',
+            color: '#0f172a',
             boxShadow: '0 1px 3px rgba(108,117,147,0.06)',
           }}
           {...props}
@@ -164,7 +164,7 @@ export const Textarea = forwardRef(
     return (
       <div className="w-full">
         {label && (
-          <label className="block text-xs font-bold uppercase tracking-wider mb-2" style={{ color: '#697a8d' }}>
+          <label className="block text-xs font-bold uppercase tracking-wider mb-2" style={{ color: '#475569' }}>
             {label}
           </label>
         )}
@@ -174,7 +174,7 @@ export const Textarea = forwardRef(
           style={{
             background: '#fff',
             border: error ? '1.5px solid #ef4444' : '1.5px solid rgba(108,117,147,0.18)',
-            color: '#1e293b',
+            color: '#0f172a',
             boxShadow: '0 1px 3px rgba(108,117,147,0.06)',
           }}
           {...props}
@@ -270,7 +270,7 @@ export const CardHeader = ({ children, className = '' }: { children: React.React
 );
 
 export const CardTitle = ({ children, className = '' }: { children: React.ReactNode; className?: string }) => (
-  <h3 className={`text-sm font-bold tracking-tight ${className}`} style={{ color: '#1e293b' }}>
+  <h3 className={`text-sm font-bold tracking-tight ${className}`} style={{ color: '#0f172a' }}>
     {children}
   </h3>
 );
@@ -306,8 +306,8 @@ export const Dialog = ({
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.06)' }}>
       <div className="w-full max-w-md rounded-2xl overflow-hidden animate-scale-in" style={{ background: '#fff', boxShadow: '0 25px 80px rgba(0,0,0,0.28), 0 0 0 1px rgba(0,0,0,0.05)' }}>
         <div className="px-6 pt-6 pb-4">
-          <h3 className="text-base font-bold mb-2" style={{ color: '#1e293b' }}>{title}</h3>
-          {description && <p className="text-sm" style={{ color: '#697a8d' }}>{description}</p>}
+          <h3 className="text-base font-bold mb-2" style={{ color: '#0f172a' }}>{title}</h3>
+          {description && <p className="text-sm" style={{ color: '#475569' }}>{description}</p>}
           {children}
         </div>
         {onConfirm && (
@@ -399,8 +399,8 @@ interface PageHeaderProps {
 export const PageHeader = ({ title, description, children }: PageHeaderProps) => (
   <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6 animate-fade-in-up">
     <div>
-      <h1 className="text-xl font-black tracking-tight" style={{ color: '#1e293b' }}>{title}</h1>
-      {description && <p className="text-sm mt-1 font-medium" style={{ color: '#697a8d' }}>{description}</p>}
+      <h1 className="text-xl font-black tracking-tight" style={{ color: '#0f172a' }}>{title}</h1>
+      {description && <p className="text-sm mt-1 font-medium" style={{ color: '#475569' }}>{description}</p>}
     </div>
     {children && (
       <div className="flex flex-wrap items-center gap-2.5 shrink-0">{children}</div>
@@ -432,7 +432,7 @@ const ICON_WRAP: Record<string, React.CSSProperties> = {
 export const StatCard = ({ title, value, description, icon, iconColor = 'primary', trend, className = '' }: StatCardProps) => (
   <Card className={`p-6 hover:-translate-y-1 transition-all duration-300 relative overflow-hidden group ${className}`}>
     <div className={`flex flex-col space-y-1.5 min-w-0 ${icon ? 'pr-8' : ''}`}>
-      <p className="text-[10px] font-extrabold uppercase tracking-widest text-slate-400 truncate" title={title}>{title}</p>
+      <p className="text-[10px] font-extrabold uppercase tracking-widest text-slate-500 truncate" title={title}>{title}</p>
       <p 
         className="text-lg sm:text-xl md:text-2xl xl:text-base 2xl:text-xl font-black leading-none text-slate-800 whitespace-nowrap truncate" 
         title={typeof value === 'string' || typeof value === 'number' ? String(value) : undefined}
@@ -454,7 +454,7 @@ export const StatCard = ({ title, value, description, icon, iconColor = 'primary
           )}
           {description && (
             <div 
-              className="text-[11px] font-medium truncate max-w-full text-slate-400" 
+              className="text-[11px] font-medium truncate max-w-full text-slate-500" 
               title={typeof description === 'string' ? description : undefined}
             >
               {description}
@@ -540,17 +540,17 @@ export const EmptyState = ({ title, description, actionLabel, onAction, icon: Ic
       style={{ background: '#f4f5fb' }}
     >
       {Icon ? (
-        <Icon className="w-7 h-7" style={{ color: '#a1acb8' }} />
+        <Icon className="w-7 h-7" style={{ color: '#64748b' }} />
       ) : (
-        <svg className="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5" style={{ color: '#a1acb8' }}>
+        <svg className="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5" style={{ color: '#64748b' }}>
           <path strokeLinecap="round" strokeLinejoin="round"
             d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5m6 4.125l2.25 2.25m0 0l2.25 2.25m-2.25-2.25l-2.25 2.25m2.25-2.25l2.25-2.25M3.75 7.5L5.621 3.75A2.25 2.25 0 017.647 2.5h8.706a2.25 2.25 0 012.026 1.25L18.25 7.5m-14.5 0h14.5"
           />
         </svg>
       )}
     </div>
-    <h3 className="text-sm font-bold mb-1.5" style={{ color: '#1e293b' }}>{title}</h3>
-    <p className="text-sm max-w-sm mb-6" style={{ color: '#a1acb8' }}>{description}</p>
+    <h3 className="text-sm font-bold mb-1.5" style={{ color: '#0f172a' }}>{title}</h3>
+    <p className="text-sm max-w-sm mb-6" style={{ color: '#64748b' }}>{description}</p>
     {action}
     {actionLabel && onAction && (
       <Button variant="primary" size="sm" onClick={onAction}>{actionLabel}</Button>

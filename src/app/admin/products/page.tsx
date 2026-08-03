@@ -166,7 +166,7 @@ export default function AdminProductsPage() {
                     )}
                   </div>
                   <div className="flex items-center gap-3 flex-wrap">
-                    <h2 className="text-lg font-bold text-foreground truncate">{product.name}</h2>
+                    <h2 className="text-lg font-bold text-black truncate">{product.name}</h2>
                       {product.status === 'active' ? (
                         <Badge variant="success">Hoạt động</Badge>
                       ) : (

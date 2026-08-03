@@ -365,7 +365,7 @@ Tôi có thể giúp bạn kiểm tra dự án, doanh thu, đơn hàng dịch v�
 
       {/* ── Nav label ── */}
       <div className="px-5 pt-5 pb-2 shrink-0">
-        <span className="text-[9.5px] font-extrabold uppercase tracking-widest" style={{ color: '#a1acb8' }}>
+        <span className="text-[9.5px] font-extrabold uppercase tracking-widest" style={{ color: '#64748b' }}>
           Menu chính
         </span>
       </div>
@@ -389,7 +389,7 @@ Tôi có thể giúp bạn kiểm tra dự án, doanh thu, đơn hàng dịch v�
                         color: '#a145ab',
                       }
                     : {
-                        color: '#697a8d',
+                        color: '#475569',
                         background: 'transparent',
                       }
                 }
@@ -406,7 +406,7 @@ Tôi có thể giúp bạn kiểm tra dự án, doanh thu, đơn hàng dịch v�
                   style={
                     isActive
                       ? { background: '#a145ab', color: '#fff', boxShadow: '0 3px 8px rgba(161,69,171,0.35)' }
-                      : { background: 'rgba(108,117,147,0.06)', color: '#a1acb8' }
+                      : { background: 'rgba(108,117,147,0.06)', color: '#64748b' }
                   }
                 >
                   <Icon className="w-4 h-4" />
@@ -436,7 +436,7 @@ Tôi có thể giúp bạn kiểm tra dự án, doanh thu, đơn hàng dịch v�
                   onClick={() => toggleGroup(item.key)}
                   className="group flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 relative w-full text-left cursor-pointer focus:outline-none"
                   style={{
-                    color: isGroupActive ? '#a145ab' : '#697a8d',
+                    color: isGroupActive ? '#a145ab' : '#475569',
                     background: 'transparent',
                   }}
                 >
@@ -444,7 +444,7 @@ Tôi có thể giúp bạn kiểm tra dự án, doanh thu, đơn hàng dịch v�
                     className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 transition-all duration-200"
                     style={{
                       background: isGroupActive ? 'rgba(161,69,171,0.08)' : 'rgba(108,117,147,0.06)',
-                      color: isGroupActive ? '#a145ab' : '#a1acb8',
+                      color: isGroupActive ? '#a145ab' : '#64748b',
                     }}
                   >
                     <Icon className="w-4 h-4" />
@@ -476,7 +476,7 @@ Tôi có thể giúp bạn kiểm tra dự án, doanh thu, đơn hàng dịch v�
                                   color: '#a145ab',
                                 }
                               : {
-                                  color: '#697a8d',
+                                  color: '#475569',
                                   background: 'transparent',
                                 }
                           }
@@ -492,7 +492,7 @@ Tôi có thể giúp bạn kiểm tra dự án, doanh thu, đơn hàng dịch v�
                             style={
                               isSubActive
                                 ? { background: 'rgba(161,69,171,0.08)', color: '#a145ab' }
-                                : { background: 'rgba(108,117,147,0.04)', color: '#a1acb8' }
+                                : { background: 'rgba(108,117,147,0.04)', color: '#64748b' }
                             }
                           >
                             <SubIcon className="w-3.5 h-3.5" />
@@ -523,7 +523,7 @@ Tôi có thể giúp bạn kiểm tra dự án, doanh thu, đơn hàng dịch v�
                       color: '#a145ab',
                     }
                   : {
-                      color: '#697a8d',
+                      color: '#475569',
                       background: 'transparent',
                     }
               }
@@ -539,7 +539,7 @@ Tôi có thể giúp bạn kiểm tra dự án, doanh thu, đơn hàng dịch v�
                 style={
                   isActive
                     ? { background: '#a145ab', color: '#fff', boxShadow: '0 3px 8px rgba(161,69,171,0.35)' }
-                    : { background: 'rgba(108,117,147,0.06)', color: '#a1acb8' }
+                    : { background: 'rgba(108,117,147,0.06)', color: '#64748b' }
                 }
               >
                 <Sparkles className="w-4 h-4" />
@@ -555,7 +555,7 @@ Tôi có thể giúp bạn kiểm tra dự án, doanh thu, đơn hàng dịch v�
               onClick={() => toggleGroup('settings')}
               className="group flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 relative w-full text-left cursor-pointer focus:outline-none"
               style={{
-                color: openGroups.settings ? '#a145ab' : '#697a8d',
+                color: openGroups.settings ? '#a145ab' : '#475569',
                 background: 'transparent',
               }}
             >
@@ -563,7 +563,7 @@ Tôi có thể giúp bạn kiểm tra dự án, doanh thu, đơn hàng dịch v�
                 className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 transition-all duration-200"
                 style={{
                   background: openGroups.settings ? 'rgba(161,69,171,0.08)' : 'rgba(108,117,147,0.06)',
-                  color: openGroups.settings ? '#a145ab' : '#a1acb8',
+                  color: openGroups.settings ? '#a145ab' : '#64748b',
                 }}
               >
                 <Settings className="w-4 h-4" />
@@ -595,7 +595,7 @@ Tôi có thể giúp bạn kiểm tra dự án, doanh thu, đơn hàng dịch v�
                               color: '#a145ab',
                             }
                           : {
-                              color: '#697a8d',
+                              color: '#475569',
                               background: 'transparent',
                             }
                       }
@@ -611,7 +611,7 @@ Tôi có thể giúp bạn kiểm tra dự án, doanh thu, đơn hàng dịch v�
                         style={
                           isActive
                             ? { background: 'rgba(161,69,171,0.08)', color: '#a145ab' }
-                            : { background: 'rgba(108,117,147,0.04)', color: '#a1acb8' }
+                            : { background: 'rgba(108,117,147,0.04)', color: '#64748b' }
                         }
                       >
                         <Icon className="w-3.5 h-3.5" />
@@ -651,7 +651,7 @@ Tôi có thể giúp bạn kiểm tra dự án, doanh thu, đơn hàng dịch v�
           )}
           <div className="min-w-0 flex-1">
             <div className="text-xs font-bold truncate" style={{ color: '#1e293b' }}>{user.name}</div>
-            <div className="text-[10px] truncate mt-0.5" style={{ color: '#a1acb8' }}>{user.email}</div>
+            <div className="text-[10px] truncate mt-0.5" style={{ color: '#64748b' }}>{user.email}</div>
           </div>
           <Badge variant="primary">Admin</Badge>
         </div>
@@ -738,7 +738,7 @@ Tôi có thể giúp bạn kiểm tra dự án, doanh thu, đơn hàng dịch v�
               className="relative p-1.5 rounded-lg transition-colors cursor-pointer"
               style={{ background: 'rgba(108,117,147,0.08)' }}
             >
-              <Bell className="w-4.5 h-4.5" style={{ color: '#697a8d' }} />
+              <Bell className="w-4.5 h-4.5" style={{ color: '#475569' }} />
               {unreadCount > 0 && (
                 <span
                   className="absolute -top-0.5 -right-0.5 min-w-[14px] h-[14px] px-0.5 rounded-full flex items-center justify-center text-[8px] font-extrabold text-white animate-pulse"
@@ -864,7 +864,7 @@ Tôi có thể giúp bạn kiểm tra dự án, doanh thu, đơn hàng dịch v�
                 className="relative w-9 h-9 rounded-xl flex items-center justify-center transition-all cursor-pointer hover:scale-105"
                 style={{ background: '#fff', border: '1px solid rgba(108,117,147,0.12)' }}
               >
-                <Bell className="w-4.5 h-4.5" style={{ color: '#697a8d' }} />
+                <Bell className="w-4.5 h-4.5" style={{ color: '#475569' }} />
                 {unreadCount > 0 && (
                   <span
                     className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full flex items-center justify-center text-[9px] font-extrabold text-white animate-pulse"
