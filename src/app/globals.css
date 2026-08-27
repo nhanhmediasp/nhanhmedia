@@ -8,6 +8,8 @@
 }
 
 .fixed.inset-0.z-50.flex.items-center.justify-center.p-4 > div:first-child {
+  width: min(92vw, 760px);
+  max-width: 760px !important;
   border: 1px solid rgba(108, 117, 147, 0.18);
   box-shadow: 0 24px 70px rgba(15, 23, 42, 0.20), 0 0 0 1px rgba(255, 255, 255, 0.8);
 }
