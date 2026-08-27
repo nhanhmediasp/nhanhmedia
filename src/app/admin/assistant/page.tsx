@@ -90,14 +90,23 @@ Hãy nhập câu hỏi bên dưới hoặc chọn các mẫu gợi ý nhanh nhé
         }),
       });
 
-      if (res.ok) {
-        const data = await res.json();
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.reply) {
         setMessages((prev) => [...prev, { role: 'assistant', content: data.reply }]);
       } else {
-        showToast('Có lỗi xảy ra khi kết nối máy chủ AI.', 'error');
+        const errorMessage = data.error || 'Máy chủ AI không trả về câu trả lời hợp lệ.';
+        setMessages((prev) => [...prev, {
+          role: 'assistant',
+          content: `Mình chưa xử lý được yêu cầu này. **Lý do:** ${errorMessage}\n\nBạn có thể thử nói lại tự nhiên hơn hoặc bổ sung tên/mã/ngày còn thiếu nhé.`,
+        }]);
+        showToast(errorMessage, 'error');
       }
     } catch (err) {
       console.error('Chat error:', err);
+      setMessages((prev) => [...prev, {
+        role: 'assistant',
+        content: 'Mình chưa kết nối được với máy chủ AI. Bạn kiểm tra mạng hoặc thử gửi lại sau ít giây nhé.',
+      }]);
       showToast('Không thể kết nối máy chủ AI.', 'error');
     } finally {
       setSending(false);

@@ -13,14 +13,33 @@ async function getAdminUserId(): Promise<string> {
   return anyUser ? anyUser.id : 'system';
 }
 
+function parseToolArguments(rawArguments: unknown): Record<string, any> {
+  if (rawArguments && typeof rawArguments === 'object') return rawArguments as Record<string, any>;
+  if (typeof rawArguments !== 'string') return {};
+
+  try {
+    const parsed = JSON.parse(rawArguments);
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    // Models occasionally wrap JSON in a code fence or add a short explanation.
+    const jsonCandidate = rawArguments.match(/\{[\s\S]*\}/)?.[0];
+    try {
+      const parsed = jsonCandidate ? JSON.parse(jsonCandidate) : {};
+      return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+    } catch {
+      return {};
+    }
+  }
+}
+
 // 1. Tool execution logic (Manipulating Database)
 async function executeTool(name: string, args: any) {
   console.log(`[AI Assistant Agent] Executing tool "${name}" with args:`, args);
   try {
     if (name === 'createOrder') {
-      const { productName, variantName, customerName, customerPhone, customerEmail, price, note } = args;
-      if (!productName) {
-        return { success: false, message: 'Thiếu tên sản phẩm cần tạo đơn.' };
+      const { productName, variantName, customerName, customerPhone, customerEmail, price, customPrice, importPrice, cost, note } = args;
+      if (!productName || !customerName) {
+        return { success: false, message: 'Cần có tên sản phẩm và tên khách hàng để tạo đơn.' };
       }
 
       const product = await prisma.product.findFirst({
@@ -42,10 +61,24 @@ async function executeTool(name: string, args: any) {
         const foundV = product.variants.find((v) =>
           v.name.toLowerCase().includes(variantName.toLowerCase())
         );
-        if (foundV) selectedVariant = foundV;
+        if (!foundV) {
+          return {
+            success: false,
+            message: `Sản phẩm "${product.name}" chưa có gói "${variantName}". Các gói hiện có: ${product.variants.map((v) => v.name).join(', ')}.`,
+          };
+        }
+        selectedVariant = foundV;
       }
 
-      const finalPrice = price !== undefined ? Number(price) : (selectedVariant.prices[0]?.price || 0);
+      const basePrice = selectedVariant.prices[0]?.price || 0;
+      const requestedSalePrice = customPrice ?? price;
+      const finalCustomPrice = requestedSalePrice !== undefined ? Number(requestedSalePrice) : null;
+      const finalImportPrice = importPrice ?? cost;
+      const parsedImportPrice = finalImportPrice !== undefined ? Number(finalImportPrice) : null;
+      if ((finalCustomPrice !== null && (!Number.isFinite(finalCustomPrice) || finalCustomPrice < 0)) ||
+        (parsedImportPrice !== null && (!Number.isFinite(parsedImportPrice) || parsedImportPrice < 0))) {
+        return { success: false, message: 'Giá bán hoặc chi phí phải là số không âm.' };
+      }
       const adminUserId = await getAdminUserId();
 
       let customer = null;
@@ -79,7 +112,9 @@ async function executeTool(name: string, args: any) {
             createdByUserId: adminUserId,
             productId: product.id,
             variantId: selectedVariant.id,
-            price: finalPrice,
+            price: basePrice,
+            customPrice: finalCustomPrice,
+            importPrice: parsedImportPrice,
             status: 'new',
             startDate,
             endDate,
@@ -95,7 +130,35 @@ async function executeTool(name: string, args: any) {
 
       return {
         success: true,
-        message: `🎉 Đã tạo thành công đơn hàng mới!\n- Mã đơn: **${newOrder.orderCode}**\n- Sản phẩm: **${product.name}** (${selectedVariant.name})\n- Khách hàng: **${customer.name}**\n- Giá tiền: **${finalPrice.toLocaleString('vi-VN')}đ**\n- Thời hạn: ${startDate.toLocaleDateString('vi-VN')} đến ${endDate.toLocaleDateString('vi-VN')}`,
+        message: `🎉 Đã tạo thành công đơn hàng mới!\n- Mã đơn: **${newOrder.orderCode}**\n- Sản phẩm: **${product.name}** (${selectedVariant.name})\n- Khách hàng: **${customer.name}**\n- Giá bán: **${(finalCustomPrice ?? basePrice).toLocaleString('vi-VN')}đ**\n- Chi phí: **${parsedImportPrice === null ? 'Chưa nhập' : parsedImportPrice.toLocaleString('vi-VN') + 'đ'}**\n- Thời hạn: ${startDate.toLocaleDateString('vi-VN')} đến ${endDate.toLocaleDateString('vi-VN')}`,
+      };
+    }
+
+    if (name === 'updateOrderFields') {
+      const { orderCode, customPrice, importPrice, cost, status, note, internalNote, accountInfo } = args;
+      if (!orderCode) return { success: false, message: 'Thiếu mã đơn hàng cần cập nhật.' };
+      const data: Record<string, string | number | null> = {};
+      if (customPrice !== undefined) data.customPrice = Number(customPrice);
+      if (importPrice !== undefined || cost !== undefined) data.importPrice = Number(importPrice ?? cost);
+      if (status !== undefined) data.status = status;
+      if (note !== undefined) data.note = note || null;
+      if (internalNote !== undefined) data.internalNote = internalNote || null;
+      if (accountInfo !== undefined) data.accountInfo = accountInfo || null;
+      if (Object.keys(data).length === 0) return { success: false, message: 'Chưa có trường nào cần cập nhật.' };
+      const allowedStatuses = ['new', 'processing', 'running', 'expired_soon', 'expired', 'cancelled'];
+      if (status !== undefined && !allowedStatuses.includes(status)) {
+        return { success: false, message: `Trạng thái "${status}" không hợp lệ. Có thể dùng: new, processing, running, expired_soon, expired, cancelled.` };
+      }
+      if (('customPrice' in data && (typeof data.customPrice !== 'number' || !Number.isFinite(data.customPrice) || data.customPrice < 0)) ||
+        ('importPrice' in data && (typeof data.importPrice !== 'number' || !Number.isFinite(data.importPrice) || data.importPrice < 0))) {
+        return { success: false, message: 'Giá bán hoặc chi phí phải là số không âm.' };
+      }
+      const order = await prisma.order.findFirst({ where: { orderCode: { contains: orderCode, mode: 'insensitive' } } });
+      if (!order) return { success: false, message: `Không tìm thấy đơn hàng "${orderCode}".` };
+      const updated = await prisma.order.update({ where: { id: order.id }, data });
+      return {
+        success: true,
+        message: `Đã cập nhật đơn **${updated.orderCode}** thành công.${updated.customPrice !== null ? ` Giá bán: ${updated.customPrice.toLocaleString('vi-VN')}đ.` : ''}${updated.importPrice !== null ? ` Chi phí: ${updated.importPrice.toLocaleString('vi-VN')}đ.` : ''}`,
       };
     }
 
@@ -464,6 +527,59 @@ async function executeTool(name: string, args: any) {
         message: `Đã truy xuất báo cáo doanh thu ${days} ngày gần đây thành công.`
       };
     }
+
+    if (name === 'getTopCustomersByRevenue') {
+      const limit = Math.min(Math.max(Number(args.limit || 5), 1), 20);
+      const days = Math.min(Math.max(Number(args.days || 30), 1), 3650);
+      const startDate = new Date();
+      startDate.setDate(startDate.getDate() - days);
+      startDate.setHours(0, 0, 0, 0);
+
+      const [orders, renewals] = await Promise.all([
+        prisma.order.findMany({
+          where: { createdAt: { gte: startDate }, status: { not: 'cancelled' } },
+          select: {
+            price: true,
+            customPrice: true,
+            customer: { select: { id: true, name: true, phone: true } },
+          },
+        }),
+        prisma.orderRenewal.findMany({
+          where: { createdAt: { gte: startDate }, order: { status: { not: 'cancelled' } } },
+          select: {
+            price: true,
+            order: { select: { customer: { select: { id: true, name: true, phone: true } } } },
+          },
+        }),
+      ]);
+
+      const totals = new Map<string, { name: string; phone: string | null; revenue: number; orders: number; renewals: number }>();
+      const addRevenue = (customer: { id: string; name: string; phone: string | null }, revenue: number, kind: 'order' | 'renewal') => {
+        const current = totals.get(customer.id) || { name: customer.name, phone: customer.phone, revenue: 0, orders: 0, renewals: 0 };
+        current.revenue += revenue;
+        current[kind === 'order' ? 'orders' : 'renewals'] += 1;
+        totals.set(customer.id, current);
+      };
+
+      orders.forEach((order) => addRevenue(order.customer, order.customPrice ?? order.price, 'order'));
+      renewals.forEach((renewal) => addRevenue(renewal.order.customer, renewal.price, 'renewal'));
+
+      const topCustomers = Array.from(totals.values())
+        .sort((a, b) => b.revenue - a.revenue)
+        .slice(0, limit)
+        .map((customer, index) => ({ rank: index + 1, ...customer }));
+
+      const lines = topCustomers.length
+        ? topCustomers.map((customer) => `${customer.rank}. **${customer.name}**${customer.phone ? ` (${customer.phone})` : ''} — **${customer.revenue.toLocaleString('vi-VN')}đ** (${customer.orders} đơn, ${customer.renewals} lần gia hạn)`).join('\n')
+        : 'Chưa có doanh thu trong khoảng thời gian này.';
+      return {
+        success: true,
+        days,
+        limit,
+        topCustomers,
+        message: `🏆 **Top ${limit} khách hàng theo doanh số trong ${days} ngày gần đây:**\n${lines}`,
+      };
+    }
   } catch (err: any) {
     console.error(`Error executing tool ${name}:`, err);
     return { success: false, message: `Lỗi hệ thống khi thực hiện thao tác: ${err.message || String(err)}` };
@@ -486,10 +602,13 @@ const geminiTools = [
           customerName: { type: 'string', description: 'Tên khách hàng' },
           customerPhone: { type: 'string', description: 'Số điện thoại khách hàng' },
           customerEmail: { type: 'string', description: 'Email khách hàng (tùy chọn)' },
-          price: { type: 'number', description: 'Tùy chỉnh giá tiền (tùy chọn, mặc định lấy giá sản phẩm)' },
+          price: { type: 'number', description: 'Giá bán tùy chỉnh (VND), đồng nghĩa customPrice' },
+          customPrice: { type: 'number', description: 'Giá bán thực tế cho khách hàng (VND)' },
+          importPrice: { type: 'number', description: 'Chi phí/giá nhập của đơn hàng (VND)' },
+          cost: { type: 'number', description: 'Cách gọi khác của chi phí/giá nhập (VND)' },
           note: { type: 'string', description: 'Ghi chú cho đơn hàng (tùy chọn)' },
         },
-        required: ['productName'],
+        required: ['productName', 'customerName'],
       },
     },
   },
@@ -502,6 +621,27 @@ const geminiTools = [
         type: 'object',
         properties: {
           orderCode: { type: 'string', description: 'Mã đơn hàng cần xóa (ví dụ: NHANH260722-1234)' },
+        },
+        required: ['orderCode'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'updateOrderFields',
+      description: 'Cập nhật một hoặc nhiều trường của đơn hàng theo mã đơn: giá bán, chi phí, trạng thái, ghi chú, ghi chú nội bộ hoặc thông tin tài khoản.',
+      parameters: {
+        type: 'object',
+        properties: {
+          orderCode: { type: 'string', description: 'Mã đơn hàng cần cập nhật' },
+          customPrice: { type: 'number', description: 'Giá bán thực tế mới (VND)' },
+          importPrice: { type: 'number', description: 'Chi phí/giá nhập mới (VND)' },
+          cost: { type: 'number', description: 'Cách gọi khác của chi phí/giá nhập (VND)' },
+          status: { type: 'string', description: 'Trạng thái mới: new, processing, running, expired_soon, expired, cancelled' },
+          note: { type: 'string', description: 'Ghi chú cho khách hàng/đơn hàng' },
+          internalNote: { type: 'string', description: 'Ghi chú nội bộ' },
+          accountInfo: { type: 'string', description: 'Thông tin tài khoản dịch vụ' },
         },
         required: ['orderCode'],
       },
@@ -656,6 +796,21 @@ const geminiTools = [
   {
     type: 'function',
     function: {
+      name: 'getTopCustomersByRevenue',
+      description: 'Xếp hạng khách hàng có doanh số cao nhất trong một khoảng thời gian. Hiểu các cách hỏi như top 5 khách hàng, khách mua nhiều tiền nhất, khách doanh thu cao nhất.',
+      parameters: {
+        type: 'object',
+        properties: {
+          limit: { type: 'number', description: 'Số lượng khách hàng cần lấy, mặc định 5, tối đa 20' },
+          days: { type: 'number', description: 'Số ngày gần đây cần thống kê, mặc định 30 ngày' },
+        },
+        required: [],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
       name: 'getRevenueReport',
       description: 'Lấy báo cáo doanh thu chi tiết (bao gồm doanh thu đơn hàng mới và gia hạn) và phân tích theo số ngày gần đây (ví dụ: 7 ngày hoặc 30 ngày gần đây).',
       parameters: {
@@ -700,7 +855,9 @@ async function callGeminiWithRetry(geminiKey: string, payload: any) {
             let parsedRes = {};
             try { parsedRes = JSON.parse(m.content); } catch { parsedRes = { result: m.content }; }
             return {
-              role: 'function',
+              // Gemini Native REST accepts functionResponse in a user turn.
+              // Sending role=function causes the second request to fail.
+              role: 'user',
               parts: [{ functionResponse: { name: m.name || 'tool', response: parsedRes } }],
             };
           }
@@ -732,11 +889,15 @@ async function callGeminiWithRetry(geminiKey: string, payload: any) {
         ];
       }
 
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 30000);
       const res = await fetch(nativeUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(nativePayload),
+        signal: controller.signal,
       });
+      clearTimeout(timeout);
 
       if (res.ok) {
         const nativeData = await res.json();
@@ -886,13 +1047,29 @@ export async function POST(req: Request) {
     const settings = await prisma.websiteSettings.findUnique({ where: { id: 'default' } });
     const geminiKey = process.env.GEMINI_API_KEY || settings?.geminiApiKey;
 
-    const { prompt, history } = await req.json();
+    const body = await req.json();
+    const prompt = typeof body?.prompt === 'string' ? body.prompt.trim() : '';
+    const history = Array.isArray(body?.history) ? body.history.slice(-12) : [];
 
     if (!prompt) {
       return NextResponse.json({ error: 'Nội dung tin nhắn không được để trống.' }, { status: 400 });
     }
 
-    const systemInstruction = `Bạn là Trợ lý của Nhanh Media 🤖. Nhiệm vụ của bạn là hỗ trợ ban quản trị phân tích dữ liệu và THỰC THI THAO TÁC tạo/cập nhật dữ liệu trực tiếp trên hệ thống thông qua các công cụ (tools) được cung cấp.
+    const systemInstruction = `Bạn là Trợ lý AI của Nhanh Media 🤖, đang hỗ trợ trực tiếp cho quản trị viên.
+
+PHONG CÁCH GIAO TIẾP:
+- Hiểu tiếng Việt tự nhiên, tiếng lóng, viết tắt và câu thiếu dấu. Ví dụ “tạo hộ đơn cho anh A”, “check doanh thu tháng này”, “đổi dự án X sang xong” đều phải được hiểu theo ngữ cảnh.
+- Trả lời thân thiện, rõ ràng, có cấu trúc; nếu người dùng nói mơ hồ thì hỏi lại đúng phần còn thiếu, không bắt họ phải viết lại cả câu.
+- Khi người dùng hỏi thông tin, hãy trả lời bằng số liệu cụ thể từ dữ liệu bên dưới. Nếu không có dữ liệu thì nói thẳng là chưa tìm thấy.
+
+QUY TẮC THỰC THI:
+- Với yêu cầu tạo/cập nhật/xóa, luôn dùng tool tương ứng. Không được nói đã làm xong nếu tool chưa chạy thành công.
+- Trước thao tác xóa hoặc thao tác có thể gây mất dữ liệu, phải xác nhận lại nếu người dùng chưa nói rõ ý định xóa.
+- Nếu thiếu tham số bắt buộc, hỏi ngắn gọn tham số đó. Không tự bịa tên, giá, ngày tháng, mã đơn hoặc tiến độ.
+- Có thể tự suy ra cách nói tương đương (ví dụ “hoàn tất”, “xong rồi” = completed; “đang làm” = processing/running), nhưng phải giữ nguyên dữ liệu người dùng cung cấp.
+- Sau khi tool chạy, tóm tắt kết quả, nêu rõ bản ghi nào đã được tác động và báo lỗi bằng ngôn ngữ dễ hiểu nếu thất bại.
+- Với câu hỏi xếp hạng/doanh số, dùng tool báo cáo phù hợp; “top 5 người/khách” mặc định là top 5 khách hàng theo tổng tiền đã bán, gồm cả đơn mới và gia hạn. “Tuần này”, “tháng này” hãy chuyển thành khoảng ngày tương ứng; nếu không nói thời gian thì dùng 30 ngày gần nhất.
+
 Dưới đây là dữ liệu thực tế trong hệ thống của chúng tôi hiện tại (dạng JSON):
 --- DỰ ÁN ĐANG CHẠY HOẶC TẠM DỪNG ---
 ${JSON.stringify(projectsContext, null, 2)}
@@ -900,20 +1077,18 @@ ${JSON.stringify(projectsContext, null, 2)}
 --- ĐƠN HÀNG ĐANG HOẠT ĐỘNG ---
 ${JSON.stringify(ordersContext, null, 2)}
 ---
-LƯU Ý QUAN TRỌNG:
-1. Khi người dùng yêu cầu thao tác (ví dụ: "Tạo dự án mới...", "Cập nhật tiến độ dự án...", "Đổi trạng thái đơn hàng..."), bạn BẮT BUỘC phải gọi công cụ (tool) tương ứng. Đừng chỉ trả lời bằng lời nói suông.
-2. Trả lời câu hỏi một cách chính xác, ngắn gọn, súc tích và bằng tiếng Việt lịch sự, chuyên nghiệp. Sử dụng định dạng Markdown đẹp mắt.`;
+Hãy ưu tiên thông tin chính xác và hữu ích hơn việc trả lời thật ngắn.`;
 
     if (geminiKey && geminiKey !== 'your_gemini_api_key_here') {
       try {
         const geminiMessages = [
           { role: 'system', content: systemInstruction },
-          ...(history
-            ? history.map((msg: any) => ({
+          ...history
+            .filter((msg: any) => msg && (msg.role === 'user' || msg.role === 'assistant') && typeof msg.content === 'string')
+            .map((msg: any) => ({
                 role: msg.role === 'assistant' ? 'assistant' : 'user',
                 content: msg.content,
-              }))
-            : []),
+              })),
           { role: 'user', content: prompt },
         ];
 
@@ -930,7 +1105,7 @@ LƯU Ý QUAN TRỌNG:
         if (message.tool_calls && message.tool_calls.length > 0) {
           const toolCall = message.tool_calls[0];
           const functionName = toolCall.function.name;
-          const functionArgs = JSON.parse(toolCall.function.arguments);
+          const functionArgs = parseToolArguments(toolCall.function.arguments);
 
           // Execute backend DB update
           const toolResult = await executeTool(functionName, functionArgs);
@@ -950,7 +1125,7 @@ LƯU Ý QUAN TRỌNG:
             temperature: 0.2,
           });
 
-          return NextResponse.json({ reply: secondData.choices[0].message.content });
+          return NextResponse.json({ reply: secondData.choices?.[0]?.message?.content || toolResult.message });
         }
 
         return NextResponse.json({ reply: message.content });

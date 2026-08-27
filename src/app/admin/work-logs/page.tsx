@@ -28,6 +28,7 @@ import {
   Clock,
   TrendingUp,
   ExternalLink,
+  Eye,
   Filter,
   RefreshCw,
   FolderGit2,
@@ -54,6 +55,13 @@ interface WorkLogItem {
   category: { id: string; name: string; color: string | null } | null;
   customer: { id: string; name: string } | null;
 }
+
+const DetailField = ({ label, value }: { label: string; value: string }) => (
+  <div>
+    <p className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 mb-1">{label}</p>
+    <p className="font-semibold text-slate-700 break-words">{value}</p>
+  </div>
+);
 
 export default function WorkLogsDashboard() {
   const [workLogs, setWorkLogs] = useState<WorkLogItem[]>([]);
@@ -82,6 +90,7 @@ export default function WorkLogsDashboard() {
 
   // Modal & Form States
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [selectedLog, setSelectedLog] = useState<WorkLogItem | null>(null);
   const [editId, setEditId] = useState<string | null>(null);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -189,6 +198,10 @@ export default function WorkLogsDashboard() {
     setIsModalOpen(true);
   };
 
+  const handleOpenDetailModal = (log: WorkLogItem) => {
+    setSelectedLog(log);
+  };
+
   const handleFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim() || !hours || !date) {
@@ -264,6 +277,16 @@ export default function WorkLogsDashboard() {
     if (!dateStr) return '';
     const d = new Date(dateStr);
     return d.toLocaleDateString('vi-VN');
+  };
+
+  const formatDateTime = (dateStr: string) => {
+    if (!dateStr) return '—';
+    const d = new Date(dateStr);
+    if (Number.isNaN(d.getTime())) return '—';
+    return d.toLocaleString('vi-VN', {
+      dateStyle: 'full',
+      timeStyle: 'short',
+    });
   };
 
   return (
@@ -401,9 +424,6 @@ export default function WorkLogsDashboard() {
                   <th className="px-6 py-4">Phân loại</th>
                   <th className="px-6 py-4">Dự án</th>
                   <th className="px-6 py-4">Thời gian</th>
-                  <th className="px-6 py-4">Đơn giá / 1h</th>
-                  <th className="px-6 py-4">Thành tiền</th>
-                  <th className="px-6 py-4">Website</th>
                   <th className="px-6 py-4">Trạng thái</th>
                   <th className="px-6 py-4 text-right">Thao tác</th>
                 </tr>
@@ -411,13 +431,13 @@ export default function WorkLogsDashboard() {
               <tbody className="divide-y divide-slate-100 text-xs">
                 {loading ? (
                   <tr>
-                    <td colSpan={9} className="py-12 text-center text-slate-400">
+                    <td colSpan={6} className="py-12 text-center text-slate-400">
                       <LoadingSkeleton variant="table" />
                     </td>
                   </tr>
                 ) : workLogs.length === 0 ? (
                   <tr>
-                    <td colSpan={9} className="py-16 text-center text-slate-400">
+                    <td colSpan={6} className="py-16 text-center text-slate-400">
                       <EmptyState
                         title="Chưa có nhật ký làm việc nào"
                         description="Không tìm thấy đầu việc nào phù hợp với bộ lọc hiện tại. Bấm nút bên dưới để kê khai công việc mới."
@@ -468,32 +488,19 @@ export default function WorkLogsDashboard() {
                         <div className="font-extrabold text-slate-800 text-sm">{log.hours} giờ</div>
                         <div className="text-[10px] text-slate-400 mt-0.5 font-medium">{formatDate(log.date)}</div>
                       </td>
-                      <td className="px-6 py-4 font-semibold text-slate-600">
-                        {log.hourlyRate > 0 ? formatCurrency(log.hourlyRate) : 'Miễn phí / lương cứng'}
-                      </td>
-                      <td className="px-6 py-4 font-black text-slate-800 text-sm">
-                        {formatCurrency(log.hours * log.hourlyRate)}
-                      </td>
-                      <td className="px-6 py-4">
-                        {log.websiteUrl ? (
-                          <a
-                            href={log.websiteUrl.startsWith('http') ? log.websiteUrl : `https://${log.websiteUrl}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-indigo-50 text-indigo-600 hover:bg-indigo-100 transition-colors"
-                            title={log.websiteUrl}
-                          >
-                            <ExternalLink className="w-3.5 h-3.5" />
-                          </a>
-                        ) : (
-                          <span className="text-slate-350">—</span>
-                        )}
-                      </td>
                       <td className="px-6 py-4">
                         <StatusBadge status={log.status} />
                       </td>
                       <td className="px-6 py-4 text-right whitespace-nowrap">
                         <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            onClick={() => handleOpenDetailModal(log)}
+                            className="p-1.5 rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-700 transition-colors cursor-pointer"
+                            title="Xem chi tiết"
+                            aria-label={`Xem chi tiết ${log.title}`}
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                          </button>
                           <button
                             onClick={() => handleOpenEditModal(log)}
                             className="p-1.5 rounded-lg text-indigo-500 hover:bg-indigo-50 hover:text-indigo-700 transition-colors cursor-pointer"
@@ -648,6 +655,81 @@ export default function WorkLogsDashboard() {
                 </Button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Detail Modal */}
+      {selectedLog && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="work-log-detail-title"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setSelectedLog(null);
+          }}
+        >
+          <div className="w-full max-w-2xl bg-white rounded-2xl shadow-xl overflow-hidden animate-scale-in">
+            <div className="px-6 py-5 border-b border-slate-100 flex items-start justify-between gap-4">
+              <div>
+                <p className="text-[10px] font-extrabold uppercase tracking-wider text-indigo-500 mb-1">Chi tiết nhật ký</p>
+                <h3 id="work-log-detail-title" className="font-extrabold text-slate-800 text-lg">{selectedLog.title}</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedLog(null)}
+                className="text-slate-400 hover:text-slate-600 font-bold text-lg focus:outline-none cursor-pointer"
+                aria-label="Đóng chi tiết"
+              >
+                ×
+              </button>
+            </div>
+            <div className="px-6 py-5 max-h-[70vh] overflow-y-auto space-y-5 text-sm">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <DetailField label="Ngày làm việc" value={formatDateTime(selectedLog.date)} />
+                <DetailField label="Số giờ" value={`${selectedLog.hours} giờ`} />
+                <DetailField label="Đơn giá / 1 giờ" value={selectedLog.hourlyRate > 0 ? formatCurrency(selectedLog.hourlyRate) : 'Miễn phí / lương cứng'} />
+                <DetailField label="Thành tiền" value={formatCurrency(selectedLog.hours * selectedLog.hourlyRate)} />
+                <DetailField label="Dự án" value={selectedLog.project?.name || 'Chưa liên kết'} />
+                <DetailField label="Phân loại" value={selectedLog.category?.name || 'Chưa phân loại'} />
+                <DetailField label="Khách hàng" value={selectedLog.customer?.name || 'Chưa liên kết'} />
+                <div>
+                  <p className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 mb-1">Trạng thái</p>
+                  <StatusBadge status={selectedLog.status} />
+                </div>
+              </div>
+              <div>
+                <p className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 mb-1">Mô tả</p>
+                <p className="whitespace-pre-wrap rounded-xl bg-slate-50 border border-slate-100 p-3 text-slate-600">
+                  {selectedLog.description || 'Không có mô tả.'}
+                </p>
+              </div>
+              {selectedLog.websiteUrl && (
+                <div>
+                  <p className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 mb-1">Website liên kết</p>
+                  <a
+                    href={selectedLog.websiteUrl.startsWith('http') ? selectedLog.websiteUrl : `https://${selectedLog.websiteUrl}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 text-indigo-600 hover:text-indigo-800 break-all"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5 shrink-0" />
+                    {selectedLog.websiteUrl}
+                  </a>
+                </div>
+              )}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4 border-t border-slate-100">
+                <DetailField label="Tạo lúc" value={formatDateTime(selectedLog.createdAt)} />
+                <DetailField label="Cập nhật lúc" value={formatDateTime(selectedLog.updatedAt)} />
+              </div>
+            </div>
+            <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-3">
+              <Button variant="outline" size="sm" onClick={() => setSelectedLog(null)}>Đóng</Button>
+              <Button variant="primary" size="sm" onClick={() => { setSelectedLog(null); handleOpenEditModal(selectedLog); }}>
+                <Edit2 className="w-3.5 h-3.5 mr-1.5" /> Sửa nhật ký
+              </Button>
+            </div>
           </div>
         </div>
       )}
