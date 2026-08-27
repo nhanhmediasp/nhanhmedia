@@ -32,7 +32,6 @@ import {
   Filter,
   RefreshCw,
   FolderGit2,
-  Tag,
   Briefcase,
   User,
 } from 'lucide-react';
@@ -421,7 +420,6 @@ export default function WorkLogsDashboard() {
               <thead>
                 <tr className="bg-slate-50 text-[10px] font-extrabold text-slate-500 uppercase border-b border-slate-200 tracking-wider">
                   <th className="px-6 py-4">Công việc & Mô tả</th>
-                  <th className="px-6 py-4">Phân loại</th>
                   <th className="px-6 py-4">Dự án</th>
                   <th className="px-6 py-4">Thời gian</th>
                   <th className="px-6 py-4">Trạng thái</th>
@@ -431,13 +429,13 @@ export default function WorkLogsDashboard() {
               <tbody className="divide-y divide-slate-100 text-xs">
                 {loading ? (
                   <tr>
-                    <td colSpan={6} className="py-12 text-center text-slate-400">
+                    <td colSpan={5} className="py-12 text-center text-slate-400">
                       <LoadingSkeleton variant="table" />
                     </td>
                   </tr>
                 ) : workLogs.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="py-16 text-center text-slate-400">
+                    <td colSpan={5} className="py-16 text-center text-slate-400">
                       <EmptyState
                         title="Chưa có nhật ký làm việc nào"
                         description="Không tìm thấy đầu việc nào phù hợp với bộ lọc hiện tại. Bấm nút bên dưới để kê khai công việc mới."
@@ -455,23 +453,6 @@ export default function WorkLogsDashboard() {
                           <div className="text-[11px] text-slate-400 mt-0.5 line-clamp-1 max-w-xs" title={log.description}>
                             {log.description}
                           </div>
-                        )}
-                      </td>
-                      <td className="px-6 py-4">
-                        {log.category ? (
-                          <span
-                            className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-lg text-[10px] font-extrabold border uppercase tracking-wider"
-                            style={{
-                              backgroundColor: `${log.category.color ? log.category.color + '10' : '#f3e8ff'}`,
-                              color: log.category.color || '#a855f7',
-                              borderColor: `${log.category.color ? log.category.color + '25' : '#e9d5ff'}`,
-                            }}
-                          >
-                            <Tag className="w-2.5 h-2.5" />
-                            {log.category.name}
-                          </span>
-                        ) : (
-                          <span className="text-slate-400 font-medium italic">Không có</span>
                         )}
                       </td>
                       <td className="px-6 py-4">
@@ -495,11 +476,12 @@ export default function WorkLogsDashboard() {
                         <div className="flex items-center justify-end gap-1.5">
                           <button
                             onClick={() => handleOpenDetailModal(log)}
-                            className="p-1.5 rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-700 transition-colors cursor-pointer"
+                            className="inline-flex items-center gap-1 px-2 py-1.5 rounded-lg text-slate-600 hover:bg-slate-100 hover:text-slate-800 transition-colors cursor-pointer font-semibold text-[11px]"
                             title="Xem chi tiết"
                             aria-label={`Xem chi tiết ${log.title}`}
                           >
                             <Eye className="w-3.5 h-3.5" />
+                            <span>Chi tiết</span>
                           </button>
                           <button
                             onClick={() => handleOpenEditModal(log)}
