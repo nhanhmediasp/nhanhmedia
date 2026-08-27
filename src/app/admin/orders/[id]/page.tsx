@@ -1668,7 +1668,7 @@ export default function AdminOrderDetailPage({ params }: { params: Promise<{ id:
       {isCaptureOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-transparent animate-fade-in">
           <div 
-            className="fixed inset-0 bg-slate-900/10 pointer-events-none" 
+            className="hidden"
             style={{ zIndex: -1 }} 
           />
           <div 

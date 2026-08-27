@@ -1,6 +1,17 @@
 @import url('https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800;900&display=swap');
 @import "tailwindcss";
 
+/* Modal overlays: keep the page visible and let the dialog stand out by itself. */
+.fixed.inset-0.z-50.flex.items-center.justify-center.p-4 {
+  background: transparent !important;
+  backdrop-filter: none !important;
+}
+
+.fixed.inset-0.z-50.flex.items-center.justify-center.p-4 > div:first-child {
+  border: 1px solid rgba(108, 117, 147, 0.18);
+  box-shadow: 0 24px 70px rgba(15, 23, 42, 0.20), 0 0 0 1px rgba(255, 255, 255, 0.8);
+}
+
 :root {
   --font-be-vietnam-pro: 'Be Vietnam Pro', sans-serif;
 
