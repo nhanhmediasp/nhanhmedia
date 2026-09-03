@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { createOrderWithUniqueCode } from '@/lib/order-code';
 import { calculateEndDate } from '@/lib/datetime';
+import { resolveCustomer } from '@/lib/customer';
 
 async function getAdminUserId(): Promise<string> {
   const adminUser = await prisma.user.findFirst({
@@ -81,12 +82,7 @@ async function executeTool(name: string, args: any) {
       }
       const adminUserId = await getAdminUserId();
 
-      let customer = null;
-      if (customerPhone && customerPhone.trim()) {
-        customer = await prisma.customer.findUnique({
-          where: { phone: customerPhone.trim() },
-        });
-      }
+      let customer = await resolveCustomer({ name: customerName, phone: customerPhone });
 
       if (!customer) {
         customer = await prisma.customer.create({

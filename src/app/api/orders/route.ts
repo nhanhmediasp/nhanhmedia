@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { createAuditLog } from '@/lib/audit';
 import { notifyTelegramAdmin, esc } from '@/lib/telegram';
+import { resolveCustomer } from '@/lib/customer';
 import { createOrderWithUniqueCode } from '@/lib/order-code';
 import { calculateEndDate } from '@/lib/datetime';
 
@@ -82,6 +83,7 @@ export async function POST(req: Request) {
     const {
       productId,
       variantId,
+      customerId,
       customerName,
       customerPhone,
       customerFacebook,
@@ -167,12 +169,7 @@ export async function POST(req: Request) {
     }
 
     // 2. Resolve Customer
-    let customer = null;
-    if (customerPhone && customerPhone.trim()) {
-      customer = await prisma.customer.findUnique({
-        where: { phone: customerPhone.trim() },
-      });
-    }
+    let customer = await resolveCustomer({ customerId, name: customerName, phone: customerPhone });
 
     if (!customer) {
       customer = await prisma.customer.create({

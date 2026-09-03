@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Button, Input, Card, CardContent, Badge, showToast, Dialog, PageHeader, RoleBadge, EmptyState, LoadingSkeleton } from '@/components/ui';
-import { Search, Plus, Edit2, Trash2, UserCheck, MessageSquare, Phone, Facebook, ArrowUpDown, ArrowUp, ArrowDown, Eye } from 'lucide-react';
+import { Search, Plus, Edit2, Trash2, UserCheck, MessageSquare, Phone, Facebook, ArrowUpDown, ArrowUp, ArrowDown, Eye, Merge } from 'lucide-react';
 
 interface Customer {
   id: string;
@@ -100,6 +100,42 @@ export default function AdminCustomersPage() {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [bulkActionLoading, setBulkActionLoading] = useState(false);
   const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
+  const [showMergeModal, setShowMergeModal] = useState(false);
+  const [mergeMasterId, setMergeMasterId] = useState<string>('');
+  const [merging, setMerging] = useState(false);
+
+  const selectedCustomers = customers.filter((customer) => selectedIds.includes(customer.id));
+
+  const openMergeModal = () => {
+    if (selectedCustomers.length < 2) return;
+    setMergeMasterId(selectedCustomers[0].id);
+    setShowMergeModal(true);
+  };
+
+  const handleMerge = async () => {
+    if (!mergeMasterId || selectedIds.length < 2) return;
+    setMerging(true);
+    try {
+      const res = await fetch('/api/customers/merge', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ masterId: mergeMasterId, sourceIds: selectedIds }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        showToast(data.error || 'Không thể gộp khách hàng.', 'error');
+        return;
+      }
+      showToast(`${data.message} Đã chuyển ${data.movedOrders || 0} đơn hàng.`, 'success');
+      setSelectedIds([]);
+      setShowMergeModal(false);
+      await fetchCustomers();
+    } catch {
+      showToast('Lỗi kết nối máy chủ.', 'error');
+    } finally {
+      setMerging(false);
+    }
+  };
 
   const handleSelectAll = (checked: boolean) => {
     if (checked) {
@@ -617,6 +653,18 @@ export default function AdminCustomersPage() {
           <div className="h-4 w-px bg-slate-700" />
 
           <div className="flex items-center gap-3">
+            {selectedIds.length >= 2 && (
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={bulkActionLoading || merging}
+                onClick={openMergeModal}
+                className="h-8 text-emerald-400 border-emerald-900/50 hover:bg-emerald-950/30 hover:text-emerald-300 font-bold text-xs"
+              >
+                <Merge className="w-3.5 h-3.5 mr-1" />
+                Gộp khách
+              </Button>
+            )}
             <Button
               variant="outline"
               size="sm"
@@ -653,6 +701,34 @@ export default function AdminCustomersPage() {
         isDanger={true}
         isLoading={bulkActionLoading}
       />
+
+      {showMergeModal && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/30">
+          <div className="bg-card border border-border w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden">
+            <div className="px-6 py-5 border-b border-border">
+              <h3 className="text-lg font-bold text-foreground">Gộp khách hàng</h3>
+              <p className="text-sm text-muted-foreground mt-1">Chọn hồ sơ chính để giữ lại. Các hồ sơ còn lại sẽ bị xoá sau khi chuyển đơn.</p>
+            </div>
+            <div className="p-6 space-y-3 max-h-[55vh] overflow-y-auto">
+              {selectedCustomers.map((customer) => (
+                <label key={customer.id} className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer ${mergeMasterId === customer.id ? 'border-primary bg-primary/5' : 'border-border'}`}>
+                  <input type="radio" name="merge-master" checked={mergeMasterId === customer.id} onChange={() => setMergeMasterId(customer.id)} />
+                  <div className="min-w-0 flex-1">
+                    <div className="font-bold text-foreground">{customer.name}</div>
+                    <div className="text-xs text-muted-foreground">{customer.phone || 'Chưa có SĐT'} · {customer.orderCount} đơn hàng</div>
+                  </div>
+                  {mergeMasterId === customer.id && <Badge variant="primary">Hồ sơ chính</Badge>}
+                </label>
+              ))}
+              <p className="text-xs text-amber-600 bg-amber-50 border border-amber-100 rounded-lg p-3">Hãy đối chiếu SĐT/email trước khi xác nhận. Thao tác này không thể hoàn tác trực tiếp.</p>
+            </div>
+            <div className="px-6 py-4 bg-muted/50 border-t border-border flex justify-end gap-3">
+              <Button variant="outline" onClick={() => setShowMergeModal(false)} disabled={merging}>Hủy</Button>
+              <Button onClick={handleMerge} disabled={!mergeMasterId || merging} className="bg-emerald-600 hover:bg-emerald-700">{merging ? 'Đang gộp...' : 'Xác nhận gộp'}</Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Add/Edit Modal Dialog */}
       {isOpen && (

@@ -181,6 +181,7 @@ function AdminOrderCreateForm() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           productId, variantId,
+          customerId: selectedCustomer?.id,
           customerName, customerPhone,
           customerFacebook, customerZalo, customerEmail,
           startDate, note, internalNote, accountInfo,

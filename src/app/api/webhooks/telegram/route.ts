@@ -4,6 +4,7 @@ import { sendTelegramMessage, sendTelegramPhoto, answerCallbackQuery, getAdminCh
 import { getPaymentContent, extractOrderCodeFromContent } from '@/lib/sepay';
 import { calculateEndDate } from '@/lib/datetime';
 import { createOrderWithUniqueCode } from '@/lib/order-code';
+import { resolveCustomer } from '@/lib/customer';
 
 export const runtime = 'nodejs';
 
@@ -235,13 +236,7 @@ async function processOrderCreation(chatId: string | number, text: string) {
 
     // 2. Resolve Admin User ID & Customer
     const adminUserId = await getAdminUserId();
-    let customer = null;
-
-    if (customerPhone && customerPhone.trim()) {
-      customer = await prisma.customer.findUnique({
-        where: { phone: customerPhone.trim() },
-      });
-    }
+    let customer = await resolveCustomer({ name: finalCustomerName, phone: customerPhone });
 
     if (!customer) {
       customer = await prisma.customer.create({
