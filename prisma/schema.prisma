@@ -8,22 +8,22 @@ generator client {
 }
 
 model User {
-  id            String   @id @default(uuid())
-  name          String
-  email         String   @unique
-  passwordHash  String?  @map("password_hash")
-  phone         String?
-  role          String   @default("member") // admin, member, collaborator, agency
-  status        String   @default("active") // active, inactive, locked
-  note          String?
-  avatarUrl     String?  @map("avatar_url")
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
+  id           String   @id @default(uuid())
+  name         String
+  email        String   @unique
+  passwordHash String?  @map("password_hash")
+  phone        String?
+  role         String   @default("member") // admin, member, collaborator, agency
+  status       String   @default("active") // active, inactive, locked
+  note         String?
+  avatarUrl    String?  @map("avatar_url")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
 
-  customers      Customer[]
-  orders         Order[]
-  renewals       OrderRenewal[]
-  notifications  Notification[]     @relation("NotificationCreator")
+  customers         Customer[]
+  orders            Order[]
+  renewals          OrderRenewal[]
+  notifications     Notification[]     @relation("NotificationCreator")
   notificationReads NotificationRead[] @relation("NotificationReadByUser")
   projects          Project[]          @relation("ProjectMembers")
 
@@ -34,23 +34,23 @@ model User {
 }
 
 model Customer {
-  id               String   @id @default(uuid())
-  name             String
-  phone            String?  @unique
-  facebook         String?
-  zalo             String?
-  email            String?
-  createdByUserId  String   @map("created_by_user_id")
-  note             String?
-  source           String?  // zalo, facebook, website, referral, other
-  manualRating     Int?     @map("manual_rating")
-  internalNotes    String?  @map("internal_notes")
-  createdAt        DateTime @default(now()) @map("created_at")
-  updatedAt        DateTime @updatedAt @map("updated_at")
+  id              String   @id @default(uuid())
+  name            String
+  phone           String?  @unique
+  facebook        String?
+  zalo            String?
+  email           String?
+  createdByUserId String   @map("created_by_user_id")
+  note            String?
+  source          String? // zalo, facebook, website, referral, other
+  manualRating    Int?     @map("manual_rating")
+  internalNotes   String?  @map("internal_notes")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
 
-  createdByUser    User     @relation(fields: [createdByUserId], references: [id], onDelete: Cascade)
-  orders           Order[]
-  emailLogs        EmailLog[]
+  createdByUser User       @relation(fields: [createdByUserId], references: [id], onDelete: Cascade)
+  orders        Order[]
+  emailLogs     EmailLog[]
 
   @@index([createdByUserId])
   @@index([createdAt])
@@ -70,8 +70,8 @@ model Product {
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
 
-  variants    ProductVariant[]
-  orders      Order[]
+  variants ProductVariant[]
+  orders   Order[]
 
   @@index([status])
   @@index([createdAt])
@@ -88,10 +88,10 @@ model ProductVariant {
   createdAt     DateTime @default(now()) @map("created_at")
   updatedAt     DateTime @updatedAt @map("updated_at")
 
-  product       Product               @relation(fields: [productId], references: [id], onDelete: Cascade)
-  prices        ProductVariantPrice[]
-  orders        Order[]
-  renewals      OrderRenewal[]
+  product  Product               @relation(fields: [productId], references: [id], onDelete: Cascade)
+  prices   ProductVariantPrice[]
+  orders   Order[]
+  renewals OrderRenewal[]
 
   @@index([productId])
   @@index([status])
@@ -100,50 +100,52 @@ model ProductVariant {
 }
 
 model ProductVariantPrice {
-  id         String   @id @default(uuid())
-  variantId  String   @map("variant_id")
-  role       String   // member, collaborator, agency
-  price      Float
-  createdAt  DateTime @default(now()) @map("created_at")
-  updatedAt  DateTime @updatedAt @map("updated_at")
+  id        String   @id @default(uuid())
+  variantId String   @map("variant_id")
+  role      String // member, collaborator, agency
+  price     Float
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
-  variant    ProductVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  variant ProductVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
 
   @@unique([variantId, role])
   @@map("product_variant_prices")
 }
 
 model Order {
-  id              String   @id @default(uuid())
-  orderCode       String   @unique @map("order_code")
-  customerId      String   @map("customer_id")
-  createdByUserId String   @map("created_by_user_id")
-  productId       String   @map("product_id")
-  variantId       String   @map("variant_id")
-  supplierId      String?  @map("supplier_id")
-  price           Float
-  customPrice     Float?   @map("custom_price")
-  importPrice     Float?   @map("import_price")
-  amountPaid      Float    @default(0) @map("amount_paid")
-  status          String   @default("new") // new, processing, running, expired_soon, expired, cancelled
-  startDate       DateTime @map("start_date")
-  endDate         DateTime @map("end_date")
-  note            String?
-  internalNote    String?  @map("internal_note")
-  accountInfo     String?  @map("account_info")
-  createdAt       DateTime @default(now()) @map("created_at")
-  updatedAt       DateTime @updatedAt @map("updated_at")
-  refundAmount    Float?   @map("refund_amount")
-  refundedAt      DateTime? @map("refunded_at")
+  id               String    @id @default(uuid())
+  orderCode        String    @unique @map("order_code")
+  customerId       String    @map("customer_id")
+  createdByUserId  String    @map("created_by_user_id")
+  productId        String    @map("product_id")
+  variantId        String    @map("variant_id")
+  supplierId       String?   @map("supplier_id")
+  price            Float
+  customPrice      Float?    @map("custom_price")
+  importPrice      Float?    @map("import_price")
+  amountPaid       Float     @default(0) @map("amount_paid")
+  status           String    @default("new") // new, processing, running, expired_soon, expired, cancelled
+  startDate        DateTime  @map("start_date")
+  endDate          DateTime  @map("end_date")
+  note             String?
+  internalNote     String?   @map("internal_note")
+  accountInfo      String?   @map("account_info")
+  telegramUpdateId String?   @unique @map("telegram_update_id")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+  refundAmount     Float?    @map("refund_amount")
+  refundedAt       DateTime? @map("refunded_at")
 
-  customer      Customer       @relation(fields: [customerId], references: [id])
-  createdByUser User           @relation(fields: [createdByUserId], references: [id])
-  product       Product        @relation(fields: [productId], references: [id])
-  variant       ProductVariant @relation(fields: [variantId], references: [id])
-  supplier      Supplier?      @relation(fields: [supplierId], references: [id], onDelete: SetNull)
-  renewals      OrderRenewal[]
-  emailLogs     EmailLog[]
+  customer            Customer             @relation(fields: [customerId], references: [id])
+  createdByUser       User                 @relation(fields: [createdByUserId], references: [id])
+  product             Product              @relation(fields: [productId], references: [id])
+  variant             ProductVariant       @relation(fields: [variantId], references: [id])
+  supplier            Supplier?            @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  renewals            OrderRenewal[]
+  emailLogs           EmailLog[]
   paymentTransactions PaymentTransaction[]
+  telegramUpdate      TelegramUpdate?      @relation(fields: [telegramUpdateId], references: [updateId], onDelete: SetNull)
 
   @@index([createdAt])
   @@index([status])
@@ -152,25 +154,47 @@ model Order {
   @@index([productId])
   @@index([supplierId])
   @@index([endDate])
-  @@index([createdAt, status])  // composite: range + status filter
+  @@index([createdAt, status]) // composite: range + status filter
   // Cron nhắc hạn quét: WHERE end_date BETWEEN ... AND status NOT IN (...)
   @@index([endDate, status])
   @@map("orders")
 }
 
-model OrderRenewal {
-  id                String   @id @default(uuid())
-  orderId           String   @map("order_id")
-  oldEndDate        DateTime @map("old_end_date")
-  newEndDate        DateTime @map("new_end_date")
-  variantId         String   @map("variant_id")
-  price             Float
-  renewedByUserId   String   @map("renewed_by_user_id")
-  createdAt         DateTime @default(now()) @map("created_at")
+/// Idempotency ledger for Telegram webhook deliveries.
+/// Telegram may redeliver an update when the webhook is slow or interrupted;
+/// updateId is the stable key that guarantees each delivery is processed once.
+model TelegramUpdate {
+  updateId    String    @id @map("update_id")
+  chatId      String?   @map("chat_id")
+  messageId   String?   @map("message_id")
+  requestHash String?   @map("request_hash")
+  kind        String
+  status      String    @default("processing") // processing, completed, failed, ignored
+  error       String?
+  createdAt   DateTime  @default(now()) @map("created_at")
+  completedAt DateTime? @map("completed_at")
 
-  order             Order          @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  variant           ProductVariant @relation(fields: [variantId], references: [id])
-  renewedByUser     User           @relation(fields: [renewedByUserId], references: [id])
+  order Order?
+
+  @@index([createdAt])
+  @@index([status])
+  @@index([requestHash, createdAt])
+  @@map("telegram_updates")
+}
+
+model OrderRenewal {
+  id              String   @id @default(uuid())
+  orderId         String   @map("order_id")
+  oldEndDate      DateTime @map("old_end_date")
+  newEndDate      DateTime @map("new_end_date")
+  variantId       String   @map("variant_id")
+  price           Float
+  renewedByUserId String   @map("renewed_by_user_id")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  order         Order          @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  variant       ProductVariant @relation(fields: [variantId], references: [id])
+  renewedByUser User           @relation(fields: [renewedByUserId], references: [id])
 
   @@index([createdAt])
   @@index([renewedByUserId])
@@ -198,7 +222,7 @@ model EmailTemplate {
   name      String   @unique
   subject   String
   body      String
-  type      String   // reminder_7_days, reminder_3_days, reminder_1_day, reminder_expired
+  type      String // reminder_7_days, reminder_3_days, reminder_1_day, reminder_expired
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
@@ -212,12 +236,12 @@ model EmailLog {
   emailTo      String   @map("email_to")
   subject      String
   body         String
-  status       String   // success, failed
+  status       String // success, failed
   sentAt       DateTime @default(now()) @map("sent_at")
   errorMessage String?  @map("error_message")
 
-  order        Order?    @relation(fields: [orderId], references: [id], onDelete: SetNull)
-  customer     Customer  @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  order    Order?   @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
 
   @@index([orderId])
   @@index([customerId])
@@ -245,8 +269,8 @@ model Notification {
   createdByUserId String   @map("created_by_user_id")
   createdAt       DateTime @default(now()) @map("created_at")
 
-  createdByUser   User               @relation("NotificationCreator", fields: [createdByUserId], references: [id], onDelete: Cascade)
-  reads           NotificationRead[]
+  createdByUser User               @relation("NotificationCreator", fields: [createdByUserId], references: [id], onDelete: Cascade)
+  reads         NotificationRead[]
 
   @@index([targetRole])
   @@index([createdAt])
@@ -261,40 +285,37 @@ model NotificationRead {
   userId         String   @map("user_id")
   readAt         DateTime @default(now()) @map("read_at")
 
-  notification   Notification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
-  user           User         @relation("NotificationReadByUser", fields: [userId], references: [id], onDelete: Cascade)
+  notification Notification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+  user         User         @relation("NotificationReadByUser", fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([notificationId, userId])
   @@index([userId])
   @@map("notification_reads")
 }
 
-
-
-
 model AuditLog {
-  id              String   @id @default(uuid())
-  actorUserId     String?  @map("actor_user_id")
-  actorName       String   @map("actor_name")
-  actorEmail      String?  @map("actor_email")
-  actorRole       String   @map("actor_role") // guest, admin, member, collaborator, agency
-  action          String
-  actionLabel     String   @map("action_label")
-  module          String   // users, customers, products, orders, settings, auth, reports
-  entityType      String?  @map("entity_type")
-  entityId        String?  @map("entity_id")
-  entityName      String?  @map("entity_name")
-  description     String
-  oldValues       String?  @map("old_values") // JSON string
-  newValues       String?  @map("new_values") // JSON string
-  changedFields   String?  @map("changed_fields") // JSON array string
-  ipAddress       String?  @map("ip_address")
-  userAgent       String?  @map("user_agent")
-  requestMethod   String?  @map("request_method")
-  requestPath     String?  @map("request_path")
-  status          String   @default("success") // success, failed
-  errorMessage    String?  @map("error_message")
-  createdAt       DateTime @default(now()) @map("created_at")
+  id            String   @id @default(uuid())
+  actorUserId   String?  @map("actor_user_id")
+  actorName     String   @map("actor_name")
+  actorEmail    String?  @map("actor_email")
+  actorRole     String   @map("actor_role") // guest, admin, member, collaborator, agency
+  action        String
+  actionLabel   String   @map("action_label")
+  module        String // users, customers, products, orders, settings, auth, reports
+  entityType    String?  @map("entity_type")
+  entityId      String?  @map("entity_id")
+  entityName    String?  @map("entity_name")
+  description   String
+  oldValues     String?  @map("old_values") // JSON string
+  newValues     String?  @map("new_values") // JSON string
+  changedFields String?  @map("changed_fields") // JSON array string
+  ipAddress     String?  @map("ip_address")
+  userAgent     String?  @map("user_agent")
+  requestMethod String?  @map("request_method")
+  requestPath   String?  @map("request_path")
+  status        String   @default("success") // success, failed
+  errorMessage  String?  @map("error_message")
+  createdAt     DateTime @default(now()) @map("created_at")
 
   @@index([createdAt])
   @@index([actorUserId])
@@ -306,6 +327,7 @@ model AuditLog {
   @@index([status])
   @@map("audit_logs")
 }
+
 model Supplier {
   id            String   @id @default(uuid())
   name          String   @unique
@@ -316,7 +338,7 @@ model Supplier {
   createdAt     DateTime @default(now()) @map("created_at")
   updatedAt     DateTime @updatedAt @map("updated_at")
 
-  orders        Order[]
+  orders Order[]
 
   @@index([createdAt])
   @@map("suppliers")
@@ -353,11 +375,11 @@ model WebsiteSettings {
 }
 
 model LoginAttempt {
-  id          String   @id @default(uuid())
-  ipAddress   String   @map("ip_address")
+  id          String    @id @default(uuid())
+  ipAddress   String    @map("ip_address")
   email       String?
-  attempts    Int      @default(1)
-  lastAttempt DateTime @default(now()) @map("last_attempt")
+  attempts    Int       @default(1)
+  lastAttempt DateTime  @default(now()) @map("last_attempt")
   lockedUntil DateTime? @map("locked_until")
 
   @@index([ipAddress])
@@ -367,30 +389,30 @@ model LoginAttempt {
 }
 
 model Project {
-  id           String        @id @default(uuid())
-  name         String
-  description  String?
-  startDate    DateTime      @map("start_date")
-  endDate      DateTime?     @map("end_date")
-  status       String        @default("running") // running, completed, paused
-  progress     Float         @default(0)
-  budget         Float         @default(0)
-  amountReceived Float         @default(0) @map("amount_received")
-  categoryId     String?       @map("category_id")
-  customerId   String?       @map("customer_id")
-  websiteUrl   String?       @map("website_url")
-  createdAt    DateTime      @default(now()) @map("created_at")
-  updatedAt    DateTime      @updatedAt @map("updated_at")
+  id             String    @id @default(uuid())
+  name           String
+  description    String?
+  startDate      DateTime  @map("start_date")
+  endDate        DateTime? @map("end_date")
+  status         String    @default("running") // running, completed, paused
+  progress       Float     @default(0)
+  budget         Float     @default(0)
+  amountReceived Float     @default(0) @map("amount_received")
+  categoryId     String?   @map("category_id")
+  customerId     String?   @map("customer_id")
+  websiteUrl     String?   @map("website_url")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
 
-  category     ProjectCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
-  customer     ProjectCustomer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
-  columns      TaskColumn[]
-  tasks        Task[]
-  websiteCosts WebsiteCost[]
-  toolCosts    ToolCost[]
+  category         ProjectCategory?         @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  customer         ProjectCustomer?         @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  columns          TaskColumn[]
+  tasks            Task[]
+  websiteCosts     WebsiteCost[]
+  toolCosts        ToolCost[]
   requirementNotes ProjectRequirementNote[]
-  workLogs     ProjectWorkLog[]
-  members      User[]          @relation("ProjectMembers")
+  workLogs         ProjectWorkLog[]
+  members          User[]                   @relation("ProjectMembers")
 
   @@index([status])
   @@index([endDate])
@@ -410,8 +432,8 @@ model TaskColumn {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  tasks     Task[]
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  tasks   Task[]
 
   @@index([projectId])
   @@index([projectId, position])
@@ -419,21 +441,21 @@ model TaskColumn {
 }
 
 model Task {
-  id          String     @id @default(uuid())
-  projectId   String     @map("project_id")
-  columnId    String     @map("column_id")
+  id          String    @id @default(uuid())
+  projectId   String    @map("project_id")
+  columnId    String    @map("column_id")
   title       String
   description String?
   assignee    String?
   deadline    DateTime?
-  priority    String     @default("medium") // low, medium, high
+  priority    String    @default("medium") // low, medium, high
   tags        String?
-  position    Int        @default(0)
-  createdAt   DateTime   @default(now()) @map("created_at")
-  updatedAt   DateTime   @updatedAt @map("updated_at")
+  position    Int       @default(0)
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
 
-  project     Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  column      TaskColumn @relation(fields: [columnId], references: [id], onDelete: Cascade)
+  project Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  column  TaskColumn @relation(fields: [columnId], references: [id], onDelete: Cascade)
 
   @@index([projectId])
   @@index([columnId])
@@ -453,7 +475,7 @@ model WebsiteCost {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   @@index([projectId])
   @@index([date])
@@ -473,7 +495,7 @@ model ToolCost {
   createdAt    DateTime  @default(now()) @map("created_at")
   updatedAt    DateTime  @updatedAt @map("updated_at")
 
-  project      Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   @@index([projectId])
   @@index([createdAt])
@@ -482,50 +504,50 @@ model ToolCost {
 }
 
 model ProjectCategory {
-  id        String    @id @default(uuid())
-  name      String    @unique
-  icon      String?   @default("Folder")
-  color     String?   @default("purple")
-  createdAt DateTime  @default(now()) @map("created_at")
-  updatedAt DateTime  @updatedAt @map("updated_at")
+  id        String   @id @default(uuid())
+  name      String   @unique
+  icon      String?  @default("Folder")
+  color     String?  @default("purple")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
-  projects  Project[]
-  workLogs  ProjectWorkLog[]
+  projects Project[]
+  workLogs ProjectWorkLog[]
 
   @@map("project_categories")
 }
 
 model ProjectCustomer {
-  id        String    @id @default(uuid())
-  name      String
-  phone     String?
-  zalo      String?
-  facebook  String?
-  email     String?
-  note      String?
-  avatarUrl String?   @map("avatar_url")
-  source    String?   // zalo, facebook, website, referral, other
-  manualRating Int?   @map("manual_rating")
-  internalNotes String? @map("internal_notes")
-  createdAt DateTime  @default(now()) @map("created_at")
-  updatedAt DateTime  @updatedAt @map("updated_at")
-  projects  Project[]
-  workLogs  ProjectWorkLog[]
+  id            String           @id @default(uuid())
+  name          String
+  phone         String?
+  zalo          String?
+  facebook      String?
+  email         String?
+  note          String?
+  avatarUrl     String?          @map("avatar_url")
+  source        String? // zalo, facebook, website, referral, other
+  manualRating  Int?             @map("manual_rating")
+  internalNotes String?          @map("internal_notes")
+  createdAt     DateTime         @default(now()) @map("created_at")
+  updatedAt     DateTime         @updatedAt @map("updated_at")
+  projects      Project[]
+  workLogs      ProjectWorkLog[]
 
   @@map("project_customers")
 }
 
 model ProjectRequirementNote {
-  id          String   @id @default(uuid())
-  projectId   String   @map("project_id")
-  title       String
-  content     String
-  link        String?
-  date        DateTime @default(now())
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  id        String   @id @default(uuid())
+  projectId String   @map("project_id")
+  title     String
+  content   String
+  link      String?
+  date      DateTime @default(now())
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
-  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   @@index([projectId])
   @@map("project_requirement_notes")
@@ -533,20 +555,20 @@ model ProjectRequirementNote {
 
 model PaymentTransaction {
   id            String   @id @default(uuid())
-  sepayId       String   @unique @map("sepay_id")   // chống webhook trùng
-  orderId       String?  @map("order_id")           // null nếu không khớp đơn
+  sepayId       String   @unique @map("sepay_id") // chống webhook trùng
+  orderId       String?  @map("order_id") // null nếu không khớp đơn
   amount        Float
   content       String?
   code          String?
   accountNumber String?  @map("account_number")
-  gateway       String?                              // tên ngân hàng
+  gateway       String? // tên ngân hàng
   transactionAt DateTime @map("transaction_at")
-  matched       Boolean  @default(false)            // đã khớp được đơn chưa
-  status        String   @default("success")        // success | refunded | failed
-  raw           Json                                 // lưu nguyên payload để đối soát
+  matched       Boolean  @default(false) // đã khớp được đơn chưa
+  status        String   @default("success") // success | refunded | failed
+  raw           Json // lưu nguyên payload để đối soát
   createdAt     DateTime @default(now()) @map("created_at")
 
-  order         Order?   @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  order Order? @relation(fields: [orderId], references: [id], onDelete: SetNull)
 
   @@index([transactionAt])
   @@index([orderId])
@@ -570,9 +592,9 @@ model ProjectWorkLog {
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
-  project     Project?         @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  category    ProjectCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
-  customer    ProjectCustomer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  project  Project?         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  category ProjectCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  customer ProjectCustomer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
 
   @@index([projectId])
   @@index([categoryId])

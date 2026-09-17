@@ -1,12 +1,19 @@
-import { NextResponse } from 'next/server';
+import { after, NextResponse } from 'next/server';
+import { Prisma } from '@prisma/client';
+import { createHash } from 'node:crypto';
 import { prisma } from '@/lib/db';
-import { sendTelegramMessage, sendTelegramPhoto, answerCallbackQuery, getAdminChatId, esc } from '@/lib/telegram';
+import { sendTelegramMessage, sendTelegramPhoto, answerCallbackQuery, esc } from '@/lib/telegram';
 import { getPaymentContent, extractOrderCodeFromContent } from '@/lib/sepay';
 import { calculateEndDate } from '@/lib/datetime';
 import { createOrderWithUniqueCode } from '@/lib/order-code';
-import { resolveCustomer } from '@/lib/customer';
+import { findOrCreateCustomer } from '@/lib/customer';
 
 export const runtime = 'nodejs';
+export const maxDuration = 30;
+
+const GEMINI_TOTAL_TIMEOUT_MS = 10_000;
+const GEMINI_ATTEMPT_TIMEOUT_MS = 5_000;
+const MANUAL_RETRY_DEDUPE_MS = 3 * 60 * 1_000;
 
 /**
  * Timing-safe string comparison to protect against timing attacks
@@ -80,12 +87,11 @@ async function extractOrderDetails(text: string): Promise<{
   const geminiKey = process.env.GEMINI_API_KEY || settings?.geminiApiKey;
 
   if (geminiKey) {
-    const models = [
+    const models = [...new Set([
+      process.env.GEMINI_MODEL,
       'gemini-flash-latest',
-      'gemini-3.5-flash',
-      'gemini-3.6-flash',
       'gemini-flash-lite-latest',
-    ];
+    ].filter((model): model is string => Boolean(model)))];
     const systemInstruction = `Bạn là Trợ lý phân tích đơn hàng Telegram của Nhanh Media.
 Nhiệm vụ: Trích xuất các trường thông tin đơn hàng từ câu chat của người dùng dựa trên danh sách dịch vụ sẵn có sau đây:
 
@@ -107,13 +113,17 @@ LƯU Ý:
 - Nếu người dùng nhập tên sản phẩm/gói không rõ ràng, cố gắng khớp với gói phù hợp nhất trong danh sách catalog.
 - Nếu hoàn toàn không thể xác định được sản phẩm nào, trả về: { "error": "Tên sản phẩm không khớp với bất kỳ dịch vụ nào trong hệ thống." }`;
 
+    const deadline = Date.now() + GEMINI_TOTAL_TIMEOUT_MS;
     for (const model of models) {
+      const remainingMs = deadline - Date.now();
+      if (remainingMs <= 0) break;
+
       try {
-        // 1. Try Native REST API first
         const nativeUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(geminiKey)}`;
         const res = await fetch(nativeUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
+          signal: AbortSignal.timeout(Math.min(GEMINI_ATTEMPT_TIMEOUT_MS, remainingMs)),
           body: JSON.stringify({
             systemInstruction: { parts: [{ text: systemInstruction }] },
             contents: [{ role: 'user', parts: [{ text }] }],
@@ -132,33 +142,8 @@ LƯU Ý:
           }
         }
 
-        // 2. Fallback: Try OpenAI endpoint
-        const response = await fetch('https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${geminiKey}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            model,
-            messages: [
-              { role: 'system', content: systemInstruction },
-              { role: 'user', content: text },
-            ],
-            temperature: 0.1,
-          }),
-        });
-
-        if (response.ok) {
-          const data = await response.json();
-          const rawContent = data.choices[0].message.content.trim();
-          const jsonMatch = rawContent.match(/\{[\s\S]*\}/);
-          if (jsonMatch) {
-            return JSON.parse(jsonMatch[0]);
-          }
-        }
       } catch (err) {
-        console.error(`[Telegram Bot] Gemini model ${model} error:`, err);
+        console.warn(`[Telegram Bot] Gemini model ${model} failed or timed out:`, err);
       }
     }
   }
@@ -184,7 +169,11 @@ LƯU Ý:
 }
 
 // Process order creation logic
-async function processOrderCreation(chatId: string | number, text: string) {
+async function processOrderCreation(
+  chatId: string | number,
+  text: string,
+  telegramUpdateId: string
+) {
   const extracted = await extractOrderDetails(text);
 
   if (!extracted || extracted.error) {
@@ -236,20 +225,14 @@ async function processOrderCreation(chatId: string | number, text: string) {
 
     // 2. Resolve Admin User ID & Customer
     const adminUserId = await getAdminUserId();
-    let customer = await resolveCustomer({ name: finalCustomerName, phone: customerPhone });
-
-    if (!customer) {
-      customer = await prisma.customer.create({
-        data: {
-          name: finalCustomerName,
-          phone: customerPhone && customerPhone.trim() ? customerPhone.trim() : null,
-          email: customerEmail && customerEmail.trim() ? customerEmail.trim() : null,
-          createdByUserId: adminUserId,
-          source: 'telegram',
-          note: 'Khách hàng tự động tạo từ Telegram Bot.',
-        },
-      });
-    }
+    const customer = await findOrCreateCustomer({
+      name: finalCustomerName,
+      phone: customerPhone,
+      email: customerEmail,
+      createdByUserId: adminUserId,
+      source: 'telegram',
+      note: 'Khách hàng tự động tạo từ Telegram Bot.',
+    });
 
     // 3. Calculate End Date
     const startDate = new Date();
@@ -269,6 +252,7 @@ async function processOrderCreation(chatId: string | number, text: string) {
           startDate,
           endDate,
           note: note || 'Tạo tự động qua Telegram Bot',
+          telegramUpdateId,
         },
         include: {
           customer: true,
@@ -699,65 +683,128 @@ export async function GET(req: Request) {
   });
 }
 
-// Telegram Webhook POST Handler
-export async function POST(req: Request) {
+type TelegramUpdatePayload = {
+  update_id?: number | string;
+  message?: {
+    message_id?: number;
+    text?: string;
+    chat: { id: string | number };
+  };
+  callback_query?: {
+    id: string;
+    data?: string;
+    message?: {
+      message_id?: number;
+      chat: { id: string | number };
+    };
+  };
+};
+
+type TelegramUpdateClaim = 'claimed' | 'duplicate_update' | 'duplicate_request';
+
+function buildTelegramRequestHash(update: TelegramUpdatePayload): string | null {
+  const text = update.message?.text?.trim();
+  const chatId = update.message?.chat.id;
+  if (!text || chatId === undefined || text.startsWith('/')) return null;
+
+  const normalizedText = text.toLocaleLowerCase('vi-VN').replace(/\s+/g, ' ');
+  return createHash('sha256').update(`${chatId}:${normalizedText}`).digest('hex');
+}
+
+async function claimTelegramUpdate(
+  update: TelegramUpdatePayload,
+  updateId: string
+): Promise<TelegramUpdateClaim> {
+  const chatId = update.callback_query?.message?.chat.id ?? update.message?.chat.id;
+  const messageId = update.callback_query?.message?.message_id ?? update.message?.message_id;
+  const requestHash = buildTelegramRequestHash(update);
+
   try {
-    const secretHeader = req.headers.get('x-telegram-bot-api-secret-token');
-    const settings = await prisma.websiteSettings.findUnique({ where: { id: 'default' } });
-    const secretConfigured = process.env.TELEGRAM_WEBHOOK_SECRET || settings?.telegramWebhookSecret;
+    return await prisma.$transaction(async (tx) => {
+      if (requestHash) {
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${requestHash}, 0))`;
 
-    // Bắt buộc phải cấu hình secret. Không có secret = ai cũng POST được vào
-    // endpoint này để tạo đơn hàng thật và đọc dữ liệu khách hàng.
-    if (!secretConfigured) {
-      console.error('[Telegram Webhook] TELEGRAM_WEBHOOK_SECRET chưa được cấu hình — từ chối request.');
-      return NextResponse.json({ error: 'Webhook chưa được cấu hình bảo mật.' }, { status: 503 });
+        const recentMatch = await tx.telegramUpdate.findFirst({
+          where: {
+            requestHash,
+            createdAt: { gte: new Date(Date.now() - MANUAL_RETRY_DEDUPE_MS) },
+            status: { in: ['processing', 'completed'] },
+          },
+          select: { updateId: true },
+        });
+
+        if (recentMatch) {
+          return recentMatch.updateId === updateId ? 'duplicate_update' : 'duplicate_request';
+        }
+      }
+
+      await tx.telegramUpdate.create({
+        data: {
+          updateId,
+          chatId: chatId === undefined ? null : String(chatId),
+          messageId: messageId === undefined ? null : String(messageId),
+          requestHash,
+          kind: update.callback_query ? 'callback_query' : update.message ? 'message' : 'other',
+        },
+      });
+      return 'claimed';
+    });
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+      console.info(`[Telegram Webhook] Bỏ qua update đã nhận trước đó: ${updateId}`);
+      return 'duplicate_update';
     }
+    throw error;
+  }
+}
 
-    // LƯU Ý: phải kiểm tra cả trường hợp THIẾU header.
-    // Điều kiện cũ `secretConfigured && secretHeader && ...` cho qua mọi
-    // request không gửi header → bypass hoàn toàn.
-    if (!secretHeader || !safeCompare(secretHeader, secretConfigured)) {
-      return NextResponse.json({ error: 'Unauthorized secret token.' }, { status: 401 });
-    }
+async function finishTelegramUpdate(
+  updateId: string,
+  status: 'completed' | 'failed' | 'ignored',
+  error?: unknown
+) {
+  await prisma.telegramUpdate.update({
+    where: { updateId },
+    data: {
+      status,
+      completedAt: new Date(),
+      error: error ? String(error instanceof Error ? error.message : error).slice(0, 2_000) : null,
+    },
+  });
+}
 
-    const update = await req.json();
+async function processTelegramUpdate(
+  update: TelegramUpdatePayload,
+  updateId: string,
+  adminChatId: string
+) {
+  const incomingChatId =
+    update.callback_query?.message?.chat.id ?? update.message?.chat.id ?? null;
 
-    // Chỉ phục vụ Admin Chat ID đã cấu hình. Nếu không, bất kỳ ai tìm được bot
-    // đều tạo được đơn hàng và xem được danh sách khách hàng.
-    const adminChatId = await getAdminChatId();
-    
-    if (!adminChatId) {
-      console.warn('[Telegram Webhook] TELEGRAM_ADMIN_CHAT_ID chưa được cấu hình. Bỏ qua yêu cầu để bảo mật.');
-      return NextResponse.json({ ok: true });
-    }
-
-    const incomingChatId =
-      update.callback_query?.message?.chat?.id ?? update.message?.chat?.id ?? null;
-
+  try {
     if (incomingChatId !== null && String(incomingChatId) !== adminChatId) {
       console.warn(`[Telegram Webhook] Bỏ qua update từ chat lạ: ${incomingChatId}`);
       await sendTelegramMessage({
         chatId: incomingChatId,
         text: '⛔️ Bot này chỉ phục vụ nội bộ Nhanh Media.',
-      }).catch(() => {});
-      return NextResponse.json({ ok: true });
+      });
+      await finishTelegramUpdate(updateId, 'ignored');
+      return;
     }
 
-    // 1. Handle Callback Queries (Inline Button Clicks)
-    if (update.callback_query) {
-      const cb = update.callback_query;
-      const chatId = cb.message?.chat?.id;
+    const cb = update.callback_query;
+    if (cb) {
+      const chatId = cb.message?.chat.id;
       const data = cb.data;
 
-      if (chatId) {
-        // Mỗi callback_query chỉ được answer MỘT lần, gọi lần hai Telegram trả lỗi.
+      if (chatId !== undefined) {
         if (data === 'cb_products') {
           await answerCallbackQuery(cb.id);
           await sendProductCatalog(chatId);
         } else if (data === 'cb_orders') {
           await answerCallbackQuery(cb.id);
           await sendRecentOrders(chatId);
-        } else if (data && data.startsWith('cb_check_pay_')) {
+        } else if (data?.startsWith('cb_check_pay_')) {
           const orderCode = data.replace('cb_check_pay_', '').trim();
           await checkOrderPaymentFromTelegram(chatId, cb.id, orderCode);
         } else {
@@ -765,19 +812,19 @@ export async function POST(req: Request) {
         }
       }
 
-      return NextResponse.json({ ok: true });
+      await finishTelegramUpdate(updateId, 'completed');
+      return;
     }
 
-    // 2. Handle Messages
     const message = update.message;
-    if (!message || !message.text) {
-      return NextResponse.json({ ok: true });
+    if (!message?.text) {
+      await finishTelegramUpdate(updateId, 'ignored');
+      return;
     }
 
     const chatId = message.chat.id;
     const text = message.text.trim();
 
-    // Command handling
     if (text === '/start' || text === '/help') {
       await sendMainMenu(chatId);
     } else if (text === '/goi' || text === '/sanpham' || text === '/danhsach') {
@@ -785,13 +832,77 @@ export async function POST(req: Request) {
     } else if (text === '/donhang') {
       await sendRecentOrders(chatId);
     } else {
-      // Natural language / order creation intent
-      await processOrderCreation(chatId, text);
+      // Give the operator immediate feedback while AI extraction runs. Start
+      // both concurrently so this notification does not add to total latency.
+      const progressNotification = sendTelegramMessage({
+        chatId,
+        text: '⏳ Đang phân tích và tạo đơn, vui lòng không gửi lại tin nhắn này...',
+      });
+      await processOrderCreation(chatId, text, updateId);
+      await progressNotification;
     }
 
+    await finishTelegramUpdate(updateId, 'completed');
+  } catch (error) {
+    console.error(`[Telegram Webhook] Xử lý update ${updateId} thất bại:`, error);
+    await finishTelegramUpdate(updateId, 'failed', error).catch((finishError) => {
+      console.error(`[Telegram Webhook] Không thể ghi trạng thái lỗi cho update ${updateId}:`, finishError);
+    });
+  }
+}
+
+// Telegram Webhook POST Handler
+export async function POST(req: Request) {
+  try {
+    const secretHeader = req.headers.get('x-telegram-bot-api-secret-token');
+    const settings = await prisma.websiteSettings.findUnique({ where: { id: 'default' } });
+    const secretConfigured = process.env.TELEGRAM_WEBHOOK_SECRET || settings?.telegramWebhookSecret;
+
+    if (!secretConfigured) {
+      console.error('[Telegram Webhook] TELEGRAM_WEBHOOK_SECRET chưa được cấu hình — từ chối request.');
+      return NextResponse.json({ error: 'Webhook chưa được cấu hình bảo mật.' }, { status: 503 });
+    }
+
+    if (!secretHeader || !safeCompare(secretHeader, secretConfigured)) {
+      return NextResponse.json({ error: 'Unauthorized secret token.' }, { status: 401 });
+    }
+
+    const update = await req.json() as TelegramUpdatePayload;
+    const updateId = update.update_id === undefined ? '' : String(update.update_id);
+    if (!updateId) {
+      return NextResponse.json({ error: 'Telegram update_id is required.' }, { status: 400 });
+    }
+
+    const adminChatId = settings?.telegramAdminChatId?.trim() ||
+      process.env.TELEGRAM_ADMIN_CHAT_ID?.trim();
+    if (!adminChatId) {
+      console.warn('[Telegram Webhook] TELEGRAM_ADMIN_CHAT_ID chưa được cấu hình. Bỏ qua yêu cầu để bảo mật.');
+      return NextResponse.json({ ok: true });
+    }
+
+    const claim = await claimTelegramUpdate(update, updateId);
+    if (claim !== 'claimed') {
+      if (claim === 'duplicate_request') {
+        const chatId = update.message?.chat.id;
+        if (chatId !== undefined && String(chatId) === adminChatId) {
+          after(() => sendTelegramMessage({
+            chatId,
+            text: '⚠️ Yêu cầu giống hệt đang được xử lý. Bot đã bỏ qua để tránh tạo trùng đơn.',
+          }));
+        }
+      }
+      return NextResponse.json({ ok: true, duplicate: true, reason: claim });
+    }
+
+    // ACK Telegram immediately. Next.js keeps the request context alive until
+    // this callback settles, while Telegram no longer waits and retries.
+    after(() => processTelegramUpdate(update, updateId, adminChatId));
     return NextResponse.json({ ok: true });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('[Telegram Webhook Error]:', error);
-    return NextResponse.json({ error: error.message || String(error) }, { status: 500 });
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : String(error) },
+      { status: 500 }
+    );
   }
 }

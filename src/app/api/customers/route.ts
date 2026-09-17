@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { createAuditLog } from '@/lib/audit';
+import { Prisma } from '@prisma/client';
+import { normalizeCustomerPhone } from '@/lib/customer';
 
 export async function GET(req: Request) {
   try {
@@ -125,11 +127,13 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Họ tên là bắt buộc.' }, { status: 400 });
     }
 
-    // Check if phone number already exists
+    const normalizedPhone = normalizeCustomerPhone(phone);
+
+    // Friendly pre-check; the unique constraint catch below is the race-safe guard.
     let existing = null;
-    if (phone && phone.trim()) {
+    if (normalizedPhone) {
       existing = await prisma.customer.findUnique({
-        where: { phone: phone.trim() },
+        where: { phone: normalizedPhone },
         include: {
           createdByUser: {
             select: { name: true },
@@ -153,20 +157,31 @@ export async function POST(req: Request) {
       );
     }
 
-    const newCustomer = await prisma.customer.create({
-      data: {
-        name: name.trim(),
-        phone: phone && phone.trim() ? phone.trim() : null,
-        facebook: facebook ? facebook.trim() : null,
-        zalo: zalo ? zalo.trim() : null,
-        email: email ? email.trim() : null,
-        createdByUserId: userId,
-        note: note ? note.trim() : null,
-        source: source ? source.trim() : null,
-        manualRating: manualRating ? Number(manualRating) : null,
-        internalNotes: internalNotes ? internalNotes.trim() : null,
-      },
-    });
+    let newCustomer;
+    try {
+      newCustomer = await prisma.customer.create({
+        data: {
+          name: name.trim(),
+          phone: normalizedPhone || null,
+          facebook: facebook ? facebook.trim() : null,
+          zalo: zalo ? zalo.trim() : null,
+          email: email ? email.trim() : null,
+          createdByUserId: userId,
+          note: note ? note.trim() : null,
+          source: source ? source.trim() : null,
+          manualRating: manualRating ? Number(manualRating) : null,
+          internalNotes: internalNotes ? internalNotes.trim() : null,
+        },
+      });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        return NextResponse.json(
+          { error: 'Số điện thoại này vừa được thêm bởi một yêu cầu khác.' },
+          { status: 409 }
+        );
+      }
+      throw error;
+    }
 
     await createAuditLog({
       action: 'CREATE_CUSTOMER',

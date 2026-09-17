@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { createOrderWithUniqueCode } from '@/lib/order-code';
 import { calculateEndDate } from '@/lib/datetime';
-import { resolveCustomer } from '@/lib/customer';
+import { findOrCreateCustomer } from '@/lib/customer';
 
 async function getAdminUserId(): Promise<string> {
   const adminUser = await prisma.user.findFirst({
@@ -82,20 +82,14 @@ async function executeTool(name: string, args: any) {
       }
       const adminUserId = await getAdminUserId();
 
-      let customer = await resolveCustomer({ name: customerName, phone: customerPhone });
-
-      if (!customer) {
-        customer = await prisma.customer.create({
-          data: {
-            name: customerName ? customerName.trim() : 'Khách Web Assistant',
-            phone: customerPhone ? customerPhone.trim() : null,
-            email: customerEmail ? customerEmail.trim() : null,
-            createdByUserId: adminUserId,
-            source: 'web_assistant',
-            note: 'Tạo tự động qua Trợ lý AI',
-          },
-        });
-      }
+      const customer = await findOrCreateCustomer({
+        name: customerName || 'Khách Web Assistant',
+        phone: customerPhone,
+        email: customerEmail,
+        createdByUserId: adminUserId,
+        source: 'web_assistant',
+        note: 'Tạo tự động qua Trợ lý AI',
+      });
 
       const startDate = new Date();
       const endDate = calculateEndDate(startDate, selectedVariant.durationValue, selectedVariant.durationUnit);
@@ -244,15 +238,13 @@ async function executeTool(name: string, args: any) {
       if (!custName) return { success: false, message: 'Thiếu tên khách hàng.' };
 
       const adminUserId = await getAdminUserId();
-      const customer = await prisma.customer.create({
-        data: {
-          name: custName.trim(),
-          phone: phone ? phone.trim() : null,
-          email: email ? email.trim() : null,
-          createdByUserId: adminUserId,
-          source: 'web_assistant',
-          note: note || 'Tạo tự động qua Trợ lý AI',
-        },
+      const customer = await findOrCreateCustomer({
+        name: custName,
+        phone,
+        email,
+        createdByUserId: adminUserId,
+        source: 'web_assistant',
+        note: note || 'Tạo tự động qua Trợ lý AI',
       });
 
       return {

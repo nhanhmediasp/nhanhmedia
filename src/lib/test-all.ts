@@ -2,6 +2,29 @@ import { hashPassword, comparePassword, signToken, verifyToken } from './auth';
 import { calculateEndDate } from './datetime';
 import { formatEmailBody } from '../app/api/orders/[id]/remind-manual/route';
 import { encrypt, decrypt } from './crypto';
+import { normalizeCustomerName, normalizeCustomerPhone } from './customer';
+
+function testIdentityNormalization() {
+  console.log('Testing customer identity normalization...');
+
+  const phoneCases: Array<[string, string]> = [
+    ['0912 345 678', '0912345678'],
+    ['+84 912 345 678', '0912345678'],
+    ['0084-912-345-678', '0912345678'],
+  ];
+
+  for (const [input, expected] of phoneCases) {
+    if (normalizeCustomerPhone(input) !== expected) {
+      throw new Error(`FAILED: Phone normalization for ${input}`);
+    }
+  }
+
+  if (normalizeCustomerName('  Nguyễn   Văn A  ') !== 'Nguyễn Văn A') {
+    throw new Error('FAILED: Customer name normalization!');
+  }
+
+  console.log(' - Customer identity normalization PASSED');
+}
 
 function testCrypto() {
   console.log('Testing AES Cryptography...');
@@ -137,6 +160,8 @@ function runAll() {
     testPricingAndDates();
     console.log('');
     testEmailTemplates();
+    console.log('');
+    testIdentityNormalization();
     console.log('');
     console.log('==================================================');
     console.log('SUCCESS: ALL AUTOMATED TESTS COMPLETED SUCCESSFULLY!');

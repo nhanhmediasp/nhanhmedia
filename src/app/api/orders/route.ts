@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { createAuditLog } from '@/lib/audit';
 import { notifyTelegramAdmin, esc } from '@/lib/telegram';
-import { resolveCustomer } from '@/lib/customer';
+import { findOrCreateCustomer } from '@/lib/customer';
 import { createOrderWithUniqueCode } from '@/lib/order-code';
 import { calculateEndDate } from '@/lib/datetime';
 
@@ -169,21 +169,16 @@ export async function POST(req: Request) {
     }
 
     // 2. Resolve Customer
-    let customer = await resolveCustomer({ customerId, name: customerName, phone: customerPhone });
-
-    if (!customer) {
-      customer = await prisma.customer.create({
-        data: {
-          name: customerName.trim(),
-          phone: customerPhone && customerPhone.trim() ? customerPhone.trim() : null,
-          facebook: customerFacebook ? customerFacebook.trim() : null,
-          zalo: customerZalo ? customerZalo.trim() : null,
-          email: customerEmail ? customerEmail.trim() : null,
-          createdByUserId: userId,
-          note: 'Khách hàng tự động tạo từ đơn hàng đầu tiên.',
-        },
-      });
-    }
+    const customer = await findOrCreateCustomer({
+      customerId,
+      name: customerName,
+      phone: customerPhone,
+      facebook: customerFacebook,
+      zalo: customerZalo,
+      email: customerEmail,
+      createdByUserId: userId,
+      note: 'Khách hàng tự động tạo từ đơn hàng đầu tiên.',
+    });
 
     // 3. Calculate End Date
     const parsedStartDate = new Date(startDate);

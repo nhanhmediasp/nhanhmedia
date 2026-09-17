@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { hashPassword } from '@/lib/auth';
 import { createAuditLog } from '@/lib/audit';
+import { Prisma } from '@prisma/client';
+import { normalizeCustomerPhone } from '@/lib/customer';
 
 export async function GET(req: Request) {
   try {
@@ -108,9 +110,17 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Tài khoản admin bắt buộc phải có email đăng nhập.' }, { status: 400 });
     }
 
+    const normalizedPhone = normalizeCustomerPhone(phone);
+    if ((!email || !email.trim()) && !normalizedPhone) {
+      return NextResponse.json(
+        { error: 'Cần nhập email hoặc số điện thoại để nhận diện nhân sự và tránh tạo trùng.' },
+        { status: 400 }
+      );
+    }
+
     const finalEmail = email && email.trim() !== ''
       ? email.toLowerCase().trim()
-      : `staff_${Date.now()}@nhanhmedia.com`;
+      : `staff_${normalizedPhone}@nhanhmedia.com`;
 
     // Check if email already exists
     const existing = await prisma.user.findUnique({
@@ -123,17 +133,28 @@ export async function POST(req: Request) {
 
     const passwordHash = userRole === 'admin' ? hashPassword(password) : null;
 
-    const newUser = await prisma.user.create({
-      data: {
-        name: name.trim(),
-        email: finalEmail,
-        passwordHash,
-        phone: phone ? phone.trim() : null,
-        role: userRole,
-        status: status || 'active',
-        note: note ? note.trim() : null,
-      },
-    });
+    let newUser;
+    try {
+      newUser = await prisma.user.create({
+        data: {
+          name: name.trim(),
+          email: finalEmail,
+          passwordHash,
+          phone: normalizedPhone || null,
+          role: userRole,
+          status: status || 'active',
+          note: note ? note.trim() : null,
+        },
+      });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        return NextResponse.json(
+          { error: 'Email hoặc số điện thoại này vừa được dùng để tạo một nhân sự khác.' },
+          { status: 409 }
+        );
+      }
+      throw error;
+    }
 
     await createAuditLog({
       action: 'CREATE_USER',

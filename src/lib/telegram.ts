@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/db';
 
 const TELEGRAM_API_BASE = 'https://api.telegram.org/bot';
+const TELEGRAM_REQUEST_TIMEOUT_MS = 8_000;
 
 /**
  * Escape các ký tự đặc biệt của Telegram HTML parse_mode.
@@ -81,6 +82,7 @@ export async function sendTelegramMessage(options: SendMessageOptions): Promise<
     const res = await fetch(`${TELEGRAM_API_BASE}${token}/sendMessage`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      signal: AbortSignal.timeout(TELEGRAM_REQUEST_TIMEOUT_MS),
       body: JSON.stringify({
         chat_id: options.chatId,
         text: options.text,
@@ -116,6 +118,7 @@ export async function sendTelegramPhoto(options: SendPhotoOptions): Promise<bool
     const res = await fetch(`${TELEGRAM_API_BASE}${token}/sendPhoto`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      signal: AbortSignal.timeout(TELEGRAM_REQUEST_TIMEOUT_MS),
       body: JSON.stringify({
         chat_id: options.chatId,
         photo: options.photoUrl,
@@ -161,6 +164,7 @@ export async function answerCallbackQuery(callbackQueryId: string, text?: string
     await fetch(`${TELEGRAM_API_BASE}${token}/answerCallbackQuery`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      signal: AbortSignal.timeout(TELEGRAM_REQUEST_TIMEOUT_MS),
       body: JSON.stringify({
         callback_query_id: callbackQueryId,
         text: text || '',

@@ -177,6 +177,10 @@ export default function AdminUsersPage() {
       showToast('Vui lòng điền đầy đủ các thông tin bắt buộc.', 'error');
       return;
     }
+    if (!editId && !email.trim() && !phone.trim()) {
+      showToast('Cần nhập email hoặc số điện thoại để tránh tạo trùng nhân sự.', 'error');
+      return;
+    }
 
     setSaving(true);
     try {
@@ -450,7 +454,7 @@ export default function AdminUsersPage() {
                 />
                 
                 <Input
-                  label="Email liên hệ (Không bắt buộc)"
+                  label="Email liên hệ (cần email hoặc SĐT)"
                   type="email"
                   placeholder="name@example.com"
                   value={email}
@@ -458,7 +462,7 @@ export default function AdminUsersPage() {
                 />
 
                 <Input
-                  label="Số điện thoại"
+                  label="Số điện thoại (cần email hoặc SĐT)"
                   placeholder="Ví dụ: 0977111222"
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
