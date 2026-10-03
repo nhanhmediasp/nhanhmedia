@@ -25,6 +25,7 @@ import {
   History,
   Globe,
   Mail,
+  DatabaseBackup,
   FolderGit2,
   Sparkles,
   RefreshCw,
@@ -95,6 +96,7 @@ const menuItems = [
 const adminSettingsLinks = [
   { label: 'Tùy chỉnh Website',  href: '/admin/settings/website',  icon: Globe },
   { label: 'Cấu hình Email',     href: '/admin/settings/email',     icon: Mail },
+  { label: 'Backup & Khôi phục', href: '/admin/settings/backup',    icon: DatabaseBackup },
   { label: 'Nhật ký hoạt động',  href: '/admin/audit-logs',         icon: History },
 ];
 
