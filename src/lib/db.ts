@@ -18,7 +18,9 @@ function buildDatabaseUrl(): string | undefined {
     const url = new URL(raw);
 
     if (!url.searchParams.has('connection_limit')) {
-      url.searchParams.set('connection_limit', process.env.DB_CONNECTION_LIMIT || '10');
+      // Serverless instances scale horizontally, so each local pool must stay tiny.
+      const defaultConnectionLimit = process.env.VERCEL ? '1' : '10';
+      url.searchParams.set('connection_limit', process.env.DB_CONNECTION_LIMIT || defaultConnectionLimit);
     }
     // Thời gian chờ lấy connection từ pool (giây) — mặc định 10s là quá ngắn
     // khi dashboard bắn hơn 20 query song song.
@@ -27,6 +29,15 @@ function buildDatabaseUrl(): string | undefined {
     }
     if (!url.searchParams.has('connect_timeout')) {
       url.searchParams.set('connect_timeout', '10');
+    }
+
+    // Supavisor transaction mode does not support prepared statements.
+    if (
+      url.port === '6543' &&
+      url.hostname.endsWith('.pooler.supabase.com') &&
+      !url.searchParams.has('pgbouncer')
+    ) {
+      url.searchParams.set('pgbouncer', 'true');
     }
 
     return url.toString();

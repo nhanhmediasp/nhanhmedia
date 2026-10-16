@@ -17,6 +17,8 @@
 /.next/
 /out/
 /public/uploads/
+/.npm-cache/
+/migration-backups/
 
 # production
 /build

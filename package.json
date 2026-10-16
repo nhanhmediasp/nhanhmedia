@@ -8,11 +8,14 @@
     "postinstall": "prisma generate",
     "start": "next start",
     "lint": "eslint",
-    "test": "npx tsx src/lib/test-all.ts"
+    "test": "npx tsx src/lib/test-all.ts",
+    "migrate:database": "node scripts/migrate-postgres.mjs",
+    "migrate:uploads": "node scripts/migrate-uploads-to-supabase.mjs"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
     "@prisma/client": "^6.19.3",
+    "@supabase/supabase-js": "^2.117.2",
     "bcryptjs": "^3.0.3",
     "jsonwebtoken": "^9.0.3",
     "lucide-react": "^0.468.0",

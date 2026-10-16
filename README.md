@@ -2,6 +2,8 @@
 
 Hệ thống admin-only để quản lý khách hàng, nhân sự, dự án và đơn hàng dịch vụ cho **Nhanh Media**. Chỉ tài khoản có vai trò `admin` được phép đăng nhập.
 
+Hướng dẫn chuyển production từ aaPanel sang Vercel + Supabase: [VERCEL_SUPABASE_DEPLOY_GUIDE.md](./VERCEL_SUPABASE_DEPLOY_GUIDE.md).
+
 ---
 
 ## 🚀 Công nghệ sử dụng
